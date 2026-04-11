@@ -1,7 +1,7 @@
 """Generate a video chain script using an OpenAI-compatible LLM API.
 
-Produces a JSON file of per-segment visual prompts that can be fed
-to chain.py via --suffixes-file.
+Produces per-segment visual prompts and voiceover monologue that can be fed
+to chain.py and render_voiceover.py.
 
 Usage:
     python3 write_script.py --theme "surreal dream journey" --segments 16 --seed 42
@@ -20,7 +20,7 @@ import urllib.request
 LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
 
-SYSTEM_PROMPT = """\
+VISUAL_SYSTEM_PROMPT = """\
 You are a visual director writing a shot list for a surreal experimental video.
 
 The video is made of sequential segments, each about 24 seconds long.
@@ -43,22 +43,38 @@ Rules:
 Respond with a JSON array of strings, one per segment. No other text.\
 """
 
+VOICEOVER_SYSTEM_PROMPT = """\
+You are a poet and narrator writing a voiceover monologue for a surreal experimental video.
 
-def generate_script(base_url, model, theme, segments, base_prompt=None,
-                    temperature=0.9, api_key=None):
-    """Call the LLM to generate per-segment visual descriptions."""
-    user_msg = f"Theme: {theme}\nNumber of segments: {segments}"
-    if base_prompt:
-        user_msg += f"\n\nThe following base prompt will be prepended to each of your descriptions, so do not repeat its content:\n{base_prompt}"
+The video is made of sequential segments, each about 24 seconds long.
+You will be given the visual descriptions for each segment.
+Your job is to write spoken monologue text that accompanies each segment.
 
+Rules:
+- Each segment's voiceover should be about 40-60 words (to fill ~24 seconds of speech).
+- The voiceover should be poetic, contemplative, or stream-of-consciousness.
+- It should COMPLEMENT the visuals, not describe them literally.
+- Think of it like a waking dream narration — the speaker is experiencing these visions.
+- The voice should have a consistent personality across all segments.
+- Vary the tone: sometimes questioning, sometimes declarative, sometimes whispering urgency.
+- Do NOT describe what is being seen on screen directly.
+- Instead, speak about ideas, feelings, memories, or questions evoked by the imagery.
+- The monologue should feel like one continuous thought that evolves across segments.
+
+Respond with a JSON array of strings, one per segment. No other text.\
+"""
+
+
+def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=None):
+    """Call the LLM and return parsed JSON array."""
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_msg},
         ],
         "temperature": temperature,
-        "max_tokens": 4096,
+        "max_tokens": 8192,
     }
 
     url = f"{base_url}/v1/chat/completions"
@@ -70,7 +86,7 @@ def generate_script(base_url, model, theme, segments, base_prompt=None,
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             result = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
@@ -86,21 +102,20 @@ def generate_script(base_url, model, theme, segments, base_prompt=None,
     text = content.strip()
     if text.startswith("```"):
         lines = text.split("\n")
-        # Strip first and last lines (```json and ```)
         lines = [l for l in lines if not l.strip().startswith("```")]
         text = "\n".join(lines)
 
     try:
-        suffixes = json.loads(text)
+        items = json.loads(text)
     except json.JSONDecodeError:
         print(f"Error: LLM response was not valid JSON:\n{content}", file=sys.stderr)
         sys.exit(1)
 
-    if not isinstance(suffixes, list):
-        print(f"Error: expected JSON array, got {type(suffixes).__name__}", file=sys.stderr)
+    if not isinstance(items, list):
+        print(f"Error: expected JSON array, got {type(items).__name__}", file=sys.stderr)
         sys.exit(1)
 
-    return suffixes
+    return items
 
 
 def main():
@@ -112,11 +127,9 @@ def main():
     parser.add_argument("--segments", type=int, default=16,
                         help="Number of segments to generate (default: 16)")
     parser.add_argument("--seed", type=int, required=True,
-                        help="Run ID seed (output goes to output/{seed}/script.json)")
+                        help="Run ID seed (output goes to output/{seed}/)")
     parser.add_argument("--base-prompt", default=None,
                         help="Base prompt that will be prepended (so LLM avoids repeating it)")
-    parser.add_argument("--output", default=None,
-                        help="Output path (default: output/{seed}/script.json)")
     parser.add_argument("--url", default=None,
                         help=f"LLM API base URL (default: {LLM_URL})")
     parser.add_argument("--model", default=None,
@@ -125,6 +138,10 @@ def main():
                         help="API key (default: LLM_API_KEY env var)")
     parser.add_argument("--temperature", type=float, default=0.9,
                         help="Sampling temperature (default: 0.9)")
+    parser.add_argument("--visual-only", action="store_true",
+                        help="Only generate visual descriptions, skip voiceover")
+    parser.add_argument("--voiceover-only", action="store_true",
+                        help="Only generate voiceover (requires existing script.json)")
     parser.add_argument("--print", action="store_true", dest="print_only",
                         help="Print to stdout instead of saving to file")
 
@@ -134,42 +151,89 @@ def main():
     model = args.model or LLM_MODEL
     api_key = args.api_key or os.environ.get("LLM_API_KEY", "")
 
-    print(f"Generating {args.segments}-segment script for theme: {args.theme}")
-    print(f"  LLM: {base_url} ({model})")
+    run_dir = os.path.join("output", str(args.seed))
+    os.makedirs(run_dir, exist_ok=True)
 
-    suffixes = generate_script(
-        base_url, model, args.theme, args.segments,
-        base_prompt=args.base_prompt,
-        temperature=args.temperature,
-        api_key=api_key,
-    )
+    script_path = os.path.join(run_dir, "script.json")
+    voiceover_path = os.path.join(run_dir, "voiceover.json")
 
-    # Pad or trim to requested count
-    if len(suffixes) < args.segments:
-        print(f"  warning: LLM returned {len(suffixes)} segments, "
-              f"requested {args.segments} — will cycle", file=sys.stderr)
-    elif len(suffixes) > args.segments:
-        suffixes = suffixes[:args.segments]
+    # ── Visual descriptions ───────────────────────────────────────────
+    if not args.voiceover_only:
+        print(f"Generating {args.segments}-segment visual script...")
+        print(f"  theme: {args.theme}")
+        print(f"  LLM:   {base_url} ({model})")
 
-    if args.print_only:
-        print(json.dumps(suffixes, indent=2))
-        return
+        user_msg = f"Theme: {args.theme}\nNumber of segments: {args.segments}"
+        if args.base_prompt:
+            user_msg += (f"\n\nThe following base prompt will be prepended to each "
+                         f"of your descriptions, so do not repeat its content:\n"
+                         f"{args.base_prompt}")
 
-    out_path = args.output
-    if not out_path:
-        run_dir = os.path.join("output", str(args.seed))
-        os.makedirs(run_dir, exist_ok=True)
-        out_path = os.path.join(run_dir, "script.json")
+        visuals = call_llm(base_url, model, VISUAL_SYSTEM_PROMPT, user_msg,
+                           temperature=args.temperature, api_key=api_key)
 
-    with open(out_path, "w") as f:
-        json.dump(suffixes, f, indent=2)
-        f.write("\n")
+        if len(visuals) < args.segments:
+            print(f"  warning: LLM returned {len(visuals)} segments, "
+                  f"requested {args.segments} — will cycle", file=sys.stderr)
+        elif len(visuals) > args.segments:
+            visuals = visuals[:args.segments]
 
-    print(f"\nSaved {len(suffixes)} segments to {out_path}")
-    print(f"\nUse with:")
-    print(f"  just chain --text-to-video --workflow workflow/ltx_i2v.json "
-          f"--seed {args.seed} --segments {len(suffixes)} "
-          f"--suffixes-file {out_path}")
+        if args.print_only:
+            print("\n=== Visual descriptions ===")
+            print(json.dumps(visuals, indent=2))
+        else:
+            with open(script_path, "w") as f:
+                json.dump(visuals, f, indent=2)
+                f.write("\n")
+            print(f"  saved: {script_path}")
+    else:
+        if not os.path.exists(script_path):
+            print(f"Error: {script_path} not found (needed for --voiceover-only)",
+                  file=sys.stderr)
+            sys.exit(1)
+        with open(script_path) as f:
+            visuals = json.load(f)
+
+    # ── Voiceover monologue ───────────────────────────────────────────
+    if not args.visual_only:
+        print(f"\nGenerating voiceover monologue...")
+
+        visual_list = "\n".join(f"  Segment {i+1}: {v}" for i, v in enumerate(visuals))
+        vo_user_msg = (f"Theme: {args.theme}\n"
+                       f"Number of segments: {len(visuals)}\n\n"
+                       f"Visual descriptions for each segment:\n{visual_list}")
+
+        voiceover = call_llm(base_url, model, VOICEOVER_SYSTEM_PROMPT, vo_user_msg,
+                             temperature=args.temperature, api_key=api_key)
+
+        if len(voiceover) < len(visuals):
+            print(f"  warning: LLM returned {len(voiceover)} voiceover segments, "
+                  f"expected {len(visuals)} — will cycle", file=sys.stderr)
+        elif len(voiceover) > len(visuals):
+            voiceover = voiceover[:len(visuals)]
+
+        if args.print_only:
+            print("\n=== Voiceover monologue ===")
+            print(json.dumps(voiceover, indent=2))
+        else:
+            with open(voiceover_path, "w") as f:
+                json.dump(voiceover, f, indent=2)
+                f.write("\n")
+            print(f"  saved: {voiceover_path}")
+
+    # ── Usage hint ────────────────────────────────────────────────────
+    if not args.print_only:
+        print(f"\nNext steps:")
+        print(f"  1. Review/edit: {script_path}")
+        if not args.visual_only:
+            print(f"     Review/edit: {voiceover_path}")
+            print(f"  2. Render voiceover (with ChatterboxTTS running):")
+            print(f"     just voiceover --seed {args.seed}")
+        step = 3 if not args.visual_only else 2
+        print(f"  {step}. Render video (with LTX running):")
+        print(f"     just chain --text-to-video --workflow workflow/ltx_i2v.json "
+              f"--seed {args.seed} --segments {len(visuals)} "
+              f"--suffixes-file {script_path}")
 
 
 if __name__ == "__main__":
