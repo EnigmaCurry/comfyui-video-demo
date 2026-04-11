@@ -33,43 +33,47 @@ config:
 chain *ARGS:
     python3 chain.py {{ARGS}}
 
-# Concatenate all segment videos into final.mp4
-concat SEED:
+# Concatenate segment videos into final.mp4 (per seed dir, or all)
+concat *SEED:
     #!/usr/bin/env bash
     set -euo pipefail
-    dir="output/{{SEED}}"
-    if [ ! -d "$dir" ]; then
-        echo "No run directory: $dir"
-        exit 1
-    fi
-    shopt -s nullglob
-    files=("$dir"/segment_*.mp4)
-    if [ ${#files[@]} -eq 0 ]; then
-        echo "No segment videos found in $dir/"
-        exit 1
-    fi
-    out="$dir/final.mp4"
-    # Check if final.mp4 is already newer than all segments
-    if [ -f "$out" ]; then
-        stale=false
-        for f in "${files[@]}"; do
-            if [ "$f" -nt "$out" ]; then
-                stale=true
-                break
-            fi
-        done
-        if [ "$stale" = false ]; then
-            echo "final.mp4 is already up to date (${#files[@]} segments)"
-            exit 0
+    concat_dir() {
+        local dir="$1"
+        shopt -s nullglob
+        local files=("$dir"/segment_*.mp4)
+        if [ ${#files[@]} -eq 0 ]; then
+            return
         fi
+        local out="$dir/final.mp4"
+        if [ -f "$out" ]; then
+            local stale=false
+            for f in "${files[@]}"; do
+                if [ "$f" -nt "$out" ]; then
+                    stale=true
+                    break
+                fi
+            done
+            if [ "$stale" = false ]; then
+                echo "$dir: final.mp4 is already up to date (${#files[@]} segments)"
+                return
+            fi
+        fi
+        local list
+        list=$(mktemp)
+        for f in "${files[@]}"; do
+            echo "file '$(realpath "$f")'" >> "$list"
+        done
+        ffmpeg -y -f concat -safe 0 -i "$list" -c copy "$out"
+        rm "$list"
+        echo "$dir: concatenated ${#files[@]} segments -> final.mp4"
+    }
+    if [ -n "{{SEED}}" ]; then
+        concat_dir "output/{{SEED}}"
+    else
+        for dir in output/*/; do
+            [ -d "$dir" ] && concat_dir "$dir"
+        done
     fi
-    list=$(mktemp)
-    for f in "${files[@]}"; do
-        echo "file '$(realpath "$f")'" >> "$list"
-    done
-    ffmpeg -y -f concat -safe 0 -i "$list" -c copy "$out"
-    rm "$list"
-    echo "Concatenated ${#files[@]} segments -> $out"
 
 # Extract last frame from a video as PNG
 last-frame VIDEO OUT:
