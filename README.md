@@ -23,69 +23,99 @@ Optional LLM-generated scripts and TTS voiceover narration.
 ## Setup
 
 ```bash
-just config   # set your ComfyUI server URL in .env
+just config   # configure ComfyUI URL, LLM endpoint, and API keys
 ```
 
 Export your LTX image-to-video workflow from ComfyUI in **API format**
 (Save API Format) and save it to `workflow/ltx_i2v.json`.
 
-If your ComfyUI server requires authentication, add to `.env`:
+### .env variables
 
-```
-COMFYUI_TOKEN=your-bearer-token
-```
-
-For LLM script generation, add to `.env`:
-
-```
-LLM_URL=http://127.0.0.1:8000
-LLM_MODEL=your-model-name
-LLM_API_KEY=your-api-key
-```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `COMFYUI_URL` | ComfyUI server URL | `http://127.0.0.1:8188` |
+| `COMFYUI_TOKEN` | Bearer token for ComfyUI auth | (none) |
+| `LLM_URL` | OpenAI-compatible LLM API URL | `http://127.0.0.1:8000` |
+| `LLM_MODEL` | LLM model name | `default` |
+| `LLM_API_KEY` | Bearer token for LLM API | (none) |
 
 ## Quick start
 
+Run the full pipeline in one command:
+
 ```bash
-# Generate 4 segments from text, concatenate into one video
-just chain --text-to-video --workflow workflow/ltx_i2v.json \
-  --seed 42 --segments 4 --concat
+just workflow --theme "waking life alien dreamscape" --seed 42 --segments 16
 ```
 
-## Full workflow with LLM script and voiceover
+This runs all four steps in sequence:
+1. Generate visual script + voiceover monologue from the LLM
+2. Render voiceover audio via tts-demo
+3. Render chained video segments via ComfyUI
+4. Concatenate segments into `final.mp4` with centered voiceover
+
+Every step skips existing files, so the command is fully resumable. If it
+gets interrupted, just run it again.
+
+### Additional workflow options
 
 ```bash
-# 1. Generate visual script + voiceover monologue (with vllm running)
+# Custom voice for narration
+just workflow --theme "gothic cathedral dreams" --seed 99 --segments 8 --voice narrator.wav
+
+# Shorter segments (121 frames ~= 4 seconds)
+just workflow --theme "ocean depths" --seed 77 --segments 32 --length 121
+```
+
+Extra flags are passed through to `chain.py` (e.g. `--length`, `--base-prompt`,
+`--negative-prompt`).
+
+## Running steps individually
+
+Each step can also be run separately:
+
+```bash
+# 1. Generate visual script + voiceover monologue
 just script --theme "waking life alien dreamscape" --seed 42 --segments 16
 
 # 2. Review and edit the generated files
 cat output/42/script.json      # visual prompts per segment
 cat output/42/voiceover.json   # voiceover monologue per segment
 
-# 3. Render voiceover audio (with ComfyUI + ChatterboxTTS running)
+# 3. Render voiceover audio (requires ComfyUI + ChatterboxTTS)
 just voiceover --seed 42 --voice narrator.wav
 
-# 4. Render video segments (with ComfyUI + LTX running)
+# 4. Render video segments (requires ComfyUI + LTX)
 just chain --text-to-video --workflow workflow/ltx_i2v.json \
   --seed 42 --segments 16 --suffixes-file output/42/script.json
 
-# 5. Concatenate with voiceover mixed in
+# 5. Concatenate with centered voiceover
 just concat 42
+```
+
+### Manual script generation
+
+If you prefer to use your own LLM (e.g. ChatGPT, Claude), use the manual
+mode which prints prompts for copy-paste:
+
+```bash
+just script-manual --theme "waking life alien dreamscape" --seed 42 --segments 16
 ```
 
 ## Iterating
 
-Every step is resumable. The `--seed` is a run ID — all outputs go to
-`output/{seed}/`. Existing files are skipped.
+The `--seed` is a run ID — all outputs go to `output/{seed}/`. Existing
+files are skipped automatically.
 
 ```bash
 # Don't like segment 5? Delete it and re-run (gets a new random noise seed)
 rm output/42/segment_05.mp4 output/42/segment_05_last.png
-just chain --text-to-video --workflow workflow/ltx_i2v.json \
-  --seed 42 --segments 16 --suffixes-file output/42/script.json
+just workflow --theme "waking life alien dreamscape" --seed 42 --segments 16
 
 # Extend from 16 to 32 segments (keeps the first 16, generates 17-32)
-just chain --text-to-video --workflow workflow/ltx_i2v.json \
-  --seed 42 --segments 32 --suffixes-file output/42/script.json
+just workflow --theme "waking life alien dreamscape" --seed 42 --segments 32
+
+# Regenerate the LLM script from scratch
+just script --theme "new direction" --seed 42 --segments 16 --force
 
 # Re-concat after changes
 just concat 42
@@ -98,8 +128,10 @@ just concat
 
 | Recipe | Description |
 |--------|-------------|
-| `just config` | Set ComfyUI URL in `.env` |
+| `just workflow` | Run full pipeline: script, voiceover, video, concat |
+| `just config` | Configure `.env` settings |
 | `just script` | Generate visual + voiceover script from LLM |
+| `just script-manual` | Generate script via copy-paste prompts |
 | `just voiceover` | Render voiceover audio via tts-demo |
 | `just chain` | Run chained video generation |
 | `just concat` | Concatenate segments into `final.mp4` |
@@ -122,16 +154,16 @@ output/
     ├── voiceover_01.wav       # voiceover audio per segment
     ├── voiceover_02.wav
     ├── ...
-    └── final.mp4              # concatenated final video
+    └── final.mp4              # concatenated final video with voiceover
 ```
 
 ## chain.py options
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--seed` | Run ID (required) | — |
-| `--workflow` | ComfyUI API workflow JSON (required) | — |
-| `--image` | Initial input image | — |
+| `--seed` | Run ID (required) | -- |
+| `--workflow` | ComfyUI API workflow JSON (required) | -- |
+| `--image` | Initial input image | -- |
 | `--text-to-video` | Text-to-video mode for first segment | off |
 | `--segments` | Number of segments | 4 |
 | `--length` | Video length in frames | 600 (~24s) |
@@ -139,7 +171,7 @@ output/
 | `--suffixes-file` | JSON file of per-segment suffixes | built-in |
 | `--concat` | Concatenate after generation | off |
 | `--timeout` | Per-segment timeout (seconds) | 600 |
-| `--negative-prompt` | Override negative prompt | — |
+| `--negative-prompt` | Override negative prompt | -- |
 
 Workflow node IDs are configurable via `--image-node`, `--prompt-node`,
 `--seed-node`, `--output-node`, etc. See `python3 chain.py --help`.
