@@ -136,12 +136,26 @@ def upload_image(base_url, image_path, subfolder="", overwrite=True):
     return result.get("name", filename)
 
 
+def cancel_queue(base_url):
+    """Cancel all queued and running prompts on the ComfyUI server."""
+    post_json(f"{base_url}/api/interrupt", {})
+    try:
+        post_json(f"{base_url}/api/queue", {"clear": True})
+    except Exception:
+        pass
+
+
 def run_workflow(base_url, workflow, timeout=600):
     """Submit a workflow and wait for completion. Returns history entry."""
     client_id = str(uuid.uuid4())
     result = queue_prompt(base_url, workflow, client_id)
     prompt_id = result["prompt_id"]
     print(f"  queued: {prompt_id}")
-    history = poll_until_done(base_url, prompt_id, timeout=timeout)
+    try:
+        history = poll_until_done(base_url, prompt_id, timeout=timeout)
+    except KeyboardInterrupt:
+        print("\n  interrupted — cancelling job on ComfyUI...")
+        cancel_queue(base_url)
+        raise
     print()
     return history
