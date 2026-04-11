@@ -330,7 +330,7 @@ def main():
             seed_value = random.randint(0, 2**53)
 
         # Name files by segment number and seed so runs don't overwrite
-        seg_label = f"segment_{seg_num:02d}_{seed_value}"
+        seg_label = f"segment_{seed_value}_{seg_num:02d}"
         seg_video = os.path.join(args.output_dir, f"{seg_label}.mp4")
         seg_frame = os.path.join(args.output_dir, f"{seg_label}_last.png")
 
