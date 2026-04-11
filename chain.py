@@ -317,9 +317,6 @@ def main():
 
     for i in range(args.segments):
         seg_num = args.start_segment + i
-        seg_label = f"segment_{seg_num:02d}"
-        seg_video = os.path.join(args.output_dir, f"{seg_label}.mp4")
-        seg_frame = os.path.join(args.output_dir, f"{seg_label}_last.png")
 
         suffix_idx = i % len(suffixes)
         suffix = suffixes[suffix_idx]
@@ -331,6 +328,11 @@ def main():
         else:
             import random
             seed_value = random.randint(0, 2**53)
+
+        # Name files by segment number and seed so runs don't overwrite
+        seg_label = f"segment_{seg_num:02d}_{seed_value}"
+        seg_video = os.path.join(args.output_dir, f"{seg_label}.mp4")
+        seg_frame = os.path.join(args.output_dir, f"{seg_label}_last.png")
 
         # First segment can be text-to-video (no image input)
         is_t2v = args.text_to_video and i == 0 and not args.start_frame
