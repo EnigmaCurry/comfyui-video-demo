@@ -66,7 +66,7 @@ Respond with a JSON array of strings, one per segment. No other text.\
 
 
 def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=None):
-    """Call the LLM and return parsed JSON array."""
+    """Call the LLM with streaming and return parsed JSON array."""
     payload = {
         "model": model,
         "messages": [
@@ -75,6 +75,7 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
         ],
         "temperature": temperature,
         "max_tokens": 8192,
+        "stream": True,
     }
 
     url = f"{base_url}/v1/chat/completions"
@@ -86,8 +87,7 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
     try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            result = json.loads(resp.read())
+        resp = urllib.request.urlopen(req, timeout=30)
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
         print(f"Error: HTTP {e.code}: {body}", file=sys.stderr)
@@ -96,7 +96,33 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
         print(f"Error: could not connect to {base_url}: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
-    content = result["choices"][0]["message"]["content"]
+    # Read SSE stream
+    content = ""
+    token_count = 0
+    try:
+        for raw_line in resp:
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line or not line.startswith("data: "):
+                continue
+            data_str = line[6:]
+            if data_str == "[DONE]":
+                break
+            try:
+                chunk = json.loads(data_str)
+                delta = chunk["choices"][0].get("delta", {})
+                text_chunk = delta.get("content", "")
+                if text_chunk:
+                    content += text_chunk
+                    token_count += 1
+                    if token_count % 20 == 0:
+                        sys.stdout.write(".")
+                        sys.stdout.flush()
+            except (json.JSONDecodeError, KeyError, IndexError):
+                continue
+    finally:
+        resp.close()
+
+    print(f" ({token_count} tokens)")
 
     # Parse JSON from the response (handle markdown code blocks)
     text = content.strip()
