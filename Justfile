@@ -43,11 +43,25 @@ concat DIR="output":
         echo "No segment videos found in {{DIR}}/"
         exit 1
     fi
+    out="{{DIR}}/final.mp4"
+    # Check if final.mp4 is already newer than all segments
+    if [ -f "$out" ]; then
+        stale=false
+        for f in "${files[@]}"; do
+            if [ "$f" -nt "$out" ]; then
+                stale=true
+                break
+            fi
+        done
+        if [ "$stale" = false ]; then
+            echo "final.mp4 is already up to date (${#files[@]} segments)"
+            exit 0
+        fi
+    fi
     list=$(mktemp)
     for f in "${files[@]}"; do
         echo "file '$(realpath "$f")'" >> "$list"
     done
-    out="{{DIR}}/final.mp4"
     ffmpeg -y -f concat -safe 0 -i "$list" -c copy "$out"
     rm "$list"
     echo "Concatenated ${#files[@]} segments -> $out"
