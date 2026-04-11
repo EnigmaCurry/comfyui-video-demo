@@ -29,6 +29,10 @@ config:
     fi
     echo "Saved COMFYUI_URL=${url} to .env"
 
+# Generate a video script from an LLM
+script *ARGS:
+    python3 write_script.py {{ARGS}}
+
 # Run chained image-to-video generation
 chain *ARGS:
     python3 chain.py {{ARGS}}
