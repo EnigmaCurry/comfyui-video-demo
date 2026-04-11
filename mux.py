@@ -152,6 +152,16 @@ def main():
                 capture_output=True, check=True,
             )
 
+            # Warn if total voiceover and video durations differ
+            video_dur = get_duration(tmp_video)
+            vo_dur_total = get_duration(tmp_vo)
+            if video_dur and vo_dur_total:
+                diff = abs(video_dur - vo_dur_total)
+                if diff > 1.0:
+                    print(f"  WARNING: total video={video_dur:.1f}s, "
+                          f"voiceover={vo_dur_total:.1f}s "
+                          f"(diff={diff:.1f}s)")
+
             # Apply master offset delay to the full voiceover track
             if args.voice_delay > 0:
                 delay_ms = int(args.voice_delay * 1000)
