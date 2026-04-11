@@ -37,6 +37,9 @@ def make_run_dir(output_dir, seed, theme=None):
 
     if theme:
         slug = re.sub(r'[^a-z0-9]+', '-', theme.lower()).strip('-')
+        # Truncate slug to keep directory names reasonable
+        if len(slug) > 60:
+            slug = slug[:60].rstrip('-')
         run_dir = os.path.join(output_dir, f"{seed}-{slug}")
     else:
         run_dir = os.path.join(output_dir, str(seed))
