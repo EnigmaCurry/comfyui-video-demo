@@ -82,6 +82,11 @@ def main():
     run_dir = os.path.join("output", str(args.seed))
     os.makedirs(run_dir, exist_ok=True)
 
+    theme_path = os.path.join(run_dir, "theme.txt")
+    if not os.path.exists(theme_path):
+        with open(theme_path, "w") as f:
+            f.write(args.theme)
+
     script_path = os.path.join(run_dir, "script.json")
     voiceover_path = os.path.join(run_dir, "voiceover.json")
 

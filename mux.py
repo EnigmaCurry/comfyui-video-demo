@@ -87,7 +87,17 @@ def main():
         print(f"Error: no segment videos in {run_dir}/", file=sys.stderr)
         sys.exit(1)
 
-    final_path = os.path.join(run_dir, "final.mp4")
+    # Build final filename from seed and theme
+    import re
+    theme_path = os.path.join(run_dir, "theme.txt")
+    if os.path.exists(theme_path):
+        with open(theme_path) as f:
+            theme = f.read().strip()
+        slug = re.sub(r'[^a-z0-9]+', '-', theme.lower()).strip('-')
+        final_name = f"{args.seed}-{slug}.mp4"
+    else:
+        final_name = "final.mp4"
+    final_path = os.path.join(run_dir, final_name)
 
     # Check if up to date
     if os.path.exists(final_path):
