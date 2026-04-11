@@ -122,7 +122,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate video chain script from an LLM"
     )
-    parser.add_argument("--theme", required=True,
+    parser.add_argument("--theme", required=True, nargs="+",
                         help="High-level theme or concept for the video")
     parser.add_argument("--segments", type=int, default=16,
                         help="Number of segments to generate (default: 16)")
@@ -147,6 +147,7 @@ def main():
 
     args = parser.parse_args()
 
+    args.theme = " ".join(args.theme)
     base_url = args.url or LLM_URL
     model = args.model or LLM_MODEL
     api_key = args.api_key or os.environ.get("LLM_API_KEY", "")
