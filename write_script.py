@@ -221,6 +221,8 @@ def main():
                         help="Only generate visual descriptions, skip voiceover")
     parser.add_argument("--voiceover-only", action="store_true",
                         help="Only generate voiceover (requires existing script.json)")
+    parser.add_argument("--force", action="store_true",
+                        help="Regenerate even if files already exist")
     parser.add_argument("--print", action="store_true", dest="print_only",
                         help="Print to stdout instead of saving to file")
 
@@ -239,35 +241,40 @@ def main():
 
     # ── Visual descriptions ───────────────────────────────────────────
     if not args.voiceover_only:
-        print(f"Generating {args.segments}-segment visual script...")
-        print(f"  theme: {args.theme}")
-        print(f"  LLM:   {base_url} ({model})")
-        sys.stdout.write("  streaming: ")
-        sys.stdout.flush()
-
-        user_msg = f"Theme: {args.theme}\nNumber of segments: {args.segments}"
-        if args.base_prompt:
-            user_msg += (f"\n\nThe following base prompt will be prepended to each "
-                         f"of your descriptions, so do not repeat its content:\n"
-                         f"{args.base_prompt}")
-
-        visuals = call_llm(base_url, model, VISUAL_SYSTEM_PROMPT, user_msg,
-                           temperature=args.temperature, api_key=api_key)
-
-        if len(visuals) < args.segments:
-            print(f"  warning: LLM returned {len(visuals)} segments, "
-                  f"requested {args.segments} — will cycle", file=sys.stderr)
-        elif len(visuals) > args.segments:
-            visuals = visuals[:args.segments]
-
-        if args.print_only:
-            print("\n=== Visual descriptions ===")
-            print(json.dumps(visuals, indent=2))
+        if os.path.exists(script_path) and not args.force:
+            print(f"Visual script exists: {script_path} (use --force to regenerate)")
+            with open(script_path) as f:
+                visuals = json.load(f)
         else:
-            with open(script_path, "w") as f:
-                json.dump(visuals, f, indent=2)
-                f.write("\n")
-            print(f"  saved: {script_path}")
+            print(f"Generating {args.segments}-segment visual script...")
+            print(f"  theme: {args.theme}")
+            print(f"  LLM:   {base_url} ({model})")
+            sys.stdout.write("  streaming: ")
+            sys.stdout.flush()
+
+            user_msg = f"Theme: {args.theme}\nNumber of segments: {args.segments}"
+            if args.base_prompt:
+                user_msg += (f"\n\nThe following base prompt will be prepended to each "
+                             f"of your descriptions, so do not repeat its content:\n"
+                             f"{args.base_prompt}")
+
+            visuals = call_llm(base_url, model, VISUAL_SYSTEM_PROMPT, user_msg,
+                               temperature=args.temperature, api_key=api_key)
+
+            if len(visuals) < args.segments:
+                print(f"  warning: LLM returned {len(visuals)} segments, "
+                      f"requested {args.segments} — will cycle", file=sys.stderr)
+            elif len(visuals) > args.segments:
+                visuals = visuals[:args.segments]
+
+            if args.print_only:
+                print("\n=== Visual descriptions ===")
+                print(json.dumps(visuals, indent=2))
+            else:
+                with open(script_path, "w") as f:
+                    json.dump(visuals, f, indent=2)
+                    f.write("\n")
+                print(f"  saved: {script_path}")
     else:
         if not os.path.exists(script_path):
             print(f"Error: {script_path} not found (needed for --voiceover-only)",
@@ -278,32 +285,35 @@ def main():
 
     # ── Voiceover monologue ───────────────────────────────────────────
     if not args.visual_only:
-        print(f"\nGenerating voiceover monologue...")
-        sys.stdout.write("  streaming: ")
-        sys.stdout.flush()
-
-        visual_list = "\n".join(f"  Segment {i+1}: {v}" for i, v in enumerate(visuals))
-        vo_user_msg = (f"Theme: {args.theme}\n"
-                       f"Number of segments: {len(visuals)}\n\n"
-                       f"Visual descriptions for each segment:\n{visual_list}")
-
-        voiceover = call_llm(base_url, model, VOICEOVER_SYSTEM_PROMPT, vo_user_msg,
-                             temperature=args.temperature, api_key=api_key)
-
-        if len(voiceover) < len(visuals):
-            print(f"  warning: LLM returned {len(voiceover)} voiceover segments, "
-                  f"expected {len(visuals)} — will cycle", file=sys.stderr)
-        elif len(voiceover) > len(visuals):
-            voiceover = voiceover[:len(visuals)]
-
-        if args.print_only:
-            print("\n=== Voiceover monologue ===")
-            print(json.dumps(voiceover, indent=2))
+        if os.path.exists(voiceover_path) and not args.force:
+            print(f"\nVoiceover exists: {voiceover_path} (use --force to regenerate)")
         else:
-            with open(voiceover_path, "w") as f:
-                json.dump(voiceover, f, indent=2)
-                f.write("\n")
-            print(f"  saved: {voiceover_path}")
+            print(f"\nGenerating voiceover monologue...")
+            sys.stdout.write("  streaming: ")
+            sys.stdout.flush()
+
+            visual_list = "\n".join(f"  Segment {i+1}: {v}" for i, v in enumerate(visuals))
+            vo_user_msg = (f"Theme: {args.theme}\n"
+                           f"Number of segments: {len(visuals)}\n\n"
+                           f"Visual descriptions for each segment:\n{visual_list}")
+
+            voiceover = call_llm(base_url, model, VOICEOVER_SYSTEM_PROMPT, vo_user_msg,
+                                 temperature=args.temperature, api_key=api_key)
+
+            if len(voiceover) < len(visuals):
+                print(f"  warning: LLM returned {len(voiceover)} voiceover segments, "
+                      f"expected {len(visuals)} — will cycle", file=sys.stderr)
+            elif len(voiceover) > len(visuals):
+                voiceover = voiceover[:len(visuals)]
+
+            if args.print_only:
+                print("\n=== Voiceover monologue ===")
+                print(json.dumps(voiceover, indent=2))
+            else:
+                with open(voiceover_path, "w") as f:
+                    json.dump(voiceover, f, indent=2)
+                    f.write("\n")
+                print(f"  saved: {voiceover_path}")
 
     # ── Usage hint ────────────────────────────────────────────────────
     if not args.print_only:
