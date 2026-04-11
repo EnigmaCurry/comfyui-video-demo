@@ -10,14 +10,37 @@ import urllib.request
 import uuid
 
 COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
+COMFYUI_TOKEN = os.environ.get("COMFYUI_TOKEN", "")
+
+
+def _auth_headers():
+    """Return auth headers dict if a token is configured."""
+    if COMFYUI_TOKEN:
+        return {"Authorization": f"Bearer {COMFYUI_TOKEN}"}
+    return {}
+
+
+def _authed_request(url, **kwargs):
+    """Create a urllib Request with auth headers."""
+    headers = kwargs.pop("headers", {})
+    headers.update(_auth_headers())
+    return urllib.request.Request(url, headers=headers, **kwargs)
+
+
+def _urlopen(req_or_url):
+    """Open a URL or Request, adding auth headers if given a plain URL string."""
+    if isinstance(req_or_url, str):
+        req_or_url = _authed_request(req_or_url)
+    return urllib.request.urlopen(req_or_url)
 
 
 def post_json(url, payload):
     """POST JSON, following redirects while preserving the body."""
     data = json.dumps(payload).encode()
     for _ in range(5):
-        req = urllib.request.Request(
-            url, data=data, headers={"Content-Type": "application/json"},
+        req = _authed_request(
+            url, data=data,
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
@@ -44,7 +67,7 @@ def queue_prompt(base_url, prompt, client_id=None):
 
 def get_history(base_url, prompt_id):
     """Get execution history for a prompt."""
-    with urllib.request.urlopen(f"{base_url}/api/history/{prompt_id}") as resp:
+    with _urlopen(f"{base_url}/api/history/{prompt_id}") as resp:
         return json.loads(resp.read())
 
 
@@ -83,7 +106,10 @@ def download_output(base_url, history_entry, dest_path, output_type="video"):
                         {"filename": filename, "subfolder": subfolder, "type": filetype}
                     )
                     url = f"{base_url}/api/view?{params}"
-                    urllib.request.urlretrieve(url, dest_path)
+                    req = _authed_request(url)
+                    with urllib.request.urlopen(req) as resp:
+                        with open(dest_path, "wb") as out_f:
+                            out_f.write(resp.read())
                     return dest_path
     raise RuntimeError(
         f"No output found in workflow results. "
@@ -125,7 +151,7 @@ def upload_image(base_url, image_path, subfolder="", overwrite=True):
     body += b"\r\n"
     body += f"--{boundary}--\r\n".encode()
 
-    req = urllib.request.Request(
+    req = _authed_request(
         f"{base_url}/api/upload/image",
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},

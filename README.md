@@ -29,11 +29,18 @@ just config   # set your ComfyUI server URL in .env
 Export your LTX image-to-video workflow from ComfyUI in **API format**
 (Save API Format) and save it to `workflow/ltx_i2v.json`.
 
+If your ComfyUI server requires authentication, add to `.env`:
+
+```
+COMFYUI_TOKEN=your-bearer-token
+```
+
 For LLM script generation, add to `.env`:
 
 ```
 LLM_URL=http://127.0.0.1:8000
 LLM_MODEL=your-model-name
+LLM_API_KEY=your-api-key
 ```
 
 ## Quick start
