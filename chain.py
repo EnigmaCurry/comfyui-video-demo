@@ -136,9 +136,15 @@ def patch_workflow(workflow, *, image_name, prompt_text,
     if output_node and output_node in wf and output_prefix:
         wf[output_node]["inputs"][output_field] = output_prefix
 
-    # Patch seed
-    if seed_node and seed_node in wf and seed_value is not None:
-        wf[seed_node]["inputs"][seed_field] = seed_value
+    # Patch seed — update all seed-bearing nodes so nothing is static
+    if seed_value is not None:
+        if seed_node and seed_node in wf:
+            wf[seed_node]["inputs"][seed_field] = seed_value
+        # Also patch the other RandomNoise node and the prompt generator seed
+        if "267:216" in wf:
+            wf["267:216"]["inputs"]["noise_seed"] = seed_value + 1
+        if "267:274" in wf:
+            wf["267:274"]["inputs"]["sampling_mode.seed"] = seed_value + 2
 
     # Patch negative prompt
     if (negative_prompt_node and negative_prompt_node in wf
