@@ -6,28 +6,43 @@ set dotenv-load
 default:
     @just --list
 
-# Configure ComfyUI server URL in .env
+# Configure .env settings
 config:
     #!/usr/bin/env bash
-    current=""
-    if [ -f .env ]; then
-        current=$(grep -oP '(?<=^COMFYUI_URL=).*' .env 2>/dev/null || true)
-    fi
-    if [ -n "$current" ]; then
-        echo "Current COMFYUI_URL=$current"
-    fi
-    read -rp "ComfyUI URL [${current:-http://127.0.0.1:8188}]: " url
-    url="${url:-${current:-http://127.0.0.1:8188}}"
-    if [ -f .env ]; then
-        if grep -q '^COMFYUI_URL=' .env; then
-            sed -i "s|^COMFYUI_URL=.*|COMFYUI_URL=${url}|" .env
-        else
-            echo "COMFYUI_URL=${url}" >> .env
+    touch .env
+    set_var() {
+        local key="$1" prompt="$2" default="$3" secret="$4"
+        local current
+        current=$(grep -oP "(?<=^${key}=).*" .env 2>/dev/null || true)
+        local display_default="${current:-$default}"
+        if [ "$secret" = "true" ] && [ -n "$current" ]; then
+            display_default="****${current: -4}"
         fi
-    else
-        echo "COMFYUI_URL=${url}" > .env
-    fi
-    echo "Saved COMFYUI_URL=${url} to .env"
+        if [ -n "$display_default" ]; then
+            read -rp "${prompt} [${display_default}]: " value
+        else
+            read -rp "${prompt}: " value
+        fi
+        value="${value:-$current}"
+        value="${value:-$default}"
+        if [ -n "$value" ]; then
+            if grep -q "^${key}=" .env; then
+                sed -i "s|^${key}=.*|${key}=${value}|" .env
+            else
+                echo "${key}=${value}" >> .env
+            fi
+        fi
+    }
+    echo "=== ComfyUI ==="
+    set_var COMFYUI_URL  "ComfyUI URL"    "http://127.0.0.1:8188"
+    set_var COMFYUI_TOKEN "ComfyUI Bearer token (blank for none)" "" true
+    echo ""
+    echo "=== LLM (for script generation) ==="
+    set_var LLM_URL   "LLM API URL"   "http://127.0.0.1:8000"
+    set_var LLM_MODEL "LLM model name" "default"
+    set_var LLM_API_KEY "LLM API key (blank for none)" "" true
+    echo ""
+    echo "Saved to .env"
 
 # Generate a video script from an LLM
 script *ARGS:
