@@ -49,7 +49,7 @@ workflow *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
     # Parse --seed, --segments, --theme, and passthrough args
-    seed="" segments="16" theme="" voice="despotism-doc.wav" extra_args=()
+    seed="" segments="16" theme="" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --seed) seed="$2"; shift 2 ;;
@@ -60,6 +60,7 @@ workflow *ARGS:
                 done
                 theme="${theme# }" ;;
             --voice) voice="$2"; shift 2 ;;
+            --voice-delay) voice_delay="$2"; shift 2 ;;
             *) extra_args+=("$1"); shift ;;
         esac
     done
@@ -90,7 +91,7 @@ workflow *ARGS:
     echo "══════════════════════════════════════════════════════════════"
     echo "  Step 4/4: Concatenate + mux voiceover"
     echo "══════════════════════════════════════════════════════════════"
-    python3 mux.py --seed "$seed"
+    python3 mux.py --seed "$seed" --voice-delay "$voice_delay"
     echo ""
     echo "Done! output/${seed}/final.mp4"
 
