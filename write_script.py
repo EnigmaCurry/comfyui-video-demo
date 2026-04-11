@@ -96,9 +96,26 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
         print(f"Error: could not connect to {base_url}: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
-    # Read SSE stream
+    # Read SSE stream with a waiting spinner for time-to-first-token
+    import threading
     content = ""
     token_count = 0
+    first_token = threading.Event()
+
+    def wait_spinner():
+        """Show elapsed seconds while waiting for first token."""
+        import itertools
+        elapsed = 0
+        for _ in itertools.count():
+            if first_token.wait(timeout=1):
+                return
+            elapsed += 1
+            sys.stdout.write(f"\r  streaming: (waiting {elapsed}s...)")
+            sys.stdout.flush()
+
+    spinner = threading.Thread(target=wait_spinner, daemon=True)
+    spinner.start()
+
     try:
         for raw_line in resp:
             line = raw_line.decode("utf-8", errors="replace").strip()
@@ -112,6 +129,11 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
                 delta = chunk["choices"][0].get("delta", {})
                 text_chunk = delta.get("content", "")
                 if text_chunk:
+                    if not first_token.is_set():
+                        first_token.set()
+                        spinner.join()
+                        sys.stdout.write(f"\r  streaming: ")
+                        sys.stdout.flush()
                     content += text_chunk
                     token_count += 1
                     if token_count % 20 == 0:
@@ -120,6 +142,7 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
             except (json.JSONDecodeError, KeyError, IndexError):
                 continue
     finally:
+        first_token.set()
         resp.close()
 
     print(f" ({token_count} tokens)")
