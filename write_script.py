@@ -189,6 +189,8 @@ def main():
         print(f"Generating {args.segments}-segment visual script...")
         print(f"  theme: {args.theme}")
         print(f"  LLM:   {base_url} ({model})")
+        sys.stdout.write("  streaming: ")
+        sys.stdout.flush()
 
         user_msg = f"Theme: {args.theme}\nNumber of segments: {args.segments}"
         if args.base_prompt:
@@ -224,6 +226,8 @@ def main():
     # ── Voiceover monologue ───────────────────────────────────────────
     if not args.visual_only:
         print(f"\nGenerating voiceover monologue...")
+        sys.stdout.write("  streaming: ")
+        sys.stdout.flush()
 
         visual_list = "\n".join(f"  Segment {i+1}: {v}" for i, v in enumerate(visuals))
         vo_user_msg = (f"Theme: {args.theme}\n"
