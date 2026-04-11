@@ -28,11 +28,11 @@ from comfyui_video import (
 # ── Default prompt config ─────────────────────────────────────────────
 
 BASE_PROMPT = (
-    "The video behaves like a chain of surreal revelations constantly "
-    "interrupting each other. Each new image should feel like a sudden "
-    "unexpected jump in thought. Transitions should be active "
-    "metamorphoses, not crossfades. Begin from the input image, preserve "
-    "some colors and shapes from it, but quickly mutate into new imagery."
+    "The video is a violent cascade of hallucinations. Each frame should "
+    "aggressively mutate away from the previous one. Nothing stays stable. "
+    "Shapes warp, colors invert, scale shifts wildly. The input image is "
+    "only a launching point — destroy it, rebuild something completely "
+    "different. Constant motion, constant transformation, maximum novelty."
 )
 
 DEFAULT_SUFFIXES = [
