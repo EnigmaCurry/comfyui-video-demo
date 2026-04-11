@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 from comfyui_video import (
     COMFYUI_URL,
@@ -205,6 +206,18 @@ def concat_videos(video_paths, output_path):
     return output_path
 
 
+def fmt_duration(seconds):
+    """Format seconds into human-readable duration."""
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    m, s = divmod(s, 60)
+    if m < 60:
+        return f"{m}m{s:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h{m:02d}m{s:02d}s"
+
+
 def build_prompt_text(base, suffix, segment_index):
     """Combine base prompt with per-segment suffix."""
     parts = [base.strip()]
@@ -327,6 +340,18 @@ def main():
     segment_videos = []
     generated = 0
     skipped = 0
+    clip_times = []
+    run_start = time.time()
+
+    # Count how many segments need generating
+    to_generate = 0
+    for i in range(args.segments):
+        seg_num = i + 1
+        seg_label = f"segment_{seg_num:02d}"
+        v = os.path.join(run_dir, f"{seg_label}.mp4")
+        f = os.path.join(run_dir, f"{seg_label}_last.png")
+        if not (os.path.exists(v) and os.path.exists(f)):
+            to_generate += 1
 
     for i in range(args.segments):
         seg_num = i + 1
@@ -358,8 +383,11 @@ def main():
         # Random noise seed for this generation (different each run)
         noise_seed = random.randint(0, 2**53)
 
+        seg_start = time.time()
+        remaining_count = to_generate - generated
+
         print(f"\n{'='*60}")
-        print(f"Segment {seg_num}/{args.segments}")
+        print(f"Segment {seg_num}/{args.segments} ({remaining_count} remaining)")
         if is_t2v:
             print(f"  mode:   text-to-video")
         print(f"  suffix: {suffix}")
@@ -424,6 +452,19 @@ def main():
         current_image = seg_frame
         generated += 1
 
+        # Timing stats
+        clip_time = time.time() - seg_start
+        clip_times.append(clip_time)
+        elapsed = time.time() - run_start
+        avg_time = sum(clip_times) / len(clip_times)
+        remaining_count = to_generate - generated
+        eta = avg_time * remaining_count
+
+        print(f"  clip: {fmt_duration(clip_time)} | "
+              f"avg: {fmt_duration(avg_time)} | "
+              f"elapsed: {fmt_duration(elapsed)} | "
+              f"eta: {fmt_duration(eta)} ({remaining_count} left)")
+
     # Concatenate if requested
     if args.concat and len(segment_videos) > 1:
         final_path = os.path.join(run_dir, "final.mp4")
@@ -431,7 +472,9 @@ def main():
         concat_videos(segment_videos, final_path)
         print(f"Final video: {final_path}")
 
-    print(f"\nDone. {generated} generated, {skipped} skipped in {run_dir}/")
+    total_time = time.time() - run_start
+    print(f"\nDone. {generated} generated, {skipped} skipped in {run_dir}/ "
+          f"({fmt_duration(total_time)} total)")
 
 
 if __name__ == "__main__":
