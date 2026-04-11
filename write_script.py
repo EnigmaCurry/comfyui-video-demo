@@ -110,7 +110,7 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
             if first_token.wait(timeout=1):
                 return
             elapsed += 1
-            sys.stdout.write(f"\r  streaming: (waiting {elapsed}s...)")
+            sys.stdout.write(f"\r  streaming: (thinking {elapsed}s...)")
             sys.stdout.flush()
 
     spinner = threading.Thread(target=wait_spinner, daemon=True)
