@@ -51,7 +51,7 @@ def render_segment_tts(tts_dir, comfyui_url, text, voice, output_path, seed=1):
         os.path.join(tts_dir, "tts.py"),
         "--url", comfyui_url,
         "--voice", voice,
-        "--output", output_path,
+        "--output", os.path.abspath(output_path),
         "--seed", str(seed),
         "--no-play",
         text,
