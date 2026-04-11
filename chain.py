@@ -119,8 +119,8 @@ def patch_workflow(workflow, *, image_name, prompt_text,
     if t2v_switch_node and t2v_switch_node in wf:
         wf[t2v_switch_node]["inputs"][t2v_switch_field] = t2v_enabled
 
-    # Patch image input (skip if in t2v mode — no image needed)
-    if image_node and image_node in wf and not t2v_enabled:
+    # Patch image input (always patch — ComfyUI validates even in t2v mode)
+    if image_node and image_node in wf and image_name:
         wf[image_node]["inputs"][image_field] = image_name
 
     # Patch prompt
