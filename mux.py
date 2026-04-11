@@ -28,11 +28,8 @@ def get_duration(path):
     return None
 
 
-def pad_audio_centered(wav_path, target_duration, output_path, delay=0.0):
-    """Pad a WAV with silence so it's centered within target_duration.
-
-    delay: extra seconds added to the front padding (shifts voice later).
-    """
+def pad_audio_centered(wav_path, target_duration, output_path):
+    """Pad a WAV with silence so it's centered within target_duration."""
     dur = get_duration(wav_path)
     if dur is None:
         raise RuntimeError(f"Could not get duration of {wav_path}")
@@ -46,10 +43,8 @@ def pad_audio_centered(wav_path, target_duration, output_path, delay=0.0):
         return dur
 
     pad_total = target_duration - dur
-    pad_before = pad_total / 2 + delay
+    pad_before = pad_total / 2
     pad_after = pad_total - pad_before
-    if pad_after < 0:
-        pad_after = 0
 
     # Use adelay for front padding and apad+atrim for back padding
     result = subprocess.run(
@@ -136,10 +131,9 @@ def main():
                     seg_dur = 24.0
 
                 padded_path = os.path.join(tmpdir, f"padded_{i:02d}.wav")
-                vo_dur = pad_audio_centered(vo_wav, seg_dur, padded_path,
-                                            delay=args.voice_delay)
+                vo_dur = pad_audio_centered(vo_wav, seg_dur, padded_path)
 
-                pad_before = max(0, (seg_dur - vo_dur) / 2 + args.voice_delay)
+                pad_before = max(0, (seg_dur - vo_dur) / 2)
                 print(f"  segment {i+1}: video={seg_dur:.1f}s, "
                       f"voice={vo_dur:.1f}s, "
                       f"offset={pad_before:.1f}s")
@@ -157,6 +151,19 @@ def main():
                  "-i", vo_list, "-c:a", "pcm_s16le", tmp_vo],
                 capture_output=True, check=True,
             )
+
+            # Apply master offset delay to the full voiceover track
+            if args.voice_delay > 0:
+                delay_ms = int(args.voice_delay * 1000)
+                tmp_vo_delayed = os.path.join(tmpdir, "voiceover_delayed.wav")
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", tmp_vo,
+                     "-af", f"adelay={delay_ms}|{delay_ms}",
+                     "-c:a", "pcm_s16le", tmp_vo_delayed],
+                    capture_output=True, check=True,
+                )
+                tmp_vo = tmp_vo_delayed
+                print(f"  master delay: {args.voice_delay}s")
 
             # Check if video has an audio stream
             probe = subprocess.run(
