@@ -260,8 +260,8 @@ def main():
                         help="Sampler node ID for seed patching (default: none)")
     parser.add_argument("--seed-field", default=DEFAULT_SEED_FIELD,
                         help=f"Seed field name (default: {DEFAULT_SEED_FIELD})")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="Base seed value (increments per segment; default: random)")
+    parser.add_argument("--seed", type=int, required=True,
+                        help="Run ID seed (used for naming files; noise seeds are random per segment)")
     parser.add_argument("--negative-prompt-node", default="267:247",
                         help="Negative prompt node ID (default: 267:247)")
     parser.add_argument("--negative-prompt-field", default="text",
@@ -285,13 +285,10 @@ def main():
                         help="Concatenate all segments into final.mp4")
     parser.add_argument("--timeout", type=int, default=600,
                         help="Per-segment timeout in seconds (default: 600)")
-    parser.add_argument("--start-segment", type=int, default=1,
-                        help="Starting segment number (for resuming, default: 1)")
-    parser.add_argument("--start-frame", default=None,
-                        help="Override: use this PNG as input for the first segment "
-                             "instead of --image (for resuming)")
 
     args = parser.parse_args()
+
+    import random
 
     base_url = args.url or COMFYUI_URL
 
@@ -308,10 +305,11 @@ def main():
         suffixes = DEFAULT_SUFFIXES
 
     # Create output directory
-    os.makedirs(args.output_dir, exist_ok=True)
+    run_dir = os.path.join(args.output_dir, str(args.seed))
+    os.makedirs(run_dir, exist_ok=True)
 
     # Initial image
-    current_image = args.start_frame or args.image
+    current_image = args.image
     if current_image and not os.path.exists(current_image):
         print(f"Error: image not found: {current_image}", file=sys.stderr)
         sys.exit(1)
@@ -320,35 +318,45 @@ def main():
         sys.exit(1)
 
     segment_videos = []
+    generated = 0
+    skipped = 0
 
     for i in range(args.segments):
-        seg_num = args.start_segment + i
+        seg_num = i + 1
+        seg_label = f"segment_{seg_num:02d}"
+        seg_video = os.path.join(run_dir, f"{seg_label}.mp4")
+        seg_frame = os.path.join(run_dir, f"{seg_label}_last.png")
 
         suffix_idx = i % len(suffixes)
         suffix = suffixes[suffix_idx]
         prompt_text = build_prompt_text(args.base_prompt, suffix, i)
 
-        # Compute seed for this segment
-        if args.seed is not None:
-            seed_value = args.seed + i
-        else:
-            import random
-            seed_value = random.randint(0, 2**53)
-
-        # Name files by segment number and seed so runs don't overwrite
-        seg_label = f"segment_{seed_value}_{seg_num:02d}"
-        seg_video = os.path.join(args.output_dir, f"{seg_label}.mp4")
-        seg_frame = os.path.join(args.output_dir, f"{seg_label}_last.png")
-
         # First segment can be text-to-video (no image input)
-        is_t2v = args.text_to_video and i == 0 and not args.start_frame
+        is_t2v = args.text_to_video and i == 0
+
+        # Skip if both video and last-frame already exist
+        if os.path.exists(seg_video) and os.path.exists(seg_frame):
+            print(f"\n  segment {seg_num}: exists, skipping")
+            segment_videos.append(seg_video)
+            current_image = seg_frame
+            skipped += 1
+            continue
+
+        # For i2v segments, we need the previous segment's last frame
+        if not is_t2v and current_image is None:
+            print(f"Error: segment {seg_num} needs an input image but "
+                  f"previous segment's last frame is missing", file=sys.stderr)
+            sys.exit(1)
+
+        # Random noise seed for this generation (different each run)
+        noise_seed = random.randint(0, 2**53)
 
         print(f"\n{'='*60}")
-        print(f"Segment {seg_num}/{args.start_segment + args.segments - 1}")
+        print(f"Segment {seg_num}/{args.segments}")
         if is_t2v:
             print(f"  mode:   text-to-video")
         print(f"  suffix: {suffix}")
-        print(f"  seed:   {seed_value}")
+        print(f"  noise:  {noise_seed}")
         if not is_t2v:
             print(f"  image:  {current_image}")
         print(f"  output: {seg_video}")
@@ -358,7 +366,7 @@ def main():
         # Even in t2v mode, the LoadImage node validates, so upload a placeholder
         if is_t2v:
             print(f"  uploading placeholder image for t2v...")
-            placeholder = _create_placeholder_image(args.output_dir)
+            placeholder = _create_placeholder_image(run_dir)
             uploaded_name = upload_image(base_url, placeholder)
         else:
             print(f"  uploading image...")
@@ -376,10 +384,10 @@ def main():
             prompt_field=args.prompt_field,
             output_node=args.output_node,
             output_field=args.output_field,
-            output_prefix=seg_label,
+            output_prefix=f"{args.seed}/{seg_label}",
             seed_node=args.seed_node,
             seed_field=args.seed_field,
-            seed_value=seed_value,
+            seed_value=noise_seed,
             negative_prompt_node=args.negative_prompt_node,
             negative_prompt_field=args.negative_prompt_field,
             negative_prompt_text=args.negative_prompt,
@@ -407,15 +415,16 @@ def main():
 
         segment_videos.append(seg_video)
         current_image = seg_frame
+        generated += 1
 
     # Concatenate if requested
     if args.concat and len(segment_videos) > 1:
-        final_path = os.path.join(args.output_dir, "final.mp4")
+        final_path = os.path.join(run_dir, "final.mp4")
         print(f"\nConcatenating {len(segment_videos)} segments...")
         concat_videos(segment_videos, final_path)
         print(f"Final video: {final_path}")
 
-    print(f"\nDone. Generated {len(segment_videos)} segments in {args.output_dir}/")
+    print(f"\nDone. {generated} generated, {skipped} skipped in {run_dir}/")
 
 
 if __name__ == "__main__":
