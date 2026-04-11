@@ -128,9 +128,16 @@ def patch_workflow(workflow, *, image_name, prompt_text,
     if image_node and image_node in wf and image_name:
         wf[image_node]["inputs"][image_field] = image_name
 
-    # Patch prompt
+    # Patch prompt — write to the PrimitiveStringMultiline node
     if prompt_node and prompt_node in wf:
         wf[prompt_node]["inputs"][prompt_field] = prompt_text
+
+    # Bypass TextGenerateLTX2Prompt (Gemma) — feed prompt directly to CLIPTextEncode
+    if "267:240" in wf:
+        wf["267:240"]["inputs"]["text"] = prompt_text
+    # Remove Gemma nodes so they don't run (wastes time/VRAM)
+    wf.pop("267:274", None)  # TextGenerateLTX2Prompt
+    wf.pop("267:275", None)  # PreviewAny (preview of Gemma output)
 
     # Patch output filename prefix
     if output_node and output_node in wf and output_prefix:
