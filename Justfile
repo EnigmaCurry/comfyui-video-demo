@@ -44,6 +44,56 @@ config:
     echo ""
     echo "Saved to .env"
 
+# Run full pipeline: script → voiceover → video → concat
+workflow *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Parse --seed, --segments, --theme, and passthrough args
+    seed="" segments="16" theme="" voice="despotism-doc.wav" extra_args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --seed) seed="$2"; shift 2 ;;
+            --segments) segments="$2"; shift 2 ;;
+            --theme) shift; theme=""
+                while [[ $# -gt 0 ]] && [[ "$1" != --* ]]; do
+                    theme="$theme $1"; shift
+                done
+                theme="${theme# }" ;;
+            --voice) voice="$2"; shift 2 ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+    if [ -z "$seed" ]; then
+        echo "Error: --seed is required" >&2; exit 1
+    fi
+    if [ -z "$theme" ]; then
+        echo "Error: --theme is required" >&2; exit 1
+    fi
+    script_path="output/${seed}/script.json"
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Step 1/4: Generate script + voiceover text"
+    echo "══════════════════════════════════════════════════════════════"
+    python3 write_script.py --theme $theme --seed "$seed" --segments "$segments"
+    echo ""
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Step 2/4: Render voiceover audio"
+    echo "══════════════════════════════════════════════════════════════"
+    python3 render_voiceover.py --seed "$seed" --voice "$voice"
+    echo ""
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Step 3/4: Render video segments"
+    echo "══════════════════════════════════════════════════════════════"
+    python3 chain.py --text-to-video --workflow workflow/ltx_i2v.json \
+        --seed "$seed" --segments "$segments" \
+        --suffixes-file "$script_path" "${extra_args[@]}"
+    echo ""
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  Step 4/4: Concatenate + mux voiceover"
+    echo "══════════════════════════════════════════════════════════════"
+    python3 mux.py --seed "$seed"
+    echo ""
+    echo "Done! output/${seed}/final.mp4"
+
 # Generate a video script from an LLM
 script *ARGS:
     python3 write_script.py {{ARGS}}
