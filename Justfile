@@ -93,8 +93,6 @@ workflow *ARGS:
     echo "  Step 4/4: Concatenate + mux voiceover"
     echo "══════════════════════════════════════════════════════════════"
     python3 mux.py --seed "$seed" --voice-delay "$voice_delay"
-    echo ""
-    echo "Done! output/${seed}/final.mp4"
 
 # Generate a video script from an LLM
 script *ARGS:
