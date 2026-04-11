@@ -65,6 +65,25 @@ Respond with a JSON array of strings, one per segment. No other text.\
 """
 
 
+def _salvage_json_array(text):
+    """Try to recover complete items from a truncated JSON array."""
+    import re
+    # Find all complete quoted strings in the array
+    matches = re.findall(r'"((?:[^"\\]|\\.)*)"', text)
+    if not matches:
+        return None
+    # Filter to just the array items (skip any that look like keys)
+    # The pattern in our case is simple: array of strings
+    # Try progressively shorter lists until one parses
+    for i in range(len(matches), 0, -1):
+        attempt = json.dumps(matches[:i])
+        try:
+            return json.loads(attempt)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
 def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=None):
     """Call the LLM with streaming and return parsed JSON array."""
     payload = {
@@ -74,7 +93,7 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
             {"role": "user", "content": user_msg},
         ],
         "temperature": temperature,
-        "max_tokens": 8192,
+        "max_tokens": 16384,
         "stream": True,
     }
 
@@ -100,6 +119,7 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
     import threading
     content = ""
     token_count = 0
+    finish_reason = None
     first_token = threading.Event()
 
     def wait_spinner():
@@ -126,8 +146,11 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
                 break
             try:
                 chunk = json.loads(data_str)
-                delta = chunk["choices"][0].get("delta", {})
+                choice = chunk["choices"][0]
+                delta = choice.get("delta", {})
                 text_chunk = delta.get("content", "")
+                if choice.get("finish_reason"):
+                    finish_reason = choice["finish_reason"]
                 if text_chunk:
                     if not first_token.is_set():
                         first_token.set()
@@ -145,7 +168,10 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
         first_token.set()
         resp.close()
 
-    print(f" ({token_count} tokens)")
+    status = f"{token_count} tokens"
+    if finish_reason and finish_reason != "stop":
+        status += f", finish_reason={finish_reason}"
+    print(f" ({status})")
 
     # Parse JSON from the response (handle markdown code blocks)
     text = content.strip()
@@ -157,8 +183,12 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
     try:
         items = json.loads(text)
     except json.JSONDecodeError:
-        print(f"Error: LLM response was not valid JSON:\n{content}", file=sys.stderr)
-        sys.exit(1)
+        # Try to salvage truncated JSON array
+        items = _salvage_json_array(text)
+        if items is None:
+            print(f"Error: LLM response was not valid JSON:\n{content}", file=sys.stderr)
+            sys.exit(1)
+        print(f"  warning: response was truncated, salvaged {len(items)} complete segments")
 
     if not isinstance(items, list):
         print(f"Error: expected JSON array, got {type(items).__name__}", file=sys.stderr)
