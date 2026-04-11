@@ -28,8 +28,11 @@ def get_duration(path):
     return None
 
 
-def pad_audio_centered(wav_path, target_duration, output_path):
-    """Pad a WAV with silence so it's centered within target_duration."""
+def pad_audio_centered(wav_path, target_duration, output_path, delay=0.0):
+    """Pad a WAV with silence so it's centered within target_duration.
+
+    delay: extra seconds added to the front padding (shifts voice later).
+    """
     dur = get_duration(wav_path)
     if dur is None:
         raise RuntimeError(f"Could not get duration of {wav_path}")
@@ -43,8 +46,10 @@ def pad_audio_centered(wav_path, target_duration, output_path):
         return dur
 
     pad_total = target_duration - dur
-    pad_before = pad_total / 2
+    pad_before = pad_total / 2 + delay
     pad_after = pad_total - pad_before
+    if pad_after < 0:
+        pad_after = 0
 
     # Use adelay for front padding and apad+atrim for back padding
     result = subprocess.run(
@@ -72,6 +77,8 @@ def main():
                         help="Original video audio volume (default: 0.3)")
     parser.add_argument("--voice-volume", type=float, default=1.0,
                         help="Voiceover volume (default: 1.0)")
+    parser.add_argument("--voice-delay", type=float, default=0.0,
+                        help="Extra delay in seconds added after centering (default: 0.0)")
 
     args = parser.parse_args()
 
@@ -129,9 +136,10 @@ def main():
                     seg_dur = 24.0
 
                 padded_path = os.path.join(tmpdir, f"padded_{i:02d}.wav")
-                vo_dur = pad_audio_centered(vo_wav, seg_dur, padded_path)
+                vo_dur = pad_audio_centered(vo_wav, seg_dur, padded_path,
+                                            delay=args.voice_delay)
 
-                pad_before = max(0, (seg_dur - vo_dur) / 2)
+                pad_before = max(0, (seg_dur - vo_dur) / 2 + args.voice_delay)
                 print(f"  segment {i+1}: video={seg_dur:.1f}s, "
                       f"voice={vo_dur:.1f}s, "
                       f"offset={pad_before:.1f}s")
