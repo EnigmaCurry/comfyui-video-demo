@@ -150,20 +150,43 @@ def main():
                 capture_output=True, check=True,
             )
 
-            # Mix video audio + voiceover
+            # Check if video has an audio stream
+            probe = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-select_streams", "a",
+                 "-show_entries", "stream=index", "-of", "csv=p=0",
+                 tmp_video],
+                capture_output=True, text=True,
+            )
+            has_audio = bool(probe.stdout.strip())
+
+            # Mix video audio + voiceover, or just add voiceover
             vv = args.video_volume
             vov = args.voice_volume
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", tmp_video, "-i", tmp_vo,
-                 "-filter_complex",
-                 f"[0:a]volume={vv}[orig];"
-                 f"[1:a]volume={vov}[vo];"
-                 f"[orig][vo]amix=inputs=2:duration=longest[aout]",
-                 "-map", "0:v", "-map", "[aout]",
-                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                 final_path],
-                capture_output=True, check=True,
-            )
+            if has_audio:
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", tmp_video, "-i", tmp_vo,
+                     "-filter_complex",
+                     f"[0:a]volume={vv}[orig];"
+                     f"[1:a]volume={vov}[vo];"
+                     f"[orig][vo]amix=inputs=2:duration=longest[aout]",
+                     "-map", "0:v", "-map", "[aout]",
+                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                     final_path],
+                    capture_output=True,
+                )
+            else:
+                print("  (video has no audio track, using voiceover only)")
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", tmp_video, "-i", tmp_vo,
+                     "-map", "0:v", "-map", "1:a",
+                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                     "-shortest", final_path],
+                    capture_output=True,
+                )
+            if result.returncode != 0:
+                print(f"  ffmpeg error: {result.stderr.decode(errors='replace')}",
+                      file=sys.stderr)
+                raise subprocess.CalledProcessError(result.returncode, "ffmpeg")
         else:
             if vo_files and len(vo_files) != len(seg_videos):
                 print(f"Warning: {len(vo_files)} voiceover files but "
