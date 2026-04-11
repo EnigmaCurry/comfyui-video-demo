@@ -68,6 +68,35 @@ DEFAULT_T2V_SWITCH_NODE = "267:201"  # PrimitiveBoolean: "Switch to Text to Vide
 DEFAULT_T2V_SWITCH_FIELD = "value"
 
 
+def _create_placeholder_image(output_dir):
+    """Create a small black PNG for t2v mode (ComfyUI still validates LoadImage)."""
+    import struct
+    import zlib
+
+    path = os.path.join(output_dir, "_placeholder.png")
+    if os.path.exists(path):
+        return path
+
+    os.makedirs(output_dir, exist_ok=True)
+    # 8x8 black PNG
+    width, height = 8, 8
+    raw = b""
+    for _ in range(height):
+        raw += b"\x00" + b"\x00\x00\x00" * width  # filter byte + RGB
+    compressed = zlib.compress(raw)
+
+    def chunk(ctype, data):
+        c = ctype + data
+        return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n")
+        f.write(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)))
+        f.write(chunk(b"IDAT", compressed))
+        f.write(chunk(b"IEND", b""))
+    return path
+
+
 def load_workflow(path):
     """Load a ComfyUI API-format workflow JSON."""
     with open(path) as f:
@@ -302,12 +331,16 @@ def main():
         print(f"  output: {seg_video}")
         print(f"{'='*60}")
 
-        # Upload current image to ComfyUI (skip for t2v)
-        uploaded_name = None
-        if not is_t2v:
+        # Upload image to ComfyUI
+        # Even in t2v mode, the LoadImage node validates, so upload a placeholder
+        if is_t2v:
+            print(f"  uploading placeholder image for t2v...")
+            placeholder = _create_placeholder_image(args.output_dir)
+            uploaded_name = upload_image(base_url, placeholder)
+        else:
             print(f"  uploading image...")
             uploaded_name = upload_image(base_url, current_image)
-            print(f"  uploaded as: {uploaded_name}")
+        print(f"  uploaded as: {uploaded_name}")
 
         # Patch workflow
         wf = patch_workflow(
