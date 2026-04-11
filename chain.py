@@ -67,6 +67,10 @@ DEFAULT_SEED_FIELD = "noise_seed"
 DEFAULT_T2V_SWITCH_NODE = "267:201"  # PrimitiveBoolean: "Switch to Text to Video?"
 DEFAULT_T2V_SWITCH_FIELD = "value"
 
+DEFAULT_LENGTH_NODE = "267:225"    # PrimitiveInt: video length (frames)
+DEFAULT_LENGTH_FIELD = "value"
+DEFAULT_LENGTH = 600               # ~24 seconds
+
 
 def _create_placeholder_image(output_dir):
     """Create a small black PNG for t2v mode (ComfyUI still validates LoadImage)."""
@@ -111,7 +115,8 @@ def patch_workflow(workflow, *, image_name, prompt_text,
                    negative_prompt_node=None, negative_prompt_field=None,
                    negative_prompt_text=None,
                    t2v_switch_node=None, t2v_switch_field=None,
-                   t2v_enabled=False):
+                   t2v_enabled=False,
+                   length_node=None, length_field=None, length_value=None):
     """Patch a workflow dict with new image, prompt, and output settings."""
     wf = copy.deepcopy(workflow)
 
@@ -139,6 +144,10 @@ def patch_workflow(workflow, *, image_name, prompt_text,
     if (negative_prompt_node and negative_prompt_node in wf
             and negative_prompt_text is not None):
         wf[negative_prompt_node]["inputs"][negative_prompt_field] = negative_prompt_text
+
+    # Patch video length
+    if length_node and length_node in wf and length_value is not None:
+        wf[length_node]["inputs"][length_field] = length_value
 
     return wf
 
@@ -253,6 +262,12 @@ def main():
                         help="Negative prompt field name (default: text)")
     parser.add_argument("--negative-prompt", default=None,
                         help="Override negative prompt text")
+    parser.add_argument("--length", type=int, default=DEFAULT_LENGTH,
+                        help=f"Video length in frames (default: {DEFAULT_LENGTH}, ~24s)")
+    parser.add_argument("--length-node", default=DEFAULT_LENGTH_NODE,
+                        help=f"Length node ID (default: {DEFAULT_LENGTH_NODE})")
+    parser.add_argument("--length-field", default=DEFAULT_LENGTH_FIELD,
+                        help=f"Length field name (default: {DEFAULT_LENGTH_FIELD})")
     parser.add_argument("--text-to-video", action="store_true",
                         help="Use text-to-video mode for the first segment (no input image needed)")
     parser.add_argument("--t2v-switch-node", default=DEFAULT_T2V_SWITCH_NODE,
@@ -363,6 +378,9 @@ def main():
             t2v_switch_node=args.t2v_switch_node,
             t2v_switch_field=args.t2v_switch_field,
             t2v_enabled=is_t2v,
+            length_node=args.length_node,
+            length_field=args.length_field,
+            length_value=args.length,
         )
 
         # Submit and wait
