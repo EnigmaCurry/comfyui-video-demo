@@ -60,83 +60,17 @@ voiceover *ARGS:
 chain *ARGS:
     python3 chain.py {{ARGS}}
 
-# Concatenate segment videos into final.mp4, mixing in voiceover if available
+# Concatenate segments into final.mp4, mixing centered voiceover if available
 concat *SEED:
     #!/usr/bin/env bash
     set -euo pipefail
-    concat_dir() {
-        local dir="$1"
-        shopt -s nullglob
-        local files=("$dir"/segment_*.mp4)
-        if [ ${#files[@]} -eq 0 ]; then
-            return
-        fi
-        local out="$dir/final.mp4"
-        # Check if final.mp4 is already up to date
-        if [ -f "$out" ]; then
-            local stale=false
-            for f in "${files[@]}"; do
-                if [ "$f" -nt "$out" ]; then
-                    stale=true
-                    break
-                fi
-            done
-            # Also check voiceover files
-            local vo_files=("$dir"/voiceover_*.wav)
-            for f in "${vo_files[@]}"; do
-                if [ "$f" -nt "$out" ]; then
-                    stale=true
-                    break
-                fi
-            done
-            if [ "$stale" = false ]; then
-                echo "$dir: final.mp4 is already up to date (${#files[@]} segments)"
-                return
-            fi
-        fi
-        # Concat video segments
-        local vlist
-        vlist=$(mktemp)
-        for f in "${files[@]}"; do
-            echo "file '$(realpath "$f")'" >> "$vlist"
-        done
-        # Check if voiceover files exist
-        local vo_files=("$dir"/voiceover_*.wav)
-        if [ ${#vo_files[@]} -gt 0 ] && [ ${#vo_files[@]} -eq ${#files[@]} ]; then
-            echo "$dir: mixing voiceover with video audio..."
-            # Concat video without final output first
-            local tmp_video
-            tmp_video=$(mktemp --suffix=.mp4)
-            ffmpeg -y -f concat -safe 0 -i "$vlist" -c copy "$tmp_video" 2>/dev/null
-            # Concat voiceover wavs
-            local vo_list
-            vo_list=$(mktemp)
-            for f in "${vo_files[@]}"; do
-                echo "file '$(realpath "$f")'" >> "$vo_list"
-            done
-            local tmp_vo
-            tmp_vo=$(mktemp --suffix=.wav)
-            ffmpeg -y -f concat -safe 0 -i "$vo_list" -c:a pcm_s16le "$tmp_vo" 2>/dev/null
-            # Mix: keep original video audio, add voiceover on top
-            # Original audio at reduced volume, voiceover at full volume
-            ffmpeg -y -i "$tmp_video" -i "$tmp_vo" \
-                -filter_complex "[0:a]volume=0.3[orig];[1:a]volume=1.0[vo];[orig][vo]amix=inputs=2:duration=longest[aout]" \
-                -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k "$out" 2>/dev/null
-            rm "$tmp_video" "$vo_list" "$tmp_vo"
-        else
-            if [ ${#vo_files[@]} -gt 0 ] && [ ${#vo_files[@]} -ne ${#files[@]} ]; then
-                echo "$dir: warning: ${#vo_files[@]} voiceover files but ${#files[@]} segments, skipping mix"
-            fi
-            ffmpeg -y -f concat -safe 0 -i "$vlist" -c copy "$out" 2>/dev/null
-        fi
-        rm "$vlist"
-        echo "$dir: concatenated ${#files[@]} segments -> final.mp4"
-    }
     if [ -n "{{SEED}}" ]; then
-        concat_dir "output/{{SEED}}"
+        python3 mux.py --seed "{{SEED}}"
     else
         for dir in output/*/; do
-            [ -d "$dir" ] && concat_dir "$dir"
+            [ -d "$dir" ] || continue
+            seed=$(basename "$dir")
+            python3 mux.py --seed "$seed"
         done
     fi
 
