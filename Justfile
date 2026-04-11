@@ -48,6 +48,7 @@ config:
 workflow *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    set -- {{ARGS}}
     # Parse --seed, --segments, --theme, and passthrough args
     seed="" segments="16" theme="" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
     while [[ $# -gt 0 ]]; do
