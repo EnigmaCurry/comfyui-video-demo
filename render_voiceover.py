@@ -17,6 +17,18 @@ import sys
 import time
 
 COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
+
+
+def get_wav_duration(path):
+    """Get duration of a wav file in seconds using ffprobe."""
+    result = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+         "-of", "csv=p=0", path],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return float(result.stdout.strip())
+    return None
 TTS_DEMO_DIR = os.environ.get("TTS_DEMO_DIR",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tts-demo"))
 
@@ -124,6 +136,15 @@ def main():
             seed=args.tts_seed + i,
         )
         print(f"  saved: {out_path}")
+
+        # Check duration
+        dur = get_wav_duration(out_path)
+        if dur is not None:
+            print(f"  duration: {dur:.1f}s", end="")
+            if dur > 24.0:
+                print(f"  WARNING: exceeds 24s segment length!")
+            else:
+                print()
 
         clip_time = time.time() - seg_start
         clip_times.append(clip_time)
