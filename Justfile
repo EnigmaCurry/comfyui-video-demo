@@ -48,6 +48,10 @@ config:
 script *ARGS:
     python3 write_script.py {{ARGS}}
 
+# Generate a video script manually (prints prompts for copy-paste)
+script-manual *ARGS:
+    python3 write_script_manual.py {{ARGS}}
+
 # Render voiceover audio from voiceover.json using tts-demo
 voiceover *ARGS:
     python3 render_voiceover.py {{ARGS}}
