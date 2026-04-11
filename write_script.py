@@ -20,10 +20,12 @@ import urllib.request
 LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
 
-VISUAL_SYSTEM_PROMPT = """\
+DEFAULT_DURATION = 24
+
+VISUAL_SYSTEM_PROMPT_TEMPLATE = """\
 You are a visual director writing a shot list for a surreal experimental video.
 
-The video is made of sequential segments, each about 24 seconds long.
+The video is made of sequential segments, each about {duration} seconds long.
 Each segment is generated from a text-to-video AI model.
 Each segment begins from the last frame of the previous segment.
 
@@ -43,15 +45,24 @@ Rules:
 Respond with a JSON array of strings, one per segment. No other text.\
 """
 
-VOICEOVER_SYSTEM_PROMPT = """\
+
+def _voiceover_word_range(duration):
+    """Estimate word count range for a given duration in seconds."""
+    # ~2.5 words/sec speaking rate
+    lo = max(10, int(duration * 1.5))
+    hi = int(duration * 2.5)
+    return lo, hi
+
+
+VOICEOVER_SYSTEM_PROMPT_TEMPLATE = """\
 You are a poet and narrator writing a voiceover monologue for a surreal experimental video.
 
-The video is made of sequential segments, each about 24 seconds long.
+The video is made of sequential segments, each about {duration} seconds long.
 You will be given the visual descriptions for each segment.
 Your job is to write spoken monologue text that accompanies each segment.
 
 Rules:
-- Each segment's voiceover should be about 40-60 words (to fill ~24 seconds of speech).
+- Each segment's voiceover should be about {word_lo}-{word_hi} words (to fill ~{duration} seconds of speech).
 - The voiceover should be poetic, contemplative, or stream-of-consciousness.
 - It should COMPLEMENT the visuals, not describe them literally.
 - Think of it like a waking dream narration — the speaker is experiencing these visions.
@@ -63,6 +74,13 @@ Rules:
 
 Respond with a JSON array of strings, one per segment. No other text.\
 """
+
+
+# For backward compat with write_script_manual.py imports
+VISUAL_SYSTEM_PROMPT = VISUAL_SYSTEM_PROMPT_TEMPLATE.format(duration=DEFAULT_DURATION)
+_wlo, _whi = _voiceover_word_range(DEFAULT_DURATION)
+VOICEOVER_SYSTEM_PROMPT = VOICEOVER_SYSTEM_PROMPT_TEMPLATE.format(
+    duration=DEFAULT_DURATION, word_lo=_wlo, word_hi=_whi)
 
 
 def _salvage_json_array(text):
@@ -207,6 +225,8 @@ def main():
                         help="Number of segments to generate (default: 16)")
     parser.add_argument("--seed", type=int, required=True,
                         help="Run ID seed (output goes to output/{seed}/)")
+    parser.add_argument("--duration", type=int, default=DEFAULT_DURATION,
+                        help=f"Segment duration in seconds (default: {DEFAULT_DURATION})")
     parser.add_argument("--base-prompt", default=None,
                         help="Base prompt that will be prepended (so LLM avoids repeating it)")
     parser.add_argument("--url", default=None,
@@ -233,8 +253,14 @@ def main():
     model = args.model or LLM_MODEL
     api_key = args.api_key or os.environ.get("LLM_API_KEY", "")
 
-    run_dir = os.path.join("output", str(args.seed))
-    os.makedirs(run_dir, exist_ok=True)
+    # Build duration-aware prompts
+    visual_sys = VISUAL_SYSTEM_PROMPT_TEMPLATE.format(duration=args.duration)
+    wlo, whi = _voiceover_word_range(args.duration)
+    voiceover_sys = VOICEOVER_SYSTEM_PROMPT_TEMPLATE.format(
+        duration=args.duration, word_lo=wlo, word_hi=whi)
+
+    from run_dir import make_run_dir
+    run_dir = make_run_dir("output", args.seed, theme=args.theme)
 
     # Save theme for use by mux.py when naming the final video
     theme_path = os.path.join(run_dir, "theme.txt")
@@ -264,7 +290,7 @@ def main():
                              f"of your descriptions, so do not repeat its content:\n"
                              f"{args.base_prompt}")
 
-            visuals = call_llm(base_url, model, VISUAL_SYSTEM_PROMPT, user_msg,
+            visuals = call_llm(base_url, model, visual_sys, user_msg,
                                temperature=args.temperature, api_key=api_key)
 
             if len(visuals) < args.segments:
@@ -303,7 +329,7 @@ def main():
                            f"Number of segments: {len(visuals)}\n\n"
                            f"Visual descriptions for each segment:\n{visual_list}")
 
-            voiceover = call_llm(base_url, model, VOICEOVER_SYSTEM_PROMPT, vo_user_msg,
+            voiceover = call_llm(base_url, model, voiceover_sys, vo_user_msg,
                                  temperature=args.temperature, api_key=api_key)
 
             if len(voiceover) < len(visuals):

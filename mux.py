@@ -77,7 +77,8 @@ def main():
 
     args = parser.parse_args()
 
-    run_dir = os.path.join(args.output_dir, str(args.seed))
+    from run_dir import get_run_dir
+    run_dir = get_run_dir(args.output_dir, args.seed)
 
     # Find segment videos and voiceover files
     seg_videos = sorted(glob.glob(os.path.join(run_dir, "segment_*.mp4")))
@@ -87,17 +88,9 @@ def main():
         print(f"Error: no segment videos in {run_dir}/", file=sys.stderr)
         sys.exit(1)
 
-    # Build final filename from seed and theme
-    import re
-    theme_path = os.path.join(run_dir, "theme.txt")
-    if os.path.exists(theme_path):
-        with open(theme_path) as f:
-            theme = f.read().strip()
-        slug = re.sub(r'[^a-z0-9]+', '-', theme.lower()).strip('-')
-        final_name = f"{args.seed}-{slug}.mp4"
-    else:
-        final_name = "final.mp4"
-    final_path = os.path.join(run_dir, final_name)
+    # Name the final video after the directory
+    dir_name = os.path.basename(run_dir)
+    final_path = os.path.join(run_dir, f"{dir_name}.mp4")
 
     # Check if up to date
     if os.path.exists(final_path):

@@ -325,7 +325,8 @@ def main():
         suffixes = DEFAULT_SUFFIXES
 
     # Create output directory
-    run_dir = os.path.join(args.output_dir, str(args.seed))
+    from run_dir import get_run_dir
+    run_dir = get_run_dir(args.output_dir, args.seed)
     os.makedirs(run_dir, exist_ok=True)
 
     # Initial image

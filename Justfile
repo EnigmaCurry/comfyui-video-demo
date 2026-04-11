@@ -71,11 +71,13 @@ workflow *ARGS:
     if [ -z "$theme" ]; then
         echo "Error: --theme is required" >&2; exit 1
     fi
-    script_path="output/${seed}/script.json"
     echo "══════════════════════════════════════════════════════════════"
     echo "  Step 1/4: Generate script + voiceover text"
     echo "══════════════════════════════════════════════════════════════"
     python3 write_script.py --theme $theme --seed "$seed" --segments "$segments"
+    # Resolve the run directory (may include theme slug)
+    run_dir=$(python3 -c "from run_dir import get_run_dir; print(get_run_dir('output', $seed))")
+    script_path="${run_dir}/script.json"
     echo ""
     echo "══════════════════════════════════════════════════════════════"
     echo "  Step 2/4: Render voiceover audio"

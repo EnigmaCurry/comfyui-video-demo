@@ -77,6 +77,8 @@ def main():
                         help=f"ComfyUI URL for TTS (default: {COMFYUI_URL})")
     parser.add_argument("--tts-dir", default=None,
                         help=f"Path to tts-demo directory (default: {TTS_DEMO_DIR})")
+    parser.add_argument("--duration", type=int, default=24,
+                        help="Segment duration in seconds for warnings (default: 24)")
 
     args = parser.parse_args()
 
@@ -92,7 +94,8 @@ def main():
         print(f"Error: tts.py not found in {tts_dir}", file=sys.stderr)
         sys.exit(1)
 
-    run_dir = os.path.join("output", str(args.seed))
+    from run_dir import get_run_dir
+    run_dir = get_run_dir("output", args.seed)
     voiceover_path = os.path.join(run_dir, "voiceover.json")
 
     if not os.path.exists(voiceover_path):
@@ -141,8 +144,8 @@ def main():
         dur = get_wav_duration(out_path)
         if dur is not None:
             print(f"  duration: {dur:.1f}s", end="")
-            if dur > 24.0:
-                print(f"  WARNING: exceeds 24s segment length!")
+            if dur > args.duration:
+                print(f"  WARNING: exceeds {args.duration}s segment length!")
             else:
                 print()
 

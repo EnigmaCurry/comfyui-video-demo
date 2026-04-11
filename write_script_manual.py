@@ -79,8 +79,8 @@ def main():
     args = parser.parse_args()
     args.theme = " ".join(args.theme)
 
-    run_dir = os.path.join("output", str(args.seed))
-    os.makedirs(run_dir, exist_ok=True)
+    from run_dir import make_run_dir
+    run_dir = make_run_dir("output", args.seed, theme=args.theme)
 
     theme_path = os.path.join(run_dir, "theme.txt")
     if not os.path.exists(theme_path):
