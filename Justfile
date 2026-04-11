@@ -33,17 +33,22 @@ config:
 chain *ARGS:
     python3 chain.py {{ARGS}}
 
-# Concatenate all segment videos in output/ into final.mp4
-concat DIR="output":
+# Concatenate all segment videos into final.mp4
+concat SEED:
     #!/usr/bin/env bash
     set -euo pipefail
-    shopt -s nullglob
-    files=("{{DIR}}"/segment_*.mp4)
-    if [ ${#files[@]} -eq 0 ]; then
-        echo "No segment videos found in {{DIR}}/"
+    dir="output/{{SEED}}"
+    if [ ! -d "$dir" ]; then
+        echo "No run directory: $dir"
         exit 1
     fi
-    out="{{DIR}}/final.mp4"
+    shopt -s nullglob
+    files=("$dir"/segment_*.mp4)
+    if [ ${#files[@]} -eq 0 ]; then
+        echo "No segment videos found in $dir/"
+        exit 1
+    fi
+    out="$dir/final.mp4"
     # Check if final.mp4 is already newer than all segments
     if [ -f "$out" ]; then
         stale=false
