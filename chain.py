@@ -28,22 +28,22 @@ from comfyui_video import (
 # ── Default prompt config ─────────────────────────────────────────────
 
 BASE_PROMPT = (
-    "The video is a violent cascade of hallucinations. Each frame should "
-    "aggressively mutate away from the previous one. Nothing stays stable. "
-    "Shapes warp, colors invert, scale shifts wildly. The input image is "
-    "only a launching point — destroy it, rebuild something completely "
-    "different. Constant motion, constant transformation, maximum novelty."
+    "The video shows real recognizable things in absurd impossible situations. "
+    "Each frame should aggressively mutate away from the previous one into a "
+    "completely different bizarre scenario. Real objects, real animals, real people, "
+    "real places — but everything is wrong. The context is impossible, the scale is "
+    "off, the combinations make no sense. Constant transformation into new absurdity."
 )
 
 DEFAULT_SUFFIXES = [
-    "dark alien forest, bioluminescent fungi, ancient stone monoliths, mist and spores",
-    "massive creature skull half-buried in sand, strange birds circling, ritual markings",
-    "gothic cathedral interior warping into organic flesh, ribbed vaults becoming bone",
-    "alien animal with too many eyes stalking through tall black grass, slow and predatory",
-    "abstract geometry folding in on itself, impossible architecture, non-euclidean corridors",
-    "sci-fi control room overgrown with vines, flickering holograms, shattered glass",
-    "native ceremonial masks floating in void, smoke trails, drumbeat vibrations visible as ripples",
-    "fantasy landscape, floating islands, waterfalls into nothing, winged shadows overhead",
+    "a person talking on two cell phones at once in a hospital waiting room, looking stressed, fluorescent lighting",
+    "a golden retriever wearing sunglasses driving a convertible down a desert highway, paws on the steering wheel",
+    "a man in a suit sleeping in a full bed in the middle of a busy open-plan office, coworkers walking around him",
+    "three parrots walking backwards in a line across a crosswalk, traffic stopped, pedestrians staring",
+    "a grand piano half-submerged in a backyard swimming pool, sheet music floating on the water, sunset light",
+    "a surgeon in full scrubs carefully operating on a watermelon in a gleaming operating room, nurses assisting",
+    "penguins in business suits riding a crowded subway car, holding briefcases, reading newspapers",
+    "a massive traffic jam of shopping carts in a parking lot, no people visible, overhead drone shot",
 ]
 
 # ── Workflow patching ─────────────────────────────────────────────────

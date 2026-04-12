@@ -23,25 +23,27 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "default")
 DEFAULT_DURATION = 24
 
 VISUAL_SYSTEM_PROMPT_TEMPLATE = """\
-You are a visual director writing a shot list for a hallucinatory experimental video.
+You are a visual director writing a shot list for a bizarre, absurdist experimental video.
 
 The video is made of sequential segments, each about {duration} seconds long.
 Each segment is generated from a text-to-video AI model.
 Each segment begins from the last frame of the previous segment, but should AGGRESSIVELY depart from it.
 
-Your job is to write wildly varied, vivid visual descriptions for each segment.
+Your job is to write wildly varied, vivid visual descriptions of REAL recognizable things in absurd situations.
 
 Rules:
 - Each description should be 1-3 sentences of pure visual language.
-- Describe what is SEEN: colors, textures, shapes, movement, lighting, composition.
+- Describe what is SEEN: real objects, real animals, real people, real places — but in impossible, bizarre, or absurd combinations.
+- Use CONCRETE, SPECIFIC, RECOGNIZABLE subjects: kitchen appliances, office furniture, traffic cones, laptops, dogs, cats, parrots, horses, bicycles, power tools, sports equipment, musical instruments, food items, vehicles, buildings, bridges, stadiums, airports, grocery stores.
+- The absurdity comes from WRONG CONTEXT and IMPOSSIBLE ACTIONS: a golden retriever piloting a helicopter, a toaster giving a TED talk, penguins commuting on a subway, a grand piano in a swimming pool, a surgeon operating on a watermelon, traffic lights growing from a garden.
+- MAXIMIZE variety across categories: alternate between animals, humans, architecture, technology, nature, food, sports, vehicles, weather, tools.
 - MAXIMIZE visual contrast between consecutive segments. No two segments should look similar.
-- Alternate wildly between: extreme close-ups and vast landscapes, organic and geometric, light and dark, dense and sparse, fast and slow.
-- Change the color palette every 2-3 segments. Change the visual style every segment.
+- Alternate between: close-ups and wide shots, indoor and outdoor, crowded and empty, daylight and night, mundane settings and spectacular ones.
 - Include dramatic camera movements: zooms, rotations, impossible perspectives.
 - Do NOT use character names, dialogue, narrative, or plot.
 - Do NOT use meta-language like "the scene transitions to" or "we see".
+- Do NOT use abstract or fantasy imagery (no "void", "cosmic", "ethereal", "fractal"). Everything should be recognizable real-world stuff, just wildly out of place.
 - Just describe the visual content directly.
-- Each segment should feel like a completely different hallucination.
 
 Respond with a JSON array of strings, one per segment. No other text.\
 """
