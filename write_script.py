@@ -31,13 +31,18 @@ Each segment begins from the last frame of the previous segment, but should AGGR
 
 Your job is to write wildly varied, vivid visual descriptions of REAL recognizable things in absurd situations.
 
-THEME EXTRAPOLATION:
-You will be given a theme. Use it as a SEED, not a constraint. Extrapolate outward:
-- First, identify the objects, settings, professions, animals, tools, and activities directly associated with the theme.
-- Then branch into ADJACENT domains: related industries, supply chains, supporting infrastructure, cultural associations, historical connections, opposite contexts.
-- Then go FURTHER: take those objects and put them in completely wrong settings. Combine elements from different branches. Cross-pollinate the mundane details of the theme with unrelated real-world domains.
-- The theme should be a recognizable thread running through the video, but each segment should surprise by pulling in unexpected real-world connections.
-- Example: theme "fishing" → fishing boat, tackle box, river → but also: a fish market in a desert, a bear in waders teaching a classroom, a sushi chef on a roller coaster, a fishing rod used as a TV antenna on a skyscraper rooftop, a school of fish swimming through a library.
+THEME AND RECURRING SUBJECTS:
+You will be given a theme. Identify the CORE SUBJECTS — the specific people, objects, vehicles, animals, or things named in the theme. These core subjects must appear in EVERY segment or nearly every segment. They are the recurring visual anchors of the video.
+- If the theme names a person (e.g. "Mike"), that person should be visible in almost every shot.
+- If the theme names an object (e.g. "a Ferrari"), that object should be visible in almost every shot.
+- The core subjects stay constant. What changes is the SETTING, the SITUATION, and the SURROUNDING CONTEXT — which should be wildly different each time.
+
+EXTRAPOLATION:
+Use the theme as a seed to extrapolate the changing contexts:
+- First, identify settings and activities directly associated with the theme.
+- Then branch into ADJACENT domains: related industries, supply chains, cultural associations, historical connections, opposite contexts.
+- Then go FURTHER: put the core subjects in completely wrong settings. Cross-pollinate with unrelated real-world domains.
+- Example: theme "Mike buys a Ferrari" → Mike and the red Ferrari appear in every segment, but: Mike test-driving through a grocery store aisle, Mike parallel-parking the Ferrari inside a church, the Ferrari on a tow truck in a snowstorm with Mike arguing on the phone, Mike washing the Ferrari in a car wash meant for school buses, Mike asleep in the Ferrari in the middle of a cornfield at dawn.
 
 VISUAL RULES:
 - Each description should be 1-3 sentences of pure visual language.
@@ -48,7 +53,8 @@ VISUAL RULES:
 - MAXIMIZE visual contrast between consecutive segments. No two segments should look similar.
 - Alternate between: close-ups and wide shots, indoor and outdoor, crowded and empty, daylight and night, mundane settings and spectacular ones.
 - Include dramatic camera movements: zooms, rotations, impossible perspectives.
-- Do NOT use character names, dialogue, narrative, or plot.
+- If the theme names a person, refer to them by name in every segment to anchor continuity.
+- Do NOT use dialogue, narrative exposition, or plot structure.
 - Do NOT use meta-language like "the scene transitions to" or "we see".
 - Do NOT use abstract or fantasy imagery (no "void", "cosmic", "ethereal", "fractal"). Everything should be recognizable real-world stuff, just wildly out of place.
 - Just describe the visual content directly.
