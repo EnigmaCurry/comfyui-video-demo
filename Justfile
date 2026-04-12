@@ -50,7 +50,7 @@ workflow *ARGS:
     set -euo pipefail
     set -- {{ARGS}}
     # Parse --seed, --segments, --theme, and passthrough args
-    seed="" segments="16" duration="24" theme="" style="absurd-realism" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
+    seed="" segments="16" duration="" theme="" style="absurd-realism" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
     # Check for --help before parsing
     for arg in "$@"; do
         if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
@@ -64,7 +64,7 @@ workflow *ARGS:
             echo ""
             echo "Optional arguments:"
             echo "  --segments N          Number of segments (default: 16)"
-            echo "  --duration SECS       Segment duration in seconds (default: 24)"
+            echo "  --duration SECS       Segment duration in seconds (default: from style)"
             echo "  --style NAME          Prompt style (default: absurd-realism)"
             echo "  --voice FILE          Voice sample WAV file (default: despotism-doc.wav)"
             echo "  --voice-delay SECS    Delay before voiceover starts (default: 0.0)"
@@ -90,6 +90,10 @@ workflow *ARGS:
             *) extra_args+=("$1"); shift ;;
         esac
     done
+    # Resolve duration from style if not explicitly set
+    if [ -z "$duration" ]; then
+        duration=$(python3 -c "from styles import load_style; print(load_style('$style').get('default_duration', 24))")
+    fi
     # Convert duration (seconds) to frames (25 fps)
     length=$(( duration * 25 ))
     if [ -z "$seed" ]; then

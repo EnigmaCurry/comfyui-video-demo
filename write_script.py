@@ -218,8 +218,8 @@ def main():
                         help="Number of segments to generate (default: 16)")
     parser.add_argument("--seed", type=int, required=True,
                         help="Run ID seed (output goes to output/{seed}/)")
-    parser.add_argument("--duration", type=int, default=DEFAULT_DURATION,
-                        help=f"Segment duration in seconds (default: {DEFAULT_DURATION})")
+    parser.add_argument("--duration", type=int, default=None,
+                        help="Segment duration in seconds (default: from style)")
     parser.add_argument("--style", default=DEFAULT_STYLE,
                         help=f"Prompt style (default: {DEFAULT_STYLE}; available: {', '.join(list_styles())})")
     parser.add_argument("--base-prompt", default=None,
@@ -247,6 +247,11 @@ def main():
     base_url = args.url or LLM_URL
     model = args.model or LLM_MODEL
     api_key = args.api_key or os.environ.get("LLM_API_KEY", "")
+
+    # Resolve duration from style if not explicitly set
+    if args.duration is None:
+        style_data = load_style(args.style)
+        args.duration = style_data.get("default_duration", DEFAULT_DURATION)
 
     # Build duration-aware prompts from style
     visual_sys, voiceover_sys, style_base_prompt = _build_prompts(args.style, args.duration)
