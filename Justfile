@@ -50,11 +50,34 @@ workflow *ARGS:
     set -euo pipefail
     set -- {{ARGS}}
     # Parse --seed, --segments, --theme, and passthrough args
-    seed="" segments="16" theme="" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
+    seed="" segments="16" duration="24" theme="" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
+    # Check for --help before parsing
+    for arg in "$@"; do
+        if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+            echo "Usage: just workflow --seed SEED --theme THEME [OPTIONS]"
+            echo ""
+            echo "End-to-end pipeline: generate script → render voiceover → render video → mux"
+            echo ""
+            echo "Required arguments:"
+            echo "  --seed SEED           Run ID seed (output goes to output/{seed}/)"
+            echo "  --theme THEME         Theme or concept for the video (can be multiple words)"
+            echo ""
+            echo "Optional arguments:"
+            echo "  --segments N          Number of segments (default: 16)"
+            echo "  --duration SECS       Segment duration in seconds (default: 24)"
+            echo "  --voice FILE          Voice sample WAV file (default: despotism-doc.wav)"
+            echo "  --voice-delay SECS    Delay before voiceover starts (default: 0.0)"
+            echo ""
+            echo "Any additional arguments are passed through to chain.py."
+            echo "Run 'python3 chain.py --help' for chain.py options."
+            exit 0
+        fi
+    done
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --seed) seed="$2"; shift 2 ;;
             --segments) segments="$2"; shift 2 ;;
+            --duration) duration="$2"; shift 2 ;;
             --theme) shift; theme=""
                 while [[ $# -gt 0 ]] && [[ "$1" != --* ]]; do
                     theme="$theme $1"; shift
@@ -65,6 +88,8 @@ workflow *ARGS:
             *) extra_args+=("$1"); shift ;;
         esac
     done
+    # Convert duration (seconds) to frames (25 fps)
+    length=$(( duration * 25 ))
     if [ -z "$seed" ]; then
         echo "Error: --seed is required" >&2; exit 1
     fi
@@ -74,7 +99,7 @@ workflow *ARGS:
     echo "══════════════════════════════════════════════════════════════"
     echo "  Step 1/4: Generate script + voiceover text"
     echo "══════════════════════════════════════════════════════════════"
-    python3 write_script.py --theme $theme --seed "$seed" --segments "$segments"
+    python3 write_script.py --theme $theme --seed "$seed" --segments "$segments" --duration "$duration"
     # Resolve the run directory (may include theme slug)
     run_dir=$(python3 -c "from run_dir import get_run_dir; print(get_run_dir('output', $seed))")
     script_path="${run_dir}/script.json"
@@ -88,7 +113,7 @@ workflow *ARGS:
     echo "  Step 3/4: Render video segments"
     echo "══════════════════════════════════════════════════════════════"
     python3 chain.py --text-to-video --workflow workflow/ltx_i2v.json \
-        --seed "$seed" --segments "$segments" \
+        --seed "$seed" --segments "$segments" --length "$length" \
         --suffixes-file "$script_path" "${extra_args[@]}"
     echo ""
     echo "══════════════════════════════════════════════════════════════"
