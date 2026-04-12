@@ -35,16 +35,6 @@ BASE_PROMPT = (
     "off, the combinations make no sense. Constant transformation into new absurdity."
 )
 
-DEFAULT_SUFFIXES = [
-    "a person talking on two cell phones at once in a hospital waiting room, looking stressed, fluorescent lighting",
-    "a golden retriever wearing sunglasses driving a convertible down a desert highway, paws on the steering wheel",
-    "a man in a suit sleeping in a full bed in the middle of a busy open-plan office, coworkers walking around him",
-    "three parrots walking backwards in a line across a crosswalk, traffic stopped, pedestrians staring",
-    "a grand piano half-submerged in a backyard swimming pool, sheet music floating on the water, sunset light",
-    "a surgeon in full scrubs carefully operating on a watermelon in a gleaming operating room, nurses assisting",
-    "penguins in business suits riding a crowded subway car, holding briefcases, reading newspapers",
-    "a massive traffic jam of shopping carts in a parking lot, no people visible, overhead drone shot",
-]
 
 # ── Workflow patching ─────────────────────────────────────────────────
 # These are the node IDs and field paths to patch in the exported
@@ -256,7 +246,7 @@ def main():
     )
     parser.add_argument(
         "--suffixes-file", default=None,
-        help="JSON file with list of prompt suffixes",
+        help="JSON file with list of prompt suffixes (e.g. from write_script.py)",
     )
     parser.add_argument(
         "--url", default=None,
@@ -322,7 +312,10 @@ def main():
     elif args.suffixes:
         suffixes = args.suffixes
     else:
-        suffixes = DEFAULT_SUFFIXES
+        print("Error: --suffixes-file or --suffixes is required.\n"
+              "Generate a script first with: just script --theme <theme> --seed <seed>",
+              file=sys.stderr)
+        sys.exit(1)
 
     # Create output directory
     from run_dir import get_run_dir
