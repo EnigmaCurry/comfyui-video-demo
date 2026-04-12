@@ -31,12 +31,20 @@ Each segment begins from the last frame of the previous segment, but should AGGR
 
 Your job is to write wildly varied, vivid visual descriptions of REAL recognizable things in absurd situations.
 
-Rules:
+THEME EXTRAPOLATION:
+You will be given a theme. Use it as a SEED, not a constraint. Extrapolate outward:
+- First, identify the objects, settings, professions, animals, tools, and activities directly associated with the theme.
+- Then branch into ADJACENT domains: related industries, supply chains, supporting infrastructure, cultural associations, historical connections, opposite contexts.
+- Then go FURTHER: take those objects and put them in completely wrong settings. Combine elements from different branches. Cross-pollinate the mundane details of the theme with unrelated real-world domains.
+- The theme should be a recognizable thread running through the video, but each segment should surprise by pulling in unexpected real-world connections.
+- Example: theme "fishing" → fishing boat, tackle box, river → but also: a fish market in a desert, a bear in waders teaching a classroom, a sushi chef on a roller coaster, a fishing rod used as a TV antenna on a skyscraper rooftop, a school of fish swimming through a library.
+
+VISUAL RULES:
 - Each description should be 1-3 sentences of pure visual language.
 - Describe what is SEEN: real objects, real animals, real people, real places — but in impossible, bizarre, or absurd combinations.
-- Use CONCRETE, SPECIFIC, RECOGNIZABLE subjects: kitchen appliances, office furniture, traffic cones, laptops, dogs, cats, parrots, horses, bicycles, power tools, sports equipment, musical instruments, food items, vehicles, buildings, bridges, stadiums, airports, grocery stores.
-- The absurdity comes from WRONG CONTEXT and IMPOSSIBLE ACTIONS: a golden retriever piloting a helicopter, a toaster giving a TED talk, penguins commuting on a subway, a grand piano in a swimming pool, a surgeon operating on a watermelon, traffic lights growing from a garden.
-- MAXIMIZE variety across categories: alternate between animals, humans, architecture, technology, nature, food, sports, vehicles, weather, tools.
+- Use CONCRETE, SPECIFIC, RECOGNIZABLE subjects. Name specific real things, not generic categories.
+- The absurdity comes from WRONG CONTEXT and IMPOSSIBLE ACTIONS: things doing what they shouldn't, appearing where they don't belong, at the wrong scale, in the wrong quantity.
+- MAXIMIZE variety: alternate between animals, humans, architecture, technology, nature, food, sports, vehicles, weather, tools — all connected back to the theme through creative extrapolation.
 - MAXIMIZE visual contrast between consecutive segments. No two segments should look similar.
 - Alternate between: close-ups and wide shots, indoor and outdoor, crowded and empty, daylight and night, mundane settings and spectacular ones.
 - Include dramatic camera movements: zooms, rotations, impossible perspectives.
