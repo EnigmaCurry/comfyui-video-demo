@@ -17,50 +17,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from styles import DEFAULT_STYLE, list_styles, load_style
+
 LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
 
 DEFAULT_DURATION = 24
-
-VISUAL_SYSTEM_PROMPT_TEMPLATE = """\
-You are a visual director writing a shot list for a bizarre, absurdist experimental video.
-
-The video is made of sequential segments, each about {duration} seconds long.
-Each segment is generated from a text-to-video AI model.
-Each segment begins from the last frame of the previous segment, but should AGGRESSIVELY depart from it.
-
-Your job is to write wildly varied, vivid visual descriptions of REAL recognizable things in absurd situations.
-
-THEME AND RECURRING SUBJECTS:
-You will be given a theme. Identify the CORE SUBJECTS — the specific people, objects, vehicles, animals, or things named in the theme. These core subjects must appear in EVERY segment or nearly every segment. They are the recurring visual anchors of the video.
-- If the theme names a person (e.g. "Mike"), that person should be visible in almost every shot.
-- If the theme names an object (e.g. "a Ferrari"), that object should be visible in almost every shot.
-- The core subjects stay constant. What changes is the SETTING, the SITUATION, and the SURROUNDING CONTEXT — which should be wildly different each time.
-
-EXTRAPOLATION:
-Use the theme as a seed to extrapolate the changing contexts:
-- First, identify settings and activities directly associated with the theme.
-- Then branch into ADJACENT domains: related industries, supply chains, cultural associations, historical connections, opposite contexts.
-- Then go FURTHER: put the core subjects in completely wrong settings. Cross-pollinate with unrelated real-world domains.
-- Example: theme "Mike buys a Ferrari" → Mike and the red Ferrari appear in every segment, but: Mike test-driving through a grocery store aisle, Mike parallel-parking the Ferrari inside a church, the Ferrari on a tow truck in a snowstorm with Mike arguing on the phone, Mike washing the Ferrari in a car wash meant for school buses, Mike asleep in the Ferrari in the middle of a cornfield at dawn.
-
-VISUAL RULES:
-- Each description should be 1-3 sentences of pure visual language.
-- Describe what is SEEN: real objects, real animals, real people, real places — but in impossible, bizarre, or absurd combinations.
-- Use CONCRETE, SPECIFIC, RECOGNIZABLE subjects. Name specific real things, not generic categories.
-- The absurdity comes from WRONG CONTEXT and IMPOSSIBLE ACTIONS: things doing what they shouldn't, appearing where they don't belong, at the wrong scale, in the wrong quantity.
-- MAXIMIZE variety: alternate between animals, humans, architecture, technology, nature, food, sports, vehicles, weather, tools — all connected back to the theme through creative extrapolation.
-- MAXIMIZE visual contrast between consecutive segments. No two segments should look similar.
-- Alternate between: close-ups and wide shots, indoor and outdoor, crowded and empty, daylight and night, mundane settings and spectacular ones.
-- Include dramatic camera movements: zooms, rotations, impossible perspectives.
-- If the theme names a person, refer to them by name in every segment to anchor continuity.
-- Do NOT use dialogue, narrative exposition, or plot structure.
-- Do NOT use meta-language like "the scene transitions to" or "we see".
-- Do NOT use abstract or fantasy imagery (no "void", "cosmic", "ethereal", "fractal"). Everything should be recognizable real-world stuff, just wildly out of place.
-- Just describe the visual content directly.
-
-Respond with a JSON array of strings, one per segment. No other text.\
-"""
 
 
 def _voiceover_word_range(duration):
@@ -71,7 +33,7 @@ def _voiceover_word_range(duration):
     return lo, hi
 
 
-VOICEOVER_SYSTEM_PROMPT_TEMPLATE = """\
+DEFAULT_VOICEOVER_SYSTEM_PROMPT_TEMPLATE = """\
 You are a poet and narrator writing a voiceover monologue for a surreal experimental video.
 
 The video is made of sequential segments, each about {duration} seconds long.
@@ -93,8 +55,22 @@ Respond with a JSON array of strings, one per segment. No other text.\
 """
 
 
+def _build_prompts(style_name, duration):
+    """Build visual and voiceover system prompts from a style + duration."""
+    style = load_style(style_name)
+    visual_sys = style["visual_system_prompt"].format(duration=duration)
+    wlo, whi = _voiceover_word_range(duration)
+    vo_template = style.get("voiceover_system_prompt") or DEFAULT_VOICEOVER_SYSTEM_PROMPT_TEMPLATE
+    voiceover_sys = vo_template.format(duration=duration, word_lo=wlo, word_hi=whi)
+    base_prompt = style.get("base_prompt")
+    return visual_sys, voiceover_sys, base_prompt
+
+
 # For backward compat with write_script_manual.py imports
+_default_style = load_style(DEFAULT_STYLE)
+VISUAL_SYSTEM_PROMPT_TEMPLATE = _default_style["visual_system_prompt"]
 VISUAL_SYSTEM_PROMPT = VISUAL_SYSTEM_PROMPT_TEMPLATE.format(duration=DEFAULT_DURATION)
+VOICEOVER_SYSTEM_PROMPT_TEMPLATE = DEFAULT_VOICEOVER_SYSTEM_PROMPT_TEMPLATE
 _wlo, _whi = _voiceover_word_range(DEFAULT_DURATION)
 VOICEOVER_SYSTEM_PROMPT = VOICEOVER_SYSTEM_PROMPT_TEMPLATE.format(
     duration=DEFAULT_DURATION, word_lo=_wlo, word_hi=_whi)
@@ -244,8 +220,10 @@ def main():
                         help="Run ID seed (output goes to output/{seed}/)")
     parser.add_argument("--duration", type=int, default=DEFAULT_DURATION,
                         help=f"Segment duration in seconds (default: {DEFAULT_DURATION})")
+    parser.add_argument("--style", default=DEFAULT_STYLE,
+                        help=f"Prompt style (default: {DEFAULT_STYLE}; available: {', '.join(list_styles())})")
     parser.add_argument("--base-prompt", default=None,
-                        help="Base prompt that will be prepended (so LLM avoids repeating it)")
+                        help="Override base prompt (default: from style)")
     parser.add_argument("--url", default=None,
                         help=f"LLM API base URL (default: {LLM_URL})")
     parser.add_argument("--model", default=None,
@@ -270,11 +248,10 @@ def main():
     model = args.model or LLM_MODEL
     api_key = args.api_key or os.environ.get("LLM_API_KEY", "")
 
-    # Build duration-aware prompts
-    visual_sys = VISUAL_SYSTEM_PROMPT_TEMPLATE.format(duration=args.duration)
-    wlo, whi = _voiceover_word_range(args.duration)
-    voiceover_sys = VOICEOVER_SYSTEM_PROMPT_TEMPLATE.format(
-        duration=args.duration, word_lo=wlo, word_hi=whi)
+    # Build duration-aware prompts from style
+    visual_sys, voiceover_sys, style_base_prompt = _build_prompts(args.style, args.duration)
+    if args.base_prompt is None:
+        args.base_prompt = style_base_prompt
 
     from run_dir import make_run_dir
     run_dir = make_run_dir("output", args.seed, theme=args.theme)

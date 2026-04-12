@@ -50,7 +50,7 @@ workflow *ARGS:
     set -euo pipefail
     set -- {{ARGS}}
     # Parse --seed, --segments, --theme, and passthrough args
-    seed="" segments="16" duration="24" theme="" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
+    seed="" segments="16" duration="24" theme="" style="absurd-realism" voice="despotism-doc.wav" voice_delay="0.0" extra_args=()
     # Check for --help before parsing
     for arg in "$@"; do
         if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
@@ -65,6 +65,7 @@ workflow *ARGS:
             echo "Optional arguments:"
             echo "  --segments N          Number of segments (default: 16)"
             echo "  --duration SECS       Segment duration in seconds (default: 24)"
+            echo "  --style NAME          Prompt style (default: absurd-realism)"
             echo "  --voice FILE          Voice sample WAV file (default: despotism-doc.wav)"
             echo "  --voice-delay SECS    Delay before voiceover starts (default: 0.0)"
             echo ""
@@ -78,6 +79,7 @@ workflow *ARGS:
             --seed) seed="$2"; shift 2 ;;
             --segments) segments="$2"; shift 2 ;;
             --duration) duration="$2"; shift 2 ;;
+            --style) style="$2"; shift 2 ;;
             --theme) shift; theme=""
                 while [[ $# -gt 0 ]] && [[ "$1" != --* ]]; do
                     theme="$theme $1"; shift
@@ -99,7 +101,7 @@ workflow *ARGS:
     echo "══════════════════════════════════════════════════════════════"
     echo "  Step 1/4: Generate script + voiceover text"
     echo "══════════════════════════════════════════════════════════════"
-    python3 write_script.py --theme $theme --seed "$seed" --segments "$segments" --duration "$duration"
+    python3 write_script.py --theme $theme --seed "$seed" --segments "$segments" --duration "$duration" --style "$style"
     # Resolve the run directory (may include theme slug)
     run_dir=$(python3 -c "from run_dir import get_run_dir; print(get_run_dir('output', $seed))")
     script_path="${run_dir}/script.json"
@@ -114,7 +116,7 @@ workflow *ARGS:
     echo "══════════════════════════════════════════════════════════════"
     python3 chain.py --text-to-video --workflow workflow/ltx_i2v.json \
         --seed "$seed" --segments "$segments" --length "$length" \
-        --suffixes-file "$script_path" "${extra_args[@]}"
+        --style "$style" --suffixes-file "$script_path" "${extra_args[@]}"
     echo ""
     echo "══════════════════════════════════════════════════════════════"
     echo "  Step 4/4: Concatenate + mux voiceover"

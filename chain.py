@@ -24,16 +24,7 @@ from comfyui_video import (
     run_workflow,
     upload_image,
 )
-
-# ── Default prompt config ─────────────────────────────────────────────
-
-BASE_PROMPT = (
-    "The video shows real recognizable things in absurd impossible situations. "
-    "Each frame should aggressively mutate away from the previous one into a "
-    "completely different bizarre scenario. Real objects, real animals, real people, "
-    "real places — but everything is wrong. The context is impossible, the scale is "
-    "off, the combinations make no sense. Constant transformation into new absurdity."
-)
+from styles import DEFAULT_STYLE, list_styles, load_style
 
 
 # ── Workflow patching ─────────────────────────────────────────────────
@@ -237,8 +228,12 @@ def main():
         help="Number of video segments to generate (default: 4)",
     )
     parser.add_argument(
-        "--base-prompt", default=BASE_PROMPT,
-        help="Shared base prompt for all segments",
+        "--style", default=DEFAULT_STYLE,
+        help=f"Prompt style (default: {DEFAULT_STYLE}; available: {', '.join(list_styles())})",
+    )
+    parser.add_argument(
+        "--base-prompt", default=None,
+        help="Override base prompt (default: from style)",
     )
     parser.add_argument(
         "--suffixes", nargs="*", default=None,
@@ -301,6 +296,11 @@ def main():
     import random
 
     base_url = args.url or COMFYUI_URL
+
+    # Resolve base prompt from style if not overridden
+    if args.base_prompt is None:
+        style = load_style(args.style)
+        args.base_prompt = style.get("base_prompt", "")
 
     # Load workflow
     workflow_template = load_workflow(args.workflow)
