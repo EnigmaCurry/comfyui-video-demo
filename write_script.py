@@ -28,8 +28,8 @@ DEFAULT_DURATION = 24
 def _voiceover_word_range(duration):
     """Estimate word count range for a given duration in seconds."""
     # ~2.5 words/sec speaking rate
-    lo = max(10, int(duration * 1.5))
-    hi = int(duration * 2.5)
+    lo = max(1, int(duration * 1.5))
+    hi = max(lo, int(duration * 2.5))
     return lo, hi
 
 
@@ -41,7 +41,7 @@ You will be given the visual descriptions for each segment.
 Your job is to write spoken monologue text that accompanies each segment.
 
 Rules:
-- Each segment's voiceover should be about {word_lo}-{word_hi} words (to fill ~{duration} seconds of speech).
+- CRITICAL: Each segment's voiceover MUST be {word_lo}-{word_hi} words MAX (to fill ~{duration} seconds of speech). Count your words carefully. If the limit is 3-5 words, write a fragment, not a sentence.
 - The voiceover should be poetic, contemplative, or stream-of-consciousness.
 - It should COMPLEMENT the visuals, not describe them literally.
 - Think of it like a waking dream narration — the speaker is experiencing these visions.
