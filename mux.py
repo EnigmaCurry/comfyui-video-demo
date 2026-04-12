@@ -35,9 +35,11 @@ def pad_audio_centered(wav_path, target_duration, output_path):
         raise RuntimeError(f"Could not get duration of {wav_path}")
 
     if dur >= target_duration:
-        # Voiceover is longer than segment — just copy it
+        # Voiceover is longer than segment — trim to fit
         subprocess.run(
-            ["ffmpeg", "-y", "-i", wav_path, "-c:a", "pcm_s16le", output_path],
+            ["ffmpeg", "-y", "-i", wav_path,
+             "-af", f"atrim=0:{target_duration},afade=t=out:st={max(0, target_duration - 0.15)}:d=0.15",
+             "-c:a", "pcm_s16le", output_path],
             capture_output=True,
         )
         return dur
@@ -136,10 +138,14 @@ def main():
                 padded_path = os.path.join(tmpdir, f"padded_{i:02d}.wav")
                 vo_dur = pad_audio_centered(vo_wav, seg_dur, padded_path)
 
-                pad_before = max(0, (seg_dur - vo_dur) / 2)
-                print(f"  segment {i+1}: video={seg_dur:.1f}s, "
-                      f"voice={vo_dur:.1f}s, "
-                      f"offset={pad_before:.1f}s")
+                if vo_dur > seg_dur:
+                    print(f"  segment {i+1}: video={seg_dur:.1f}s, "
+                          f"voice={vo_dur:.1f}s, trimmed to {seg_dur:.1f}s")
+                else:
+                    pad_before = (seg_dur - vo_dur) / 2
+                    print(f"  segment {i+1}: video={seg_dur:.1f}s, "
+                          f"voice={vo_dur:.1f}s, "
+                          f"offset={pad_before:.1f}s")
                 padded_files.append(padded_path)
 
             # Concat padded voiceover
@@ -196,7 +202,7 @@ def main():
                      "-filter_complex",
                      f"[0:a]volume={vv}[orig];"
                      f"[1:a]volume={vov}[vo];"
-                     f"[orig][vo]amix=inputs=2:duration=longest[aout]",
+                     f"[orig][vo]amix=inputs=2:duration=first[aout]",
                      "-map", "0:v", "-map", "[aout]",
                      "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                      final_path],
