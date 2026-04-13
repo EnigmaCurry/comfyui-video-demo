@@ -178,12 +178,18 @@ class DirectorTUI:
         self.should_end = False
 
     def run(self):
-        # Render first scene before entering TUI
-        if not self.scenes[0].has_video(self.run_dir):
-            self._render_scene_terminal(0)
+        # Try to restore a previous session
+        if self._load_session():
+            print(f"Resumed session: scene {self.current + 1}, "
+                  f"{self.frontier + 1} rendered")
         else:
-            self.scenes[0].status = "rendered"
-        self.frontier = 0
+            # First run — render scene 1
+            if not self.scenes[0].has_video(self.run_dir):
+                self._render_scene_terminal(0)
+            else:
+                self.scenes[0].status = "rendered"
+            self.frontier = 0
+            self._save_session()
         curses.wrapper(self._main)
 
     # ── curses lifecycle ─────────────────────────────────────────────
@@ -205,7 +211,11 @@ class DirectorTUI:
             key = stdscr.getch()
             self._handle_key(key)
 
-        if self.should_end:
+        if self.should_quit:
+            self._save_session()
+            curses.endwin()
+            print(f"Session saved. Resume with the same --seed {self.seed}")
+        elif self.should_end:
             curses.endwin()
             self._finalize()
 
@@ -609,6 +619,7 @@ class DirectorTUI:
             s.status = "approved"
             s.commit_draft()
         self._save_script()
+        self._delete_session()
 
         # Clean up preview/backup files
         for s in self.scenes:
@@ -765,6 +776,80 @@ class DirectorTUI:
 
     # ── persistence ──────────────────────────────────────────────────
 
+    def _session_path(self):
+        return os.path.join(self.run_dir, "session.json")
+
+    def _save_session(self):
+        """Save full session state so it can be resumed later."""
+        session = {
+            "current": self.current,
+            "frontier": self.frontier,
+            "scenes": [
+                {
+                    "status": s.status,
+                    "suffix": s.suffix,
+                    "voiceover_text": s.voiceover_text,
+                    "has_draft": s.has_draft,
+                    "_backup_suffix": s._backup_suffix,
+                    "_backup_voiceover": s._backup_voiceover,
+                }
+                for s in self.scenes
+            ],
+        }
+        with open(self._session_path(), "w") as f:
+            json.dump(session, f, indent=2)
+            f.write("\n")
+
+    def _load_session(self):
+        """Restore session state from disk. Returns True if restored."""
+        path = self._session_path()
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path) as f:
+                session = json.load(f)
+        except (json.JSONDecodeError, KeyError):
+            return False
+
+        saved_scenes = session.get("scenes", [])
+
+        # Extend self.scenes if the saved session had more (extended scenes)
+        for i in range(len(self.scenes), len(saved_scenes)):
+            ss = saved_scenes[i]
+            self.scenes.append(Scene(i, ss["suffix"], ss.get("voiceover_text", "")))
+
+        # Restore per-scene state
+        for i, ss in enumerate(saved_scenes):
+            if i >= len(self.scenes):
+                break
+            s = self.scenes[i]
+            s.suffix = ss["suffix"]
+            s.voiceover_text = ss.get("voiceover_text", "")
+            s.has_draft = ss.get("has_draft", False)
+            s._backup_suffix = ss.get("_backup_suffix")
+            s._backup_voiceover = ss.get("_backup_voiceover")
+            # Only trust the saved status if the files still exist
+            if ss["status"] in ("rendered", "approved") and s.has_video(self.run_dir):
+                s.status = ss["status"]
+            elif s.has_video(self.run_dir):
+                s.status = "rendered"
+            else:
+                s.status = "pending"
+
+        # Restore position — clamp to valid range
+        self.frontier = -1
+        for i, s in enumerate(self.scenes):
+            if s.status in ("rendered", "approved"):
+                self.frontier = i
+        self.current = min(session.get("current", 0), max(self.frontier, 0))
+        return self.frontier >= 0
+
+    def _delete_session(self):
+        """Remove session file after successful finalization."""
+        path = self._session_path()
+        if os.path.exists(path):
+            os.unlink(path)
+
     def _save_script(self):
         suffixes = [s.suffix for s in self.scenes]
         with open(self.script_path, "w") as f:
@@ -775,6 +860,7 @@ class DirectorTUI:
             with open(self.voiceover_json_path, "w") as f:
                 json.dump(voiceover, f, indent=2)
                 f.write("\n")
+        self._save_session()
 
 
 # ── interactive setup ────────────────────────────────────────────────
