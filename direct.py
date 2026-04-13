@@ -403,7 +403,13 @@ class DirectorTUI:
         elif key == ord("r"):
             self._render_movie()
         elif key == ord("q"):
-            self.should_quit = True
+            self.status_msg = "Press Q again to quit"
+            self._draw()
+            confirm = self.stdscr.getch()
+            if confirm == ord("q") or confirm == ord("Q"):
+                self.should_quit = True
+            else:
+                self.status_msg = ""
 
     # ── playback ─────────────────────────────────────────────────────
 
