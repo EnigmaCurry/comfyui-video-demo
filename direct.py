@@ -722,12 +722,15 @@ class DirectorTUI:
         seg_video = scene.video_path(self.run_dir)
         seg_frame = scene.frame_path(self.run_dir)
 
+        expected_dur = self.length / 25.0
+
         print(f"\n{'='*60}")
         print(f"  Rendering scene {scene.num}")
         if is_t2v:
-            print(f"  Mode: text-to-video")
-        print(f"  Prompt: {prompt_text[:70]}...")
-        print(f"  Seed:   {noise_seed}")
+            print(f"  Mode:     text-to-video")
+        print(f"  Prompt:   {prompt_text[:70]}...")
+        print(f"  Seed:     {noise_seed}")
+        print(f"  Duration: {expected_dur:.0f}s ({self.length} frames)")
         print(f"{'='*60}")
 
         if is_t2v:
@@ -767,7 +770,16 @@ class DirectorTUI:
             download_output(self.base_url, history, seg_video,
                             strip_audio=self.strip_audio)
             extract_last_frame(seg_video, seg_frame)
-            print(f"  Rendered in {fmt_duration(time.time() - start)}")
+            elapsed = time.time() - start
+            actual_dur = get_duration(seg_video)
+            if actual_dur is not None:
+                print(f"  Rendered in {fmt_duration(elapsed)}, "
+                      f"clip duration: {actual_dur:.1f}s")
+                if abs(actual_dur - expected_dur) > 1.0:
+                    print(f"  WARNING: expected {expected_dur:.0f}s "
+                          f"but got {actual_dur:.1f}s")
+            else:
+                print(f"  Rendered in {fmt_duration(elapsed)}")
             scene.status = "rendered"
         except Exception as e:
             print(f"  Render failed: {e}")
