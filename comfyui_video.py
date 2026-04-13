@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -89,6 +90,21 @@ def poll_until_done(base_url, prompt_id, timeout=600):
     raise TimeoutError(f"Workflow did not complete within {timeout}s")
 
 
+def _strip_audio(video_path):
+    """Remove the audio track from a video file in-place using ffmpeg."""
+    tmp = video_path + ".noaudio.mp4"
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", video_path, "-an", "-c:v", "copy", tmp],
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        os.replace(tmp, video_path)
+    else:
+        # Clean up temp file on failure; keep original as-is
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def download_output(base_url, history_entry, dest_path, output_type="video"):
     """Download the first video/image output from a completed workflow.
 
@@ -110,6 +126,7 @@ def download_output(base_url, history_entry, dest_path, output_type="video"):
                     with urllib.request.urlopen(req) as resp:
                         with open(dest_path, "wb") as out_f:
                             out_f.write(resp.read())
+                    _strip_audio(dest_path)
                     return dest_path
     raise RuntimeError(
         f"No output found in workflow results. "
