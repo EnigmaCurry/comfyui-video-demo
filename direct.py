@@ -69,10 +69,11 @@ C_KEY = 6
 # ── Scene data ──────────────────────────────────────────────────────
 
 class Scene:
-    def __init__(self, index, suffix, voiceover_text=""):
+    def __init__(self, index, suffix, voiceover_text="", length=None):
         self.index = index
         self.suffix = suffix
         self.voiceover_text = voiceover_text
+        self.length = length  # per-scene frame count, None = use default
         self.status = "pending"  # pending | rendered | approved
         self._backup_suffix = None
         self._backup_voiceover = None
@@ -270,7 +271,11 @@ class DirectorTUI:
         # ── status line ──────────────────────────────────────────────
         st, sc = self._status_label(scene)
         tag = f" (modified)" if scene.has_draft else ""
-        self._row(y, f"Status: {st}{tag}", bw, sc); y += 1
+        scene_len = scene.length if scene.length is not None else self.length
+        dur_str = f"{scene_len / 25.0:.0f}s"
+        if scene.length is not None:
+            dur_str += " (custom)"
+        self._row(y, f"Status: {st}{tag}    Duration: {dur_str}", bw, sc); y += 1
 
         # ── scene strip ──────────────────────────────────────────────
         self._hline(y, "├", "─", "┤", bw); y += 1
@@ -361,8 +366,11 @@ class DirectorTUI:
             rows.append(("[Enter] Re-render (new seed)", "[v] Refine visual"))
 
         vo_label = "[o] Refine voiceover" if self.has_voiceover and has_video else ""
+        rows.append((vo_label, "[d] Set duration"))
+
         cancel_label = "[c] Cancel changes" if scene.has_draft else ""
-        rows.append((vo_label, cancel_label))
+        if cancel_label:
+            rows.append((cancel_label, ""))
 
         rows.append(("[r] Render movie", "[q] Quit"))
         return rows
@@ -398,6 +406,8 @@ class DirectorTUI:
             self._refine_voiceover()
         elif key == ord("c"):
             self._cancel_changes()
+        elif key == ord("d"):
+            self._set_duration()
         elif key == ord("r"):
             self._end_movie()
         elif key == ord("q"):
@@ -440,6 +450,34 @@ class DirectorTUI:
         self.frontier = self.current
         self._save_script()
         self._resume_curses()
+
+    def _set_duration(self):
+        """Set custom duration for the current scene."""
+        scene = self.scenes[self.current]
+        current_len = scene.length if scene.length is not None else self.length
+        current_secs = current_len / 25.0
+
+        raw = self._input_text(
+            f"Current duration: {current_secs:.0f}s ({current_len} frames)\n"
+            f"Default duration: {self.length / 25.0:.0f}s\n\n"
+            f"Enter new duration in seconds (or Enter to keep, 0 to reset to default):\n",
+        )
+        if not raw:
+            self.status_msg = "No changes"
+            return
+        try:
+            secs = int(raw)
+        except ValueError:
+            self.status_msg = f"Invalid number: {raw}"
+            return
+
+        if secs == 0:
+            scene.length = None
+            self.status_msg = f"Scene {scene.num} reset to default ({self.length / 25.0:.0f}s)"
+        else:
+            scene.length = secs * 25
+            self.status_msg = f"Scene {scene.num} set to {secs}s ({scene.length} frames)"
+        self._save_script()
 
     def _make_preview(self, scene):
         """Mux voiceover into video for preview, or return plain video."""
@@ -722,7 +760,8 @@ class DirectorTUI:
         seg_video = scene.video_path(self.run_dir)
         seg_frame = scene.frame_path(self.run_dir)
 
-        expected_dur = self.length / 25.0
+        scene_length = scene.length if scene.length is not None else self.length
+        expected_dur = scene_length / 25.0
 
         print(f"\n{'='*60}")
         print(f"  Rendering scene {scene.num}")
@@ -730,7 +769,8 @@ class DirectorTUI:
             print(f"  Mode:     text-to-video")
         print(f"  Prompt:   {prompt_text[:70]}...")
         print(f"  Seed:     {noise_seed}")
-        print(f"  Duration: {expected_dur:.0f}s ({self.length} frames)")
+        dur_note = "" if scene.length is None else " (custom)"
+        print(f"  Duration: {expected_dur:.0f}s ({scene_length} frames){dur_note}")
         print(f"{'='*60}")
 
         if is_t2v:
@@ -761,7 +801,7 @@ class DirectorTUI:
             t2v_enabled=is_t2v,
             length_node=self.args.length_node,
             length_field=self.args.length_field,
-            length_value=self.length,
+            length_value=scene_length,
         )
 
         start = time.time()
@@ -836,6 +876,7 @@ class DirectorTUI:
                     "status": s.status,
                     "suffix": s.suffix,
                     "voiceover_text": s.voiceover_text,
+                    "length": s.length,
                     "has_draft": s.has_draft,
                     "_backup_suffix": s._backup_suffix,
                     "_backup_voiceover": s._backup_voiceover,
@@ -872,6 +913,7 @@ class DirectorTUI:
             s = self.scenes[i]
             s.suffix = ss["suffix"]
             s.voiceover_text = ss.get("voiceover_text", "")
+            s.length = ss.get("length")
             s.has_draft = ss.get("has_draft", False)
             s._backup_suffix = ss.get("_backup_suffix")
             s._backup_voiceover = ss.get("_backup_voiceover")
