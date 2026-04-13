@@ -297,9 +297,10 @@ def main():
 
     base_url = args.url or COMFYUI_URL
 
-    # Resolve base prompt from style if not overridden
+    # Resolve style settings
+    style = load_style(args.style)
+    strip_audio = style.get("strip_audio", False)
     if args.base_prompt is None:
-        style = load_style(args.style)
         args.base_prompt = style.get("base_prompt", "")
 
     # Load workflow
@@ -434,7 +435,7 @@ def main():
 
         # Download output video
         print(f"  downloading video...")
-        download_output(base_url, history, seg_video)
+        download_output(base_url, history, seg_video, strip_audio=strip_audio)
         print(f"  saved: {seg_video}")
 
         # Extract last frame

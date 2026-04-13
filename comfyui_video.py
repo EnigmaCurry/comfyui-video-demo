@@ -105,7 +105,8 @@ def _strip_audio(video_path):
             os.unlink(tmp)
 
 
-def download_output(base_url, history_entry, dest_path, output_type="video"):
+def download_output(base_url, history_entry, dest_path, output_type="video",
+                    strip_audio=False):
     """Download the first video/image output from a completed workflow.
 
     output_type: key to look for in node outputs ("video", "images", "gifs")
@@ -126,7 +127,8 @@ def download_output(base_url, history_entry, dest_path, output_type="video"):
                     with urllib.request.urlopen(req) as resp:
                         with open(dest_path, "wb") as out_f:
                             out_f.write(resp.read())
-                    _strip_audio(dest_path)
+                    if strip_audio:
+                        _strip_audio(dest_path)
                     return dest_path
     raise RuntimeError(
         f"No output found in workflow results. "
