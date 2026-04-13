@@ -136,28 +136,45 @@ def main():
             print(f"  Mixed frame rates detected: {fps_set}")
             print(f"  Normalizing to {target_fps} fps")
 
+        # Normalize mismatched segments before concat
+        normalized_videos = []
+        if mixed_fps:
+            for i, v in enumerate(seg_videos):
+                if get_fps(v) != target_fps_str:
+                    norm_path = os.path.join(tmpdir, f"norm_{i:02d}.mp4")
+                    print(f"  re-encoding {os.path.basename(v)} "
+                          f"({get_fps(v)} -> {target_fps}fps)")
+                    result = subprocess.run(
+                        ["ffmpeg", "-y", "-i", v,
+                         "-r", target_fps,
+                         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                         "-an", norm_path],
+                        capture_output=True,
+                    )
+                    if result.returncode != 0:
+                        print(f"  warning: re-encode failed: "
+                              f"{result.stderr.decode(errors='replace')[:200]}",
+                              file=sys.stderr)
+                        normalized_videos.append(v)
+                    else:
+                        normalized_videos.append(norm_path)
+                else:
+                    normalized_videos.append(v)
+        else:
+            normalized_videos = seg_videos
+
         # Concat video segments
         vlist = os.path.join(tmpdir, "videos.txt")
         with open(vlist, "w") as f:
-            for v in seg_videos:
+            for v in normalized_videos:
                 f.write(f"file '{os.path.abspath(v)}'\n")
 
         tmp_video = os.path.join(tmpdir, "concat.mp4")
-        if mixed_fps:
-            # Re-encode to normalize frame rate
-            subprocess.run(
-                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                 "-i", vlist, "-r", target_fps,
-                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                 "-an", tmp_video],
-                capture_output=True, check=True,
-            )
-        else:
-            subprocess.run(
-                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                 "-i", vlist, "-c", "copy", tmp_video],
-                capture_output=True, check=True,
-            )
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+             "-i", vlist, "-c", "copy", tmp_video],
+            capture_output=True, check=True,
+        )
 
         if vo_files and len(vo_files) == len(seg_videos):
             print(f"Mixing {len(vo_files)} voiceover clips (centered) with "
