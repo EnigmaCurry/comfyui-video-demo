@@ -80,13 +80,17 @@ def poll_until_done(base_url, prompt_id, timeout=600):
         if prompt_id in history:
             status = history[prompt_id].get("status", {})
             if status.get("completed", False) or status.get("status_str") == "success":
+                sys.stdout.write("\r" + " " * 40 + "\r")
+                sys.stdout.flush()
                 return history[prompt_id]
             if status.get("status_str") == "error":
                 msgs = status.get("messages", [])
                 raise RuntimeError(f"Workflow failed: {msgs}")
-        time.sleep(2)
-        sys.stdout.write(".")
+        elapsed = int(time.time() - start)
+        m, s = divmod(elapsed, 60)
+        sys.stdout.write(f"\r  waiting... {m}m{s:02d}s")
         sys.stdout.flush()
+        time.sleep(2)
     raise TimeoutError(f"Workflow did not complete within {timeout}s")
 
 
