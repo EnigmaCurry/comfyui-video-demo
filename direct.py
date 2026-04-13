@@ -409,7 +409,7 @@ class DirectorTUI:
             return
         preview = self._make_preview(scene)
         self._leave_curses()
-        subprocess.run(["mpv", "--loop=inf", "--really-quiet", preview],
+        subprocess.run(["mpv", "--really-quiet", preview],
                        check=False)
         self._resume_curses()
 
