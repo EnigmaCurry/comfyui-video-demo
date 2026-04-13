@@ -170,13 +170,14 @@ class DirectorTUI:
     def __init__(self, *, scenes, run_dir, workflow_template, base_url,
                  base_prompt, length, strip_audio, voice, tts_dir, tts_seed,
                  seed, args, timeout, script_path, voiceover_json_path,
-                 has_voiceover):
+                 has_voiceover, style_name):
         self.scenes = scenes
         self.run_dir = run_dir
         self.workflow_template = workflow_template
         self.base_url = base_url
         self.base_prompt = base_prompt
         self.length = length
+        self.style_name = style_name
         self.strip_audio = strip_audio
         self.voice = voice
         self.tts_dir = tts_dir
@@ -1041,6 +1042,8 @@ class DirectorTUI:
         session = {
             "current": self.current,
             "frontier": self.frontier,
+            "style": self.style_name,
+            "default_length": self.length,
             "scenes": [
                 {
                     "status": s.status,
@@ -1068,6 +1071,12 @@ class DirectorTUI:
                 session = json.load(f)
         except (json.JSONDecodeError, KeyError):
             return False
+
+        # Restore style and default length from session
+        if session.get("style"):
+            self.style_name = session["style"]
+        if session.get("default_length"):
+            self.length = session["default_length"]
 
         saved_scenes = session.get("scenes", [])
 
@@ -1385,6 +1394,7 @@ def main():
         script_path=script_path,
         voiceover_json_path=voiceover_json_path,
         has_voiceover=has_voiceover,
+        style_name=args.style,
     )
     tui.run()
 
