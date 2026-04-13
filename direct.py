@@ -46,6 +46,7 @@ from comfyui_video import (
     COMFYUI_URL,
     download_output,
     run_workflow,
+    upload_file,
     upload_image,
 )
 from mux import get_duration, pad_audio_centered
@@ -56,6 +57,21 @@ from write_script import _build_prompts, call_llm
 
 LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
+V2V_WORKFLOW = os.path.join(os.path.dirname(__file__), "workflow", "wan_v2v.json")
+
+
+def extract_first_frame(video_path, output_png):
+    """Extract the first frame of a video to a PNG using ffmpeg."""
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", video_path, "-frames:v", "1", output_png],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg first-frame extraction failed: "
+            f"{result.stderr.decode(errors='replace')}"
+        )
+    return output_png
 
 # Color pair IDs
 C_APPROVED = 1
@@ -360,6 +376,9 @@ class DirectorTUI:
         vo_label = "[o] Refine voiceover" if self.has_voiceover and has_video else ""
         rows.append((vo_label, "[d] Set duration"))
 
+        if has_video:
+            rows.append(("[t] Transform (V2V)", ""))
+
         cancel_label = "[c] Cancel changes" if scene.has_draft else ""
         if cancel_label:
             rows.append((cancel_label, ""))
@@ -400,6 +419,8 @@ class DirectorTUI:
             self._cancel_changes()
         elif key == ord("d"):
             self._set_duration()
+        elif key == ord("t"):
+            self._transform()
         elif key == ord("r"):
             self._render_movie()
         elif key == ord("q"):
@@ -476,6 +497,115 @@ class DirectorTUI:
             scene.length = secs * 25
             self.status_msg = f"Scene {scene.num} set to {secs}s ({scene.length} frames)"
         self._save_script()
+
+    def _transform(self):
+        """Transform the current scene using Wan 2.1 VACE video-to-video."""
+        scene = self.scenes[self.current]
+        if not scene.has_video(self.run_dir):
+            self.status_msg = "No video to transform"
+            return
+
+        if not os.path.exists(V2V_WORKFLOW):
+            self.status_msg = f"V2V workflow not found: {V2V_WORKFLOW}"
+            return
+
+        prompt = self._input_text(
+            "Enter a prompt describing how to transform this scene:\n"
+            "  (e.g. 'change the background to a pulsing red alert')\n"
+        )
+        if not prompt:
+            self.status_msg = "Transform cancelled"
+            return
+
+        scene.save_draft_backup()
+
+        # Back up current video
+        _backup(scene.video_path(self.run_dir))
+        _backup(scene.frame_path(self.run_dir))
+        _delete_if_exists(scene.preview_path(self.run_dir))
+
+        self._leave_curses()
+        self._run_v2v(scene, prompt)
+        self._save_script()
+        self._resume_curses()
+
+    def _run_v2v(self, scene, prompt):
+        """Run Wan 2.1 VACE V2V workflow on a scene."""
+        import copy
+
+        # Use the backed-up original video as input
+        input_video = scene.video_path(self.run_dir) + ".bak"
+        if not os.path.exists(input_video):
+            input_video = scene.video_path(self.run_dir)
+
+        output_video = scene.video_path(self.run_dir)
+        ref_image = os.path.join(self.run_dir, f"_v2v_ref_{scene.num:02d}.png")
+
+        # Extract first frame as reference image
+        print(f"\n{'='*60}")
+        print(f"  V2V Transform — Scene {scene.num}")
+        print(f"  Prompt: {prompt[:70]}...")
+        print(f"  Input:  {input_video}")
+        print(f"{'='*60}")
+
+        extract_first_frame(input_video, ref_image)
+
+        # Get input video info for frame count
+        vid_dur = get_duration(input_video)
+        # Wan VACE runs at 16fps, compute frame count (must be 4n+1)
+        if vid_dur:
+            raw_frames = int(vid_dur * 16)
+            wan_frames = ((raw_frames - 1) // 4) * 4 + 1
+            wan_frames = max(wan_frames, 5)
+        else:
+            wan_frames = 81
+
+        # Upload video and reference image
+        print(f"  Uploading video...")
+        uploaded_video = upload_file(self.base_url, input_video)
+        print(f"  Uploading reference image...")
+        uploaded_ref = upload_image(self.base_url, ref_image)
+
+        # Load and patch workflow
+        with open(V2V_WORKFLOW) as f:
+            wf = json.load(f)
+
+        wf = copy.deepcopy(wf)
+        noise_seed = random.randint(0, 2**53)
+
+        # Patch nodes
+        wf["145"]["inputs"]["file"] = uploaded_video          # LoadVideo
+        wf["134"]["inputs"]["image"] = uploaded_ref           # LoadImage (reference)
+        wf["6"]["inputs"]["text"] = prompt                    # positive prompt
+        wf["3"]["inputs"]["seed"] = noise_seed                # KSampler seed
+        wf["49"]["inputs"]["length"] = wan_frames             # frame count
+        wf["114"]["inputs"]["filename_prefix"] = (            # output
+            f"{self.seed}/v2v_{scene.label}")
+
+        print(f"  Frames: {wan_frames} ({wan_frames/16:.1f}s at 16fps)")
+        print(f"  Seed:   {noise_seed}")
+        print(f"  Submitting V2V workflow...")
+
+        start = time.time()
+        try:
+            history = run_workflow(self.base_url, wf, timeout=self.timeout)
+            download_output(self.base_url, history, output_video,
+                            strip_audio=self.strip_audio)
+            extract_last_frame(output_video, scene.frame_path(self.run_dir))
+            elapsed = time.time() - start
+            actual_dur = get_duration(output_video)
+            print(f"  Transformed in {fmt_duration(elapsed)}")
+            if actual_dur:
+                print(f"  Output duration: {actual_dur:.1f}s")
+            scene.status = "rendered"
+        except Exception as e:
+            print(f"  V2V failed: {e}")
+            # Restore backup
+            _restore(scene.video_path(self.run_dir))
+            _restore(scene.frame_path(self.run_dir))
+
+        # Clean up temp reference
+        _delete_if_exists(ref_image)
 
     def _make_preview(self, scene):
         """Mux voiceover into video for preview, or return plain video."""

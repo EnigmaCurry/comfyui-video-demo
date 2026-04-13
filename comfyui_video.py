@@ -181,6 +181,48 @@ def upload_image(base_url, image_path, subfolder="", overwrite=True):
     return result.get("name", filename)
 
 
+def upload_file(base_url, file_path, subfolder="", overwrite=True):
+    """Upload any file (image or video) to ComfyUI's input folder.
+
+    Returns the filename as stored on the server.
+    """
+    import mimetypes
+
+    filename = os.path.basename(file_path)
+    content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+
+    boundary = uuid.uuid4().hex
+    with open(file_path, "rb") as f:
+        file_data = f.read()
+
+    body = b""
+    body += f"--{boundary}\r\n".encode()
+    body += f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'.encode()
+    body += f"Content-Type: {content_type}\r\n\r\n".encode()
+    body += file_data
+    body += b"\r\n"
+    if subfolder:
+        body += f"--{boundary}\r\n".encode()
+        body += f'Content-Disposition: form-data; name="subfolder"\r\n\r\n'.encode()
+        body += subfolder.encode()
+        body += b"\r\n"
+    body += f"--{boundary}\r\n".encode()
+    body += f'Content-Disposition: form-data; name="overwrite"\r\n\r\n'.encode()
+    body += b"true" if overwrite else b"false"
+    body += b"\r\n"
+    body += f"--{boundary}--\r\n".encode()
+
+    req = _authed_request(
+        f"{base_url}/api/upload/image",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        result = json.loads(resp.read())
+    return result.get("name", filename)
+
+
 def cancel_queue(base_url):
     """Cancel all queued and running prompts on the ComfyUI server."""
     post_json(f"{base_url}/api/interrupt", {})
