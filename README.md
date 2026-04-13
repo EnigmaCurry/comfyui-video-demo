@@ -19,6 +19,8 @@ Optional LLM-generated scripts and TTS voiceover narration.
 - [tts-demo](https://github.com/EnigmaCurry/tts-demo) for voiceover
   narration (clone it as a sibling directory: `../tts-demo`)
 - An OpenAI-compatible LLM API (vllm, ollama, etc.) for script generation
+- Wan 2.1 VACE model in ComfyUI for V2V scene transforms
+- mpv for video preview playback
 
 ## Setup
 
@@ -39,7 +41,67 @@ Export your LTX image-to-video workflow from ComfyUI in **API format**
 | `LLM_MODEL` | LLM model name | `default` |
 | `LLM_API_KEY` | Bearer token for LLM API | (none) |
 
-## Quick start
+## Director mode (interactive)
+
+The director mode is a TUI for building videos clip-by-clip with full
+creative control. Run it with no arguments for interactive setup:
+
+```bash
+just direct
+```
+
+Or pass options directly:
+
+```bash
+just direct --seed 123 --style story-arc --theme A librarian slowly turns into her own books
+```
+
+This generates a script and voiceover text via LLM, then enters a curses
+TUI where you render, review, and refine each scene one at a time.
+
+### TUI controls
+
+| Key | Action |
+|-----|--------|
+| Space | Play current scene in mpv |
+| p | Play previous + current scene back-to-back |
+| Left/Right | Navigate between rendered scenes |
+| Home/End | Jump to first/last scene |
+| Enter | Re-render current scene with a new seed |
+| a | Approve scene and render the next one |
+| v | Refine visual prompt (edit and re-render) |
+| o | Refine voiceover text (edit and re-render audio) |
+| d | Set custom duration for this scene |
+| t | Transform scene with V2V (Wan 2.1 VACE) |
+| c | Cancel changes (revert to approved version) |
+| r | Render final movie (mux all segments and play) |
+| q q | Quit (double-tap; session is saved) |
+
+### Session persistence
+
+Sessions are saved automatically. Quit anytime and resume by running
+`just direct --seed <same-seed>`. All scene statuses, prompts, voiceover
+text, custom durations, and your current position are restored.
+
+### V2V transform
+
+Press `t` to restyle a rendered scene using the Wan 2.1 VACE
+video-to-video model. This keeps the motion/composition of the original
+clip but regenerates the visuals from a new prompt.
+
+Tips:
+- Describe the full destination scene, not what to change
+- Use lower strength (0.2-0.4) for major restyling
+- Use higher strength (0.6-0.8) for subtle changes
+- Requires `workflow/wan_v2v.json` and the Wan 2.1 VACE model in ComfyUI
+
+### Extending beyond the script
+
+When you approve the last scripted scene, the TUI prompts for a new scene
+description. Enter a prompt to keep going, or press Enter to stop. Extended
+scenes are saved to the script and session.
+
+## Batch mode
 
 Run the full pipeline in one command:
 
@@ -128,7 +190,9 @@ just concat
 
 | Recipe | Description |
 |--------|-------------|
-| `just workflow` | Run full pipeline: script, voiceover, video, concat |
+| `just direct` | Interactive director mode TUI |
+| `just workflow` | Run full batch pipeline: script, voiceover, video, concat |
+| `just clip` | Render a single test clip and play it |
 | `just config` | Configure `.env` settings |
 | `just script` | Generate visual + voiceover script from LLM |
 | `just script-manual` | Generate script via copy-paste prompts |
