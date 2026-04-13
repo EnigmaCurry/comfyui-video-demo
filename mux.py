@@ -126,7 +126,13 @@ def main():
             # Pick the most common fps as target
             from collections import Counter
             fps_counts = Counter(get_fps(v) for v in seg_videos)
-            target_fps = fps_counts.most_common(1)[0][0]
+            target_fps_str = fps_counts.most_common(1)[0][0]
+            # Evaluate fractional fps like "25/1" to a number string
+            if "/" in target_fps_str:
+                num, den = target_fps_str.split("/")
+                target_fps = str(int(num) // int(den))
+            else:
+                target_fps = target_fps_str
             print(f"  Mixed frame rates detected: {fps_set}")
             print(f"  Normalizing to {target_fps} fps")
 
