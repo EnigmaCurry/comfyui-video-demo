@@ -231,39 +231,41 @@ clip *ARGS:
     echo "Playing: $output_file"
     mpv --loop "$output_file"
 
-# Interactive director mode: render clips one-by-one with review
+# Interactive director mode TUI: render clips one-by-one with review
 direct *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
     set -- {{ARGS}}
-    seed="" segments="16" duration="" theme="" style="absurd-realism" extra_args=()
-    # Check for --help before parsing
+    seed="" segments="16" duration="" theme="" style="absurd-realism" voice="despotism-doc.wav" extra_args=()
     for arg in "$@"; do
         if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
             echo "Usage: just direct --seed SEED --theme THEME [OPTIONS]"
             echo ""
-            echo "Interactive director mode: generate script, render clips one at a time,"
-            echo "preview each in mpv, and choose to accept, refine, extend, or end."
+            echo "Interactive director mode TUI. Generates script, renders clips one"
+            echo "at a time, and lets you review each in mpv before continuing."
             echo ""
             echo "Required arguments:"
-            echo "  --seed SEED           Run ID seed (output goes to output/{seed}/)"
-            echo "  --theme THEME         Theme or concept for the video (can be multiple words)"
+            echo "  --seed SEED           Run ID seed"
+            echo "  --theme THEME         Theme or concept (can be multiple words)"
             echo ""
             echo "Optional arguments:"
             echo "  --segments N          Number of planned segments (default: 16)"
             echo "  --duration SECS       Segment duration in seconds (default: from style)"
             echo "  --style NAME          Prompt style (default: absurd-realism)"
-            echo "  --no-voiceover        Skip voiceover text generation"
-            echo "  --skip-script         Use existing script.json instead of generating"
+            echo "  --voice FILE          Voice sample WAV file (default: despotism-doc.wav)"
+            echo "  --no-voiceover        Skip voiceover generation"
+            echo "  --skip-script         Use existing script.json"
             echo ""
-            echo "Director commands (shown after each clip):"
-            echo "  [Enter]    Accept clip, continue to next"
-            echo "  r [text]   Refine: re-render with optional new prompt"
-            echo "  e [text]   Extend: add a new scene beyond the script"
-            echo "  end        Finish movie, mux what you have"
-            echo "  quit       Abort without muxing"
-            echo "  skip       Skip to next without re-rendering"
-            echo "  show       Replay current clip"
+            echo "TUI controls:"
+            echo "  Space        Play current scene in mpv (loop)"
+            echo "  Left/Right   Navigate between rendered scenes"
+            echo "  Home/End     Jump to first/last scene"
+            echo "  a            Approve scene & render next"
+            echo "  v            Refine visual prompt (re-render)"
+            echo "  o            Refine voiceover text (re-render audio)"
+            echo "  c            Cancel changes (revert to approved)"
+            echo "  e            End movie (mux and play final)"
+            echo "  q            Quit without muxing"
             exit 0
         fi
     done
@@ -273,6 +275,7 @@ direct *ARGS:
             --segments) segments="$2"; shift 2 ;;
             --duration) duration="$2"; shift 2 ;;
             --style) style="$2"; shift 2 ;;
+            --voice) voice="$2"; shift 2 ;;
             --theme) shift; theme=""
                 while [[ $# -gt 0 ]] && [[ "$1" != --* ]]; do
                     theme="$theme $1"; shift
@@ -292,7 +295,7 @@ direct *ARGS:
         duration_args+=(--duration "$duration")
     fi
     python3 direct.py --seed "$seed" --segments "$segments" \
-        --style "$style" --theme $theme \
+        --style "$style" --voice "$voice" --theme $theme \
         "${duration_args[@]}" "${extra_args[@]}"
 
 # Clean output directory
