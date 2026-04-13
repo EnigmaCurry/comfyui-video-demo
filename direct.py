@@ -310,7 +310,7 @@ class DirectorTUI:
         # ── navigation ───────────────────────────────────────────────
         self._hline(y, "├", "─", "┤", bw); y += 1
         self._row(y, "", bw); y += 1
-        self._row(y, "[Space] Play  [Left/Right] Navigate  [Home/End] Jump",
+        self._row(y, "[Space] Play  [p] Play prev+current  [Left/Right/Home/End]",
                   bw); y += 1
         self._row(y, "", bw); y += 1
 
@@ -421,6 +421,8 @@ class DirectorTUI:
             self._set_duration()
         elif key == ord("t"):
             self._transform()
+        elif key == ord("p"):
+            self._play_sequence()
         elif key == ord("r"):
             self._render_movie()
         elif key == ord("q"):
@@ -444,6 +446,52 @@ class DirectorTUI:
         subprocess.run(["mpv", "--really-quiet", preview],
                        check=False)
         self._resume_curses()
+
+    def _play_sequence(self):
+        """Play the previous scene and current scene back-to-back."""
+        scene = self.scenes[self.current]
+        if not scene.has_video(self.run_dir):
+            self.status_msg = "No video to play"
+            return
+        if self.current == 0:
+            # Only one scene, just play it
+            self._play_current()
+            return
+
+        prev = self.scenes[self.current - 1]
+        if not prev.has_video(self.run_dir):
+            self._play_current()
+            return
+
+        # Build previews for both scenes
+        prev_preview = self._make_preview(prev)
+        curr_preview = self._make_preview(scene)
+
+        # Concat into a temp file
+        import tempfile
+        seq_path = os.path.join(self.run_dir, "_sequence.mp4")
+        list_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False)
+        try:
+            list_file.write(f"file '{os.path.abspath(prev_preview)}'\n")
+            list_file.write(f"file '{os.path.abspath(curr_preview)}'\n")
+            list_file.close()
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                 "-i", list_file.name, "-c", "copy", seq_path],
+                capture_output=True,
+            )
+        finally:
+            os.unlink(list_file.name)
+
+        if result.returncode != 0:
+            self.status_msg = "Failed to concat sequence"
+            return
+
+        self._leave_curses()
+        subprocess.run(["mpv", "--really-quiet", seq_path], check=False)
+        self._resume_curses()
+        _delete_if_exists(seq_path)
 
     def _rerender(self):
         """Re-render the current scene with a new random seed (same prompt)."""
