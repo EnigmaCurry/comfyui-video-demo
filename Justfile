@@ -161,6 +161,73 @@ concat *SEED:
 last-frame VIDEO OUT:
     ffmpeg -y -sseof -0.1 -i "{{VIDEO}}" -frames:v 1 "{{OUT}}"
 
+# Render a single test clip from a text prompt and play it in a loop
+clip *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -- {{ARGS}}
+    style="absurd-realism" duration="" prompt_words=()
+    # Parse --help
+    for arg in "$@"; do
+        if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+            echo "Usage: just clip [--style NAME] [--duration SECS] PROMPT..."
+            echo ""
+            echo "Render a single test clip from a text prompt and play it with mpv."
+            echo ""
+            echo "Options:"
+            echo "  --style NAME      Prompt style (default: absurd-realism)"
+            echo "  --duration SECS   Clip duration in seconds (default: from style)"
+            echo ""
+            echo "Example:"
+            echo "  just clip a cat riding a bicycle through space"
+            exit 0
+        fi
+    done
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --style) style="$2"; shift 2 ;;
+            --duration) duration="$2"; shift 2 ;;
+            *) prompt_words+=("$1"); shift ;;
+        esac
+    done
+    if [ ${#prompt_words[@]} -eq 0 ]; then
+        echo "Error: prompt text is required" >&2; exit 1
+    fi
+    prompt="${prompt_words[*]}"
+    # Derive filename slug from first 6 words
+    slug=$(echo "${prompt_words[*]:0:6}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//' | head -c 60)
+    # Resolve duration from style if not set
+    if [ -z "$duration" ]; then
+        duration=$(python3 -c "from styles import load_style; print(load_style('$style').get('default_duration', 24))")
+    fi
+    length=$(( duration * 25 ))
+    seed=$RANDOM
+    output_dir="output/clips"
+    mkdir -p "$output_dir"
+    output_file="${output_dir}/${slug}.mp4"
+    echo "Prompt:   $prompt"
+    echo "Style:    $style"
+    echo "Duration: ${duration}s (${length} frames)"
+    echo "Output:   $output_file"
+    echo ""
+    python3 chain.py --text-to-video --workflow workflow/ltx_i2v.json \
+        --seed "$seed" --segments 1 --length "$length" \
+        --style "$style" --suffixes "$prompt" \
+        --output-dir "$output_dir"
+    # Find the rendered segment
+    run_dir=$(python3 -c "from run_dir import get_run_dir; print(get_run_dir('$output_dir', $seed))")
+    rendered="${run_dir}/segment_01.mp4"
+    if [ ! -f "$rendered" ]; then
+        echo "Error: rendered video not found at $rendered" >&2; exit 1
+    fi
+    # Move to final location with slug name
+    mv "$rendered" "$output_file"
+    # Clean up the run directory
+    rm -rf "$run_dir"
+    echo ""
+    echo "Playing: $output_file"
+    mpv --loop "$output_file"
+
 # Clean output directory
 [confirm("Remove output/ directory?")]
 clean:
