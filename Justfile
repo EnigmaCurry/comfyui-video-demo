@@ -231,6 +231,70 @@ clip *ARGS:
     echo "Playing: $output_file"
     mpv --loop "$output_file"
 
+# Interactive director mode: render clips one-by-one with review
+direct *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -- {{ARGS}}
+    seed="" segments="16" duration="" theme="" style="absurd-realism" extra_args=()
+    # Check for --help before parsing
+    for arg in "$@"; do
+        if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+            echo "Usage: just direct --seed SEED --theme THEME [OPTIONS]"
+            echo ""
+            echo "Interactive director mode: generate script, render clips one at a time,"
+            echo "preview each in mpv, and choose to accept, refine, extend, or end."
+            echo ""
+            echo "Required arguments:"
+            echo "  --seed SEED           Run ID seed (output goes to output/{seed}/)"
+            echo "  --theme THEME         Theme or concept for the video (can be multiple words)"
+            echo ""
+            echo "Optional arguments:"
+            echo "  --segments N          Number of planned segments (default: 16)"
+            echo "  --duration SECS       Segment duration in seconds (default: from style)"
+            echo "  --style NAME          Prompt style (default: absurd-realism)"
+            echo "  --no-voiceover        Skip voiceover text generation"
+            echo "  --skip-script         Use existing script.json instead of generating"
+            echo ""
+            echo "Director commands (shown after each clip):"
+            echo "  [Enter]    Accept clip, continue to next"
+            echo "  r [text]   Refine: re-render with optional new prompt"
+            echo "  e [text]   Extend: add a new scene beyond the script"
+            echo "  end        Finish movie, mux what you have"
+            echo "  quit       Abort without muxing"
+            echo "  skip       Skip to next without re-rendering"
+            echo "  show       Replay current clip"
+            exit 0
+        fi
+    done
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --seed) seed="$2"; shift 2 ;;
+            --segments) segments="$2"; shift 2 ;;
+            --duration) duration="$2"; shift 2 ;;
+            --style) style="$2"; shift 2 ;;
+            --theme) shift; theme=""
+                while [[ $# -gt 0 ]] && [[ "$1" != --* ]]; do
+                    theme="$theme $1"; shift
+                done
+                theme="${theme# }" ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+    if [ -z "$seed" ]; then
+        echo "Error: --seed is required" >&2; exit 1
+    fi
+    if [ -z "$theme" ]; then
+        echo "Error: --theme is required" >&2; exit 1
+    fi
+    duration_args=()
+    if [ -n "$duration" ]; then
+        duration_args+=(--duration "$duration")
+    fi
+    python3 direct.py --seed "$seed" --segments "$segments" \
+        --style "$style" --theme $theme \
+        "${duration_args[@]}" "${extra_args[@]}"
+
 # Clean output directory
 [confirm("Remove output/ directory?")]
 clean:
