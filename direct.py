@@ -176,7 +176,6 @@ class DirectorTUI:
         self.stdscr = None
         self.status_msg = ""
         self.should_quit = False
-        self.should_end = False
 
     def run(self):
         # Try to restore a previous session
@@ -208,24 +207,17 @@ class DirectorTUI:
             curses.init_pair(C_DIM, curses.COLOR_WHITE, -1)
             curses.init_pair(C_KEY, curses.COLOR_CYAN, -1)
 
-        while not self.should_quit and not self.should_end:
+        while not self.should_quit:
             self._draw()
             key = stdscr.getch()
             self._handle_key(key)
 
         # Don't call endwin() here — curses.wrapper handles that.
-        # Just save state; printing happens after wrapper returns.
-        if self.should_quit:
-            self._save_session()
-        elif self.should_end:
-            pass  # _finalize called after wrapper returns
+        self._save_session()
 
     def _post_tui(self):
         """Called after curses.wrapper returns and terminal is restored."""
-        if self.should_quit:
-            print(f"Session saved. Resume with the same --seed {self.seed}")
-        elif self.should_end:
-            self._finalize()
+        print(f"Session saved. Resume with the same --seed {self.seed}")
 
     def _leave_curses(self):
         curses.endwin()
@@ -372,7 +364,7 @@ class DirectorTUI:
         if cancel_label:
             rows.append((cancel_label, ""))
 
-        rows.append(("[r] Render movie", "[q] Quit"))
+        rows.append(("[q] Quit (session saved)", ""))
         return rows
 
     # ── key handling ─────────────────────────────────────────────────
@@ -408,8 +400,6 @@ class DirectorTUI:
             self._cancel_changes()
         elif key == ord("d"):
             self._set_duration()
-        elif key == ord("r"):
-            self._end_movie()
         elif key == ord("q"):
             self.should_quit = True
 
@@ -565,7 +555,7 @@ class DirectorTUI:
                 self.current = next_idx
                 self._resume_curses()
             else:
-                self.should_end = True
+                self.status_msg = "No prompt entered. Press q to quit."
 
     # ── refine visual ────────────────────────────────────────────────
 
@@ -675,51 +665,6 @@ class DirectorTUI:
         _delete_if_exists(scene.preview_path(self.run_dir))
         self._save_script()
         self.status_msg = "Reverted to approved version"
-
-    # ── end movie ────────────────────────────────────────────────────
-
-    def _end_movie(self):
-        self.should_end = True
-
-    def _finalize(self):
-        usable = [s for s in self.scenes if s.has_video(self.run_dir)]
-        if not usable:
-            print("No segments to mux.")
-            return
-
-        # Mark all usable scenes as approved
-        for s in usable:
-            s.status = "approved"
-            s.commit_draft()
-        self._save_script()
-        self._delete_session()
-
-        # Clean up preview/backup files
-        for s in self.scenes:
-            _delete_if_exists(s.preview_path(self.run_dir))
-            for f in [s.video_path(self.run_dir),
-                      s.frame_path(self.run_dir),
-                      s.vo_path(self.run_dir)]:
-                _delete_bak(f)
-
-        print()
-        print("=" * 60)
-        print(f"  MUXING FINAL VIDEO  ({len(usable)} segments)")
-        print("=" * 60)
-
-        subprocess.run(
-            ["python3", "mux.py", "--seed", str(self.seed)],
-            check=True,
-        )
-
-        dir_name = os.path.basename(self.run_dir)
-        final_path = os.path.join(self.run_dir, f"{dir_name}.mp4")
-        if os.path.exists(final_path):
-            print(f"\nFinal video: {final_path}")
-            subprocess.run(
-                ["mpv", "--loop=inf", "--really-quiet", final_path],
-                check=False,
-            )
 
     # ── rendering ────────────────────────────────────────────────────
 
@@ -932,12 +877,6 @@ class DirectorTUI:
                 self.frontier = i
         self.current = min(session.get("current", 0), max(self.frontier, 0))
         return self.frontier >= 0
-
-    def _delete_session(self):
-        """Remove session file after successful finalization."""
-        path = self._session_path()
-        if os.path.exists(path):
-            os.unlink(path)
 
     def _save_script(self):
         suffixes = [s.suffix for s in self.scenes]
