@@ -191,6 +191,7 @@ class DirectorTUI:
             self.frontier = 0
             self._save_session()
         curses.wrapper(self._main)
+        self._post_tui()
 
     # ── curses lifecycle ─────────────────────────────────────────────
 
@@ -211,12 +212,18 @@ class DirectorTUI:
             key = stdscr.getch()
             self._handle_key(key)
 
+        # Don't call endwin() here — curses.wrapper handles that.
+        # Just save state; printing happens after wrapper returns.
         if self.should_quit:
             self._save_session()
-            curses.endwin()
+        elif self.should_end:
+            pass  # _finalize called after wrapper returns
+
+    def _post_tui(self):
+        """Called after curses.wrapper returns and terminal is restored."""
+        if self.should_quit:
             print(f"Session saved. Resume with the same --seed {self.seed}")
         elif self.should_end:
-            curses.endwin()
             self._finalize()
 
     def _leave_curses(self):
@@ -905,7 +912,7 @@ def interactive_setup(args):
     styles = list_styles()
 
     print("╔══════════════════════════════════════════════════════════════╗")
-    print("║  DIRECTOR MODE — Setup                                     ║")
+    print("║  DIRECTOR MODE — Setup                                       ║")
     print("╚══════════════════════════════════════════════════════════════╝")
     print()
 
