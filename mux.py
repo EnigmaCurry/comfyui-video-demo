@@ -109,6 +109,27 @@ def main():
     tmpdir = tempfile.mkdtemp(prefix="mux-")
 
     try:
+        # Check if all segments share the same frame rate
+        def get_fps(path):
+            r = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
+                 "-show_entries", "stream=r_frame_rate",
+                 "-of", "csv=p=0", path],
+                capture_output=True, text=True,
+            )
+            return r.stdout.strip() if r.returncode == 0 else None
+
+        fps_set = set(get_fps(v) for v in seg_videos)
+        mixed_fps = len(fps_set) > 1
+
+        if mixed_fps:
+            # Pick the most common fps as target
+            from collections import Counter
+            fps_counts = Counter(get_fps(v) for v in seg_videos)
+            target_fps = fps_counts.most_common(1)[0][0]
+            print(f"  Mixed frame rates detected: {fps_set}")
+            print(f"  Normalizing to {target_fps} fps")
+
         # Concat video segments
         vlist = os.path.join(tmpdir, "videos.txt")
         with open(vlist, "w") as f:
@@ -116,11 +137,21 @@ def main():
                 f.write(f"file '{os.path.abspath(v)}'\n")
 
         tmp_video = os.path.join(tmpdir, "concat.mp4")
-        subprocess.run(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-             "-i", vlist, "-c", "copy", tmp_video],
-            capture_output=True, check=True,
-        )
+        if mixed_fps:
+            # Re-encode to normalize frame rate
+            subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                 "-i", vlist, "-r", target_fps,
+                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                 "-an", tmp_video],
+                capture_output=True, check=True,
+            )
+        else:
+            subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                 "-i", vlist, "-c", "copy", tmp_video],
+                capture_output=True, check=True,
+            )
 
         if vo_files and len(vo_files) == len(seg_videos):
             print(f"Mixing {len(vo_files)} voiceover clips (centered) with "
