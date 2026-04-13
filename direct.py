@@ -777,16 +777,98 @@ class DirectorTUI:
                 f.write("\n")
 
 
+# ── interactive setup ────────────────────────────────────────────────
+
+def _ask(prompt, default=None):
+    """Prompt the user for input with an optional default."""
+    if default is not None:
+        display = f"{prompt} [{default}]: "
+    else:
+        display = f"{prompt}: "
+    try:
+        value = input(display).strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        sys.exit(0)
+    return value if value else (str(default) if default is not None else "")
+
+
+def _ask_choice(prompt, choices, default=None):
+    """Prompt the user to pick from a list of choices."""
+    for i, c in enumerate(choices):
+        marker = " *" if c == default else ""
+        print(f"  {i + 1}) {c}{marker}")
+    while True:
+        raw = _ask(prompt, default)
+        # Accept the value directly if it matches a choice
+        if raw in choices:
+            return raw
+        # Accept a number
+        try:
+            idx = int(raw) - 1
+            if 0 <= idx < len(choices):
+                return choices[idx]
+        except ValueError:
+            pass
+        print(f"  Please enter a number 1-{len(choices)} or a name from the list.")
+
+
+def interactive_setup(args):
+    """Prompt for any missing required values."""
+    from styles import list_styles
+    styles = list_styles()
+
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print("║  DIRECTOR MODE — Setup                                     ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
+    print()
+
+    if not args.theme:
+        args.theme = _ask("Theme")
+        if not args.theme:
+            print("Error: theme is required")
+            sys.exit(1)
+
+    if args.seed is None:
+        raw = _ask("Seed (run ID)", default=random.randint(1, 9999))
+        try:
+            args.seed = int(raw)
+        except ValueError:
+            print(f"Error: seed must be a number, got: {raw}")
+            sys.exit(1)
+
+    if args.style is None:
+        args.style = _ask_choice("Style", styles, default=DEFAULT_STYLE)
+
+    if args.segments is None:
+        raw = _ask("Segments", default=16)
+        try:
+            args.segments = int(raw)
+        except ValueError:
+            args.segments = 16
+
+    if args.duration is None:
+        style_data = load_style(args.style)
+        style_default = style_data.get("default_duration", 24)
+        raw = _ask("Duration per segment (seconds)", default=style_default)
+        try:
+            args.duration = int(raw)
+        except ValueError:
+            args.duration = style_default
+
+    print()
+
+
 # ── main ─────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
         description="Interactive director mode TUI for video generation"
     )
-    parser.add_argument("--seed", type=int, required=True)
-    parser.add_argument("--theme", nargs="+", required=True)
-    parser.add_argument("--style", default=DEFAULT_STYLE)
-    parser.add_argument("--segments", type=int, default=16)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--theme", nargs="+", default=None)
+    parser.add_argument("--style", default=None)
+    parser.add_argument("--segments", type=int, default=None)
     parser.add_argument("--duration", type=int, default=None)
     parser.add_argument("--workflow", default="workflow/ltx_i2v.json")
     parser.add_argument("--url", default=None)
@@ -821,7 +903,13 @@ def main():
     parser.add_argument("--llm-api-key", default=None)
 
     args = parser.parse_args()
-    args.theme = " ".join(args.theme)
+
+    # Join theme words if provided via CLI
+    if args.theme:
+        args.theme = " ".join(args.theme)
+
+    # Interactive setup for missing values
+    interactive_setup(args)
 
     base_url = args.url or COMFYUI_URL
     llm_url = args.llm_url or LLM_URL
