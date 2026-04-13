@@ -599,6 +599,18 @@ class DirectorTUI:
 
         extract_first_frame(input_video, ref_image)
 
+        # Get input video resolution
+        probe = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height",
+             "-of", "csv=p=0:s=x", input_video],
+            capture_output=True, text=True,
+        )
+        if probe.returncode == 0 and "x" in probe.stdout.strip():
+            vid_w, vid_h = [int(x) for x in probe.stdout.strip().split("x")]
+        else:
+            vid_w, vid_h = 720, 720
+
         # Get input video info for frame count
         vid_dur = get_duration(input_video)
         # Wan VACE runs at 16fps, compute frame count (must be 4n+1)
@@ -627,10 +639,13 @@ class DirectorTUI:
         wf["134"]["inputs"]["image"] = uploaded_ref           # LoadImage (reference)
         wf["6"]["inputs"]["text"] = prompt                    # positive prompt
         wf["3"]["inputs"]["seed"] = noise_seed                # KSampler seed
+        wf["49"]["inputs"]["width"] = vid_w                   # match input resolution
+        wf["49"]["inputs"]["height"] = vid_h
         wf["49"]["inputs"]["length"] = wan_frames             # frame count
         wf["114"]["inputs"]["filename_prefix"] = (            # output
             f"{self.seed}/v2v_{scene.label}")
 
+        print(f"  Resolution: {vid_w}x{vid_h}")
         print(f"  Frames: {wan_frames} ({wan_frames/16:.1f}s at 16fps)")
         print(f"  Seed:   {noise_seed}")
         print(f"  Submitting V2V workflow...")
