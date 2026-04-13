@@ -166,7 +166,7 @@ clip *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
     set -- {{ARGS}}
-    style="absurd-realism" duration="" prompt_words=()
+    style="absurd-realism" duration="" seed="" prompt_words=()
     # Parse --help
     for arg in "$@"; do
         if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
@@ -175,6 +175,7 @@ clip *ARGS:
             echo "Render a single test clip from a text prompt and play it with mpv."
             echo ""
             echo "Options:"
+            echo "  --seed SEED       Reproducible seed (default: random)"
             echo "  --style NAME      Prompt style (default: absurd-realism)"
             echo "  --duration SECS   Clip duration in seconds (default: from style)"
             echo ""
@@ -185,6 +186,7 @@ clip *ARGS:
     done
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --seed) seed="$2"; shift 2 ;;
             --style) style="$2"; shift 2 ;;
             --duration) duration="$2"; shift 2 ;;
             *) prompt_words+=("$1"); shift ;;
@@ -201,7 +203,7 @@ clip *ARGS:
         duration=$(python3 -c "from styles import load_style; print(load_style('$style').get('default_duration', 24))")
     fi
     length=$(( duration * 25 ))
-    seed=$RANDOM
+    seed="${seed:-$RANDOM}"
     output_dir="output/clips"
     mkdir -p "$output_dir"
     output_file="${output_dir}/${slug}.mp4"
