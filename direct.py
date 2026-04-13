@@ -16,6 +16,7 @@ import json
 import os
 import random
 import readline
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -446,6 +447,9 @@ class DirectorTUI:
             self.status_msg = "No video to play"
             return
         preview = self._make_preview(scene)
+        if not shutil.which("mpv"):
+            self.status_msg = "mpv not found — install mpv to play videos"
+            return
         self._leave_curses()
         subprocess.run(["mpv", "--really-quiet", preview],
                        check=False)
@@ -492,6 +496,9 @@ class DirectorTUI:
             self.status_msg = "Failed to concat sequence"
             return
 
+        if not shutil.which("mpv"):
+            self.status_msg = "mpv not found — install mpv to play videos"
+            return
         self._leave_curses()
         subprocess.run(["mpv", "--really-quiet", seq_path], check=False)
         self._resume_curses()
@@ -941,11 +948,14 @@ class DirectorTUI:
             dir_name = os.path.basename(self.run_dir)
             final_path = os.path.join(self.run_dir, f"{dir_name}.mp4")
             if os.path.exists(final_path):
-                print(f"\nPlaying: {final_path}")
-                subprocess.run(
-                    ["mpv", "--really-quiet", final_path],
-                    check=False,
-                )
+                if shutil.which("mpv"):
+                    print(f"\nPlaying: {final_path}")
+                    subprocess.run(
+                        ["mpv", "--really-quiet", final_path],
+                        check=False,
+                    )
+                else:
+                    print(f"\nSaved: {final_path} (install mpv to auto-play)")
         except subprocess.CalledProcessError as e:
             print(f"  Mux failed: {e}")
 
