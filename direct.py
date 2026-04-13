@@ -1001,13 +1001,33 @@ def main():
     if args.theme:
         args.theme = " ".join(args.theme)
 
-    # Interactive setup for missing values
-    interactive_setup(args)
+    # Check for an existing session before interactive setup
+    resuming = False
+    if args.seed is not None:
+        from run_dir import find_run_dir
+        existing = find_run_dir("output", args.seed)
+        if existing and os.path.exists(os.path.join(existing, "session.json")):
+            # Resume existing session — load theme from saved files
+            resuming = True
+            theme_file = os.path.join(existing, "theme.txt")
+            if os.path.exists(theme_file):
+                with open(theme_file) as f:
+                    args.theme = f.read().strip()
+            # Load style from session if not overridden
+            session_path = os.path.join(existing, "session.json")
+            print(f"Resuming session from {existing}/")
+
+    if not resuming:
+        interactive_setup(args)
 
     base_url = args.url or COMFYUI_URL
     llm_url = args.llm_url or LLM_URL
     llm_model = args.llm_model or LLM_MODEL
     llm_api_key = args.llm_api_key or os.environ.get("LLM_API_KEY", "")
+
+    # Default style if not set (resuming or CLI)
+    if args.style is None:
+        args.style = DEFAULT_STYLE
 
     style = load_style(args.style)
     strip_audio = style.get("strip_audio", False)
@@ -1018,7 +1038,10 @@ def main():
     if args.base_prompt is None:
         args.base_prompt = style.get("base_prompt", "")
 
-    run_dir = make_run_dir("output", args.seed, theme=args.theme)
+    if resuming:
+        run_dir = existing
+    else:
+        run_dir = make_run_dir("output", args.seed, theme=args.theme)
     theme_path = os.path.join(run_dir, "theme.txt")
     if not os.path.exists(theme_path):
         with open(theme_path, "w") as f:
