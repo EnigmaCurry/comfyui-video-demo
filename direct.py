@@ -170,7 +170,7 @@ class DirectorTUI:
     def __init__(self, *, scenes, run_dir, workflow_template, base_url,
                  base_prompt, length, strip_audio, voice, tts_dir, tts_seed,
                  seed, args, timeout, script_path, voiceover_json_path,
-                 has_voiceover, style_name):
+                 has_voiceover, style_name, llm_url, llm_model, llm_api_key):
         self.scenes = scenes
         self.run_dir = run_dir
         self.workflow_template = workflow_template
@@ -178,6 +178,9 @@ class DirectorTUI:
         self.base_prompt = base_prompt
         self.length = length
         self.style_name = style_name
+        self.llm_url = llm_url
+        self.llm_model = llm_model
+        self.llm_api_key = llm_api_key
         self.strip_audio = strip_audio
         self.voice = voice
         self.tts_dir = tts_dir
@@ -558,13 +561,42 @@ class DirectorTUI:
             self.status_msg = f"V2V workflow not found: {V2V_WORKFLOW}"
             return
 
-        prompt = self._input_text(
-            "Describe the full scene as you want it to look (not what to change):\n"
-            "  (e.g. 'cyberpunk neon city at night, rain-soaked streets, holographic signs')\n"
+        change_request = self._input_text(
+            "What do you want to change about this scene?\n"
+            "  (e.g. 'change the lighting to red alert with a space battle outside')\n"
         )
-        if not prompt:
+        if not change_request:
             self.status_msg = "Transform cancelled"
             return
+
+        # Use LLM to rewrite the change request as a full scene description
+        self._leave_curses()
+        print(f"\n  Rewriting prompt via LLM...")
+        sys.stdout.write("  streaming: ")
+        sys.stdout.flush()
+        v2v_sys = (
+            "You are a visual scene description writer for a video-to-video AI model. "
+            "You will be given an original scene description and a change request. "
+            "Write a single complete scene description that incorporates the requested "
+            "changes while preserving elements not mentioned in the change request. "
+            "Be vivid and specific. Write it as a continuous description, not a list. "
+            "Respond with a JSON array containing one string: your scene description."
+        )
+        v2v_user = (
+            f"Original scene:\n{scene.suffix}\n\n"
+            f"Requested changes:\n{change_request}\n\n"
+            f"Respond with a JSON array of one string: the complete modified scene description."
+        )
+        try:
+            result = call_llm(self.llm_url, self.llm_model, v2v_sys, v2v_user,
+                              temperature=0.7, api_key=self.llm_api_key)
+            prompt = result[0] if isinstance(result, list) and result else change_request
+            print(f"  V2V prompt: {prompt[:100]}...")
+        except Exception as e:
+            print(f"  LLM failed: {e}")
+            print(f"  Using change request as-is.")
+            prompt = change_request
+        self._resume_curses()
 
         raw_str = self._input_text(
             "Control strength (how much the original video guides the output):\n"
@@ -1422,6 +1454,9 @@ def main():
         voiceover_json_path=voiceover_json_path,
         has_voiceover=has_voiceover,
         style_name=args.style,
+        llm_url=llm_url,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
     )
     tui.run()
 
