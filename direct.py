@@ -559,8 +559,8 @@ class DirectorTUI:
             return
 
         prompt = self._input_text(
-            "Enter a prompt describing how to transform this scene:\n"
-            "  (e.g. 'change the background to a pulsing red alert')\n"
+            "Describe the full scene as you want it to look (not what to change):\n"
+            "  (e.g. 'cyberpunk neon city at night, rain-soaked streets, holographic signs')\n"
         )
         if not prompt:
             self.status_msg = "Transform cancelled"
