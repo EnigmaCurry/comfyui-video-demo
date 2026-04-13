@@ -863,19 +863,16 @@ class DirectorTUI:
             self.status_msg = "No changes to cancel"
             return
 
-        old_suffix = scene.suffix
-        old_vo = scene.voiceover_text
         scene.cancel_draft()
 
-        # Restore backed-up files
-        if old_suffix != scene.suffix:
-            # Visual was changed — restore video
-            _delete_if_exists(scene.video_path(self.run_dir))
-            _delete_if_exists(scene.frame_path(self.run_dir))
-            _restore(scene.video_path(self.run_dir))
-            _restore(scene.frame_path(self.run_dir))
+        # Restore any backed-up files (visual, frame, voiceover)
+        for f in [scene.video_path(self.run_dir),
+                  scene.frame_path(self.run_dir)]:
+            if os.path.exists(f + ".bak"):
+                _delete_if_exists(f)
+                _restore(f)
 
-        if old_vo != scene.voiceover_text:
+        if os.path.exists(scene.vo_path(self.run_dir) + ".bak"):
             _delete_if_exists(scene.vo_path(self.run_dir))
             _restore(scene.vo_path(self.run_dir))
 
