@@ -222,8 +222,9 @@ clip *ARGS:
     if [ ! -f "$rendered" ]; then
         echo "Error: rendered video not found at $rendered" >&2; exit 1
     fi
-    # Move to final location with slug name
+    # Move to final location with slug name, strip audio
     mv "$rendered" "$output_file"
+    ffmpeg -y -i "$output_file" -an -c:v copy "$output_file.tmp.mp4" && mv "$output_file.tmp.mp4" "$output_file"
     # Clean up the run directory
     rm -rf "$run_dir"
     echo ""
