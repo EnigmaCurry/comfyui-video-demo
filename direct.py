@@ -355,9 +355,10 @@ class DirectorTUI:
         has_video = scene.status in ("rendered", "approved")
 
         if is_frontier and has_video:
-            rows.append(("[a] Approve & render next", "[v] Refine visual"))
-        elif has_video:
+            rows.append(("[a] Approve & render next", "[Enter] Re-render (new seed)"))
             rows.append(("[v] Refine visual", ""))
+        elif has_video:
+            rows.append(("[Enter] Re-render (new seed)", "[v] Refine visual"))
 
         vo_label = "[o] Refine voiceover" if self.has_voiceover and has_video else ""
         cancel_label = "[c] Cancel changes" if scene.has_draft else ""
@@ -371,7 +372,9 @@ class DirectorTUI:
     def _handle_key(self, key):
         scene = self.scenes[self.current]
 
-        if key == ord(" "):
+        if key == ord("\n") or key == curses.KEY_ENTER:
+            self._rerender()
+        elif key == ord(" "):
             self._play_current()
         elif key == curses.KEY_LEFT or key == ord("h"):
             if self.current > 0:
@@ -411,6 +414,31 @@ class DirectorTUI:
         self._leave_curses()
         subprocess.run(["mpv", "--really-quiet", preview],
                        check=False)
+        self._resume_curses()
+
+    def _rerender(self):
+        """Re-render the current scene with a new random seed (same prompt)."""
+        scene = self.scenes[self.current]
+        if scene.status == "pending":
+            self.status_msg = "Scene not yet rendered"
+            return
+
+        scene.save_draft_backup()
+
+        # Invalidate scenes after this one
+        if self.current < self.frontier:
+            self._invalidate_after(self.current)
+
+        # Back up current files
+        for f in [scene.video_path(self.run_dir),
+                  scene.frame_path(self.run_dir)]:
+            _backup(f)
+        _delete_if_exists(scene.preview_path(self.run_dir))
+
+        self._leave_curses()
+        self._render_scene_terminal(self.current)
+        self.frontier = self.current
+        self._save_script()
         self._resume_curses()
 
     def _make_preview(self, scene):
