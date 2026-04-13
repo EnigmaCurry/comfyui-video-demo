@@ -566,6 +566,19 @@ class DirectorTUI:
             self.status_msg = "Transform cancelled"
             return
 
+        raw_str = self._input_text(
+            "Control strength (how much the original video guides the output):\n"
+            "  1.0 = very faithful to original (subtle changes)\n"
+            "  0.5 = balanced (moderate changes)\n"
+            "  0.2 = loose (major restyling, may lose structure)\n",
+            prefill="0.5",
+        )
+        try:
+            strength = float(raw_str) if raw_str else 0.5
+            strength = max(0.0, min(1.0, strength))
+        except ValueError:
+            strength = 0.5
+
         scene.save_draft_backup()
 
         # Back up current video
@@ -574,11 +587,11 @@ class DirectorTUI:
         _delete_if_exists(scene.preview_path(self.run_dir))
 
         self._leave_curses()
-        self._run_v2v(scene, prompt)
+        self._run_v2v(scene, prompt, strength)
         self._save_script()
         self._resume_curses()
 
-    def _run_v2v(self, scene, prompt):
+    def _run_v2v(self, scene, prompt, strength=0.5):
         """Run Wan 2.1 VACE V2V workflow on a scene."""
         import copy
 
@@ -642,12 +655,14 @@ class DirectorTUI:
         wf["49"]["inputs"]["width"] = vid_w                   # match input resolution
         wf["49"]["inputs"]["height"] = vid_h
         wf["49"]["inputs"]["length"] = wan_frames             # frame count
+        wf["49"]["inputs"]["strength"] = strength             # control video influence
         wf["114"]["inputs"]["filename_prefix"] = (            # output
             f"{self.seed}/v2v_{scene.label}")
 
         print(f"  Resolution: {vid_w}x{vid_h}")
-        print(f"  Frames: {wan_frames} ({wan_frames/16:.1f}s at 16fps)")
-        print(f"  Seed:   {noise_seed}")
+        print(f"  Strength:   {strength} (lower = more prompt influence)")
+        print(f"  Frames:     {wan_frames} ({wan_frames/16:.1f}s at 16fps)")
+        print(f"  Seed:       {noise_seed}")
         print(f"  Submitting V2V workflow...")
 
         start = time.time()
