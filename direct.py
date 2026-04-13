@@ -346,7 +346,7 @@ class DirectorTUI:
         cancel_label = "[c] Cancel changes" if scene.has_draft else ""
         rows.append((vo_label, cancel_label))
 
-        rows.append(("[e] End movie", "[q] Quit"))
+        rows.append(("[r] Render movie", "[q] Quit"))
         return rows
 
     # ── key handling ─────────────────────────────────────────────────
@@ -378,7 +378,7 @@ class DirectorTUI:
             self._refine_voiceover()
         elif key == ord("c"):
             self._cancel_changes()
-        elif key == ord("e"):
+        elif key == ord("r"):
             self._end_movie()
         elif key == ord("q"):
             self.should_quit = True

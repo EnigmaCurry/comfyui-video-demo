@@ -264,7 +264,7 @@ direct *ARGS:
             echo "  v            Refine visual prompt (re-render)"
             echo "  o            Refine voiceover text (re-render audio)"
             echo "  c            Cancel changes (revert to approved)"
-            echo "  e            End movie (mux and play final)"
+            echo "  r            Render movie (mux and play final)"
             echo "  q            Quit without muxing"
             exit 0
         fi
