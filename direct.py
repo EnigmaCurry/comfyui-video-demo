@@ -364,7 +364,7 @@ class DirectorTUI:
         if cancel_label:
             rows.append((cancel_label, ""))
 
-        rows.append(("[q] Quit (session saved)", ""))
+        rows.append(("[r] Render movie", "[q] Quit"))
         return rows
 
     # ── key handling ─────────────────────────────────────────────────
@@ -400,6 +400,8 @@ class DirectorTUI:
             self._cancel_changes()
         elif key == ord("d"):
             self._set_duration()
+        elif key == ord("r"):
+            self._render_movie()
         elif key == ord("q"):
             self.should_quit = True
 
@@ -665,6 +667,45 @@ class DirectorTUI:
         _delete_if_exists(scene.preview_path(self.run_dir))
         self._save_script()
         self.status_msg = "Reverted to approved version"
+
+    # ── render movie ─────────────────────────────────────────────────
+
+    def _render_movie(self):
+        """Mux all rendered segments into final video and play it."""
+        self._save_script()
+        self._leave_curses()
+
+        # Clean up preview/backup files before muxing
+        for s in self.scenes:
+            _delete_if_exists(s.preview_path(self.run_dir))
+            for f in [s.video_path(self.run_dir),
+                      s.frame_path(self.run_dir),
+                      s.vo_path(self.run_dir)]:
+                _delete_bak(f)
+
+        print()
+        print("=" * 60)
+        usable = [s for s in self.scenes if s.has_video(self.run_dir)]
+        print(f"  RENDERING MOVIE  ({len(usable)} segments)")
+        print("=" * 60)
+
+        try:
+            subprocess.run(
+                ["python3", "mux.py", "--seed", str(self.seed)],
+                check=True,
+            )
+            dir_name = os.path.basename(self.run_dir)
+            final_path = os.path.join(self.run_dir, f"{dir_name}.mp4")
+            if os.path.exists(final_path):
+                print(f"\nPlaying: {final_path}")
+                subprocess.run(
+                    ["mpv", "--really-quiet", final_path],
+                    check=False,
+                )
+        except subprocess.CalledProcessError as e:
+            print(f"  Mux failed: {e}")
+
+        self._resume_curses()
 
     # ── rendering ────────────────────────────────────────────────────
 
