@@ -176,13 +176,24 @@ def main():
             capture_output=True, check=True,
         )
 
-        if vo_files and len(vo_files) == len(seg_videos):
-            print(f"Mixing {len(vo_files)} voiceover clips (centered) with "
+        # Build a mapping from segment index to voiceover file
+        vo_by_index = {}
+        for vo in vo_files:
+            # Extract index from voiceover_NN.wav
+            base = os.path.splitext(os.path.basename(vo))[0]
+            try:
+                idx = int(base.split("_")[1]) - 1  # 1-based to 0-based
+                vo_by_index[idx] = vo
+            except (IndexError, ValueError):
+                pass
+
+        if vo_by_index:
+            print(f"Mixing {len(vo_by_index)} voiceover clips (centered) with "
                   f"{len(seg_videos)} video segments...")
 
             # Get each video segment duration and pad voiceover to match
             padded_files = []
-            for i, (seg_vid, vo_wav) in enumerate(zip(seg_videos, vo_files)):
+            for i, seg_vid in enumerate(seg_videos):
                 seg_dur = get_duration(seg_vid)
                 if seg_dur is None:
                     print(f"  warning: could not get duration of {seg_vid}, "
@@ -190,16 +201,30 @@ def main():
                     seg_dur = 24.0
 
                 padded_path = os.path.join(tmpdir, f"padded_{i:02d}.wav")
-                vo_dur = pad_audio_centered(vo_wav, seg_dur, padded_path)
+                vo_wav = vo_by_index.get(i)
 
-                if vo_dur > seg_dur:
+                if vo_wav is None:
+                    # Generate silence for this segment
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-f", "lavfi",
+                         "-i", f"anullsrc=r=24000:cl=mono",
+                         "-t", str(seg_dur),
+                         "-c:a", "pcm_s16le", padded_path],
+                        capture_output=True, check=True,
+                    )
                     print(f"  segment {i+1}: video={seg_dur:.1f}s, "
-                          f"voice={vo_dur:.1f}s, trimmed to {seg_dur:.1f}s")
+                          f"(silence)")
                 else:
-                    pad_before = (seg_dur - vo_dur) / 2
-                    print(f"  segment {i+1}: video={seg_dur:.1f}s, "
-                          f"voice={vo_dur:.1f}s, "
-                          f"offset={pad_before:.1f}s")
+                    vo_dur = pad_audio_centered(vo_wav, seg_dur, padded_path)
+
+                    if vo_dur > seg_dur:
+                        print(f"  segment {i+1}: video={seg_dur:.1f}s, "
+                              f"voice={vo_dur:.1f}s, trimmed to {seg_dur:.1f}s")
+                    else:
+                        pad_before = (seg_dur - vo_dur) / 2
+                        print(f"  segment {i+1}: video={seg_dur:.1f}s, "
+                              f"voice={vo_dur:.1f}s, "
+                              f"offset={pad_before:.1f}s")
                 padded_files.append(padded_path)
 
             # Concat padded voiceover
@@ -276,9 +301,6 @@ def main():
                       file=sys.stderr)
                 raise subprocess.CalledProcessError(result.returncode, "ffmpeg")
         else:
-            if vo_files and len(vo_files) != len(seg_videos):
-                print(f"Warning: {len(vo_files)} voiceover files but "
-                      f"{len(seg_videos)} segments, skipping voiceover mix")
             # No voiceover — just copy concat
             subprocess.run(
                 ["ffmpeg", "-y", "-i", tmp_video, "-c", "copy", final_path],
