@@ -1284,17 +1284,39 @@ class TransitionDirectorTUI:
         self.stdscr = None
         self.status_msg = ""
         self.should_quit = False
+        self.auto_mode = False
 
-    def run(self):
+    def run(self, auto=False):
+        self.auto_mode = auto
         if self._load_session():
             print(f"Resumed session: {self.phase} phase, position {self.current + 1}")
         else:
+            if self.auto_mode:
+                # Auto mode — render and approve everything
+                self._auto_approve_keyframes()
+                self._auto_approve_transitions()
+                self._render_movie()
+                print(f"Session saved. Resume with the same --seed {self.seed}")
+                return
             # First run — render keyframe 1
             if not self.keyframes[0].has_image(self.run_dir):
                 self._render_keyframe_terminal(0)
             else:
                 self.keyframes[0].status = "generated"
             self._save_session()
+
+        if self.auto_mode:
+            # Resume auto mode from wherever we left off
+            if self.phase == self.PHASE_KEYFRAMES:
+                if not all(k.status == "approved" for k in self.keyframes):
+                    self._auto_approve_keyframes()
+                self._auto_approve_transitions()
+            elif not all(t.status == "approved" for t in self.transitions):
+                self._auto_approve_transitions()
+            self._render_movie()
+            print(f"Session saved. Resume with the same --seed {self.seed}")
+            return
+
         curses.wrapper(self._main)
         print(f"Session saved. Resume with the same --seed {self.seed}")
 
@@ -1317,11 +1339,13 @@ class TransitionDirectorTUI:
         self._save_session()
 
     def _leave_curses(self):
-        curses.endwin()
+        if self.stdscr is not None:
+            curses.endwin()
 
     def _resume_curses(self):
-        self.stdscr.clear()
-        self.stdscr.refresh()
+        if self.stdscr is not None:
+            self.stdscr.clear()
+            self.stdscr.refresh()
 
     def _safe(self, y, x, text, attr=0):
         h, w = self.stdscr.getmaxyx()
@@ -2591,7 +2615,7 @@ def _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
         llm_model=llm_model,
         llm_api_key=llm_api_key,
     )
-    tui.run()
+    tui.run(auto=args.auto)
 
 
 # ── main ─────────────────────────────────────────────────────────────
@@ -2615,6 +2639,8 @@ def main():
     parser.add_argument("--transition-height", type=int, default=480)
     parser.add_argument("--transition-fps", type=int, default=25)
     parser.add_argument("--audio-workflow", default=AUDIO_WORKFLOW)
+    parser.add_argument("--auto", action="store_true",
+                        help="Auto-approve all keyframes and transitions without interactive review")
     parser.add_argument("--url", default=None)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--base-prompt", default=None)
