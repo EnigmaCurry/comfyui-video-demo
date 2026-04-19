@@ -3078,6 +3078,27 @@ class FreeformDirectorTUI:
         kf.description = new_desc
         self._leave_curses()
         self._render_keyframe_terminal(kf.index)
+
+        # Show keyframe and ask for approval
+        if shutil.which("mpv") and kf.has_image(self.run_dir):
+            print(f"\n  Opening keyframe {kf.num} for review...")
+            subprocess.run(["mpv", "--really-quiet", kf.image_path(self.run_dir)],
+                           check=False)
+
+        while True:
+            choice = input("\n  [a] Approve  [r] Regenerate  [c] Cancel: ").strip().lower()
+            if choice == "a":
+                break
+            elif choice == "r":
+                self._render_keyframe_terminal(kf.index)
+                if shutil.which("mpv") and kf.has_image(self.run_dir):
+                    subprocess.run(["mpv", "--really-quiet", kf.image_path(self.run_dir)],
+                                   check=False)
+            elif choice == "c":
+                self._resume_curses()
+                self.status_msg = "Cancelled"
+                return
+
         # Re-render this transition and invalidate later ones
         _delete_if_exists(tr.video_path(self.run_dir))
         _delete_if_exists(os.path.join(self.run_dir, f"preview_{tr.num:02d}.mp4"))
