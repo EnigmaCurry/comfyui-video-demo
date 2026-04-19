@@ -27,9 +27,9 @@ DEFAULT_DURATION = 24
 
 def _voiceover_word_range(duration):
     """Estimate word count range for a given duration in seconds."""
-    # ~2.5 words/sec speaking rate
-    lo = max(1, int(duration * 1.5))
-    hi = max(lo, int(duration * 2.5))
+    # ~1.7 words/sec speaking rate (scaled back 33% from 2.5)
+    lo = max(1, int(duration * 1.0))
+    hi = max(lo, int(duration * 1.7))
     return lo, hi
 
 
