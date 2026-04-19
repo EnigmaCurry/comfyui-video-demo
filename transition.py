@@ -59,9 +59,13 @@ def patch_t2i_workflow(workflow, *, prompt_text, negative_prompt_text="",
 def patch_transition_workflow(workflow, *, first_image_name, last_image_name,
                                prompt_text, negative_prompt_text="",
                                seed_value, width=640, height=480,
-                               frame_rate=25, duration_frames=120,
+                               frame_rate=25, duration_seconds=10,
                                output_prefix="video/transition"):
-    """Patch LTX transition workflow for two-frame video transition."""
+    """Patch LTX transition workflow for two-frame video transition.
+
+    Note: the workflow's math expression computes frame count as
+    ``duration_seconds * frame_rate + 1``, so duration_seconds is in seconds.
+    """
     wf = copy.deepcopy(workflow)
 
     wf[TRANS_FIRST_IMAGE_NODE]["inputs"]["image"] = first_image_name
@@ -72,7 +76,7 @@ def patch_transition_workflow(workflow, *, first_image_name, last_image_name,
     wf[TRANS_WIDTH_NODE]["inputs"]["value"] = width
     wf[TRANS_HEIGHT_NODE]["inputs"]["value"] = height
     wf[TRANS_FRAMERATE_NODE]["inputs"]["value"] = frame_rate
-    wf[TRANS_DURATION_NODE]["inputs"]["value"] = duration_frames
+    wf[TRANS_DURATION_NODE]["inputs"]["value"] = duration_seconds
     wf[TRANS_OUTPUT_NODE]["inputs"][TRANS_OUTPUT_FIELD] = output_prefix
 
     return wf

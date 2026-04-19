@@ -1250,7 +1250,7 @@ class TransitionDirectorTUI:
 
     def __init__(self, *, keyframes, transitions, run_dir, t2i_template,
                  transition_template, base_url, base_prompt, negative_prompt,
-                 duration_frames, width, height, frame_rate, strip_audio,
+                 duration_seconds, width, height, frame_rate, strip_audio,
                  voice, tts_dir, tts_seed, seed, timeout, has_voiceover,
                  style_name, llm_url, llm_model, llm_api_key):
         self.keyframes = keyframes
@@ -1261,7 +1261,7 @@ class TransitionDirectorTUI:
         self.base_url = base_url
         self.base_prompt = base_prompt
         self.negative_prompt = negative_prompt
-        self.duration_frames = duration_frames
+        self.duration_seconds = duration_seconds
         self.width = width
         self.height = height
         self.frame_rate = frame_rate
@@ -1436,7 +1436,7 @@ class TransitionDirectorTUI:
         y += 1
 
         st, sc = self._tr_status_label(tr)
-        dur_str = f"{self.duration_frames / self.frame_rate:.0f}s"
+        dur_str = f"{self.duration_seconds}s"
         self._row(y, f"Status: {st}    Duration: {dur_str}", bw, sc); y += 1
 
         # Strip
@@ -1808,8 +1808,9 @@ class TransitionDirectorTUI:
         print(f"  To:       keyframe {kf_to.num}")
         print(f"  Prompt:   {tr.description[:70]}...")
         print(f"  Seed:     {noise_seed}")
-        print(f"  Duration: {self.duration_frames / self.frame_rate:.0f}s "
-              f"({self.duration_frames} frames)")
+        total_frames = self.duration_seconds * self.frame_rate + 1
+        print(f"  Duration: {self.duration_seconds}s "
+              f"({total_frames} frames)")
         print(f"{'='*60}")
 
         uploaded_first = upload_image(self.base_url, first_img)
@@ -1825,7 +1826,7 @@ class TransitionDirectorTUI:
             width=self.width,
             height=self.height,
             frame_rate=self.frame_rate,
-            duration_frames=self.duration_frames,
+            duration_seconds=self.duration_seconds,
             output_prefix=f"{self.seed}/transition_{tr.num:02d}",
         )
 
@@ -1969,7 +1970,7 @@ class TransitionDirectorTUI:
             "phase": self.phase,
             "current": self.current,
             "style": self.style_name,
-            "duration_frames": self.duration_frames,
+            "duration_seconds": self.duration_seconds,
             "width": self.width,
             "height": self.height,
             "frame_rate": self.frame_rate,
@@ -2005,8 +2006,8 @@ class TransitionDirectorTUI:
 
         self.phase = session.get("phase", self.PHASE_KEYFRAMES)
         self.current = session.get("current", 0)
-        if session.get("duration_frames"):
-            self.duration_frames = session["duration_frames"]
+        if session.get("duration_seconds"):
+            self.duration_seconds = session["duration_seconds"]
         if session.get("width"):
             self.width = session["width"]
         if session.get("height"):
@@ -2137,7 +2138,7 @@ def _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
                          llm_api_key, style, strip_audio, length):
     """Run the transition director TUI."""
     negative_prompt = args.negative_prompt or style.get("negative_prompt", "")
-    duration_frames = args.duration * args.transition_fps
+    duration_seconds = args.duration
     has_voiceover = not args.no_voiceover
 
     keyframes_path = os.path.join(run_dir, "keyframes.json")
@@ -2265,7 +2266,7 @@ def _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
         base_url=base_url,
         base_prompt=args.base_prompt or "",
         negative_prompt=negative_prompt,
-        duration_frames=duration_frames,
+        duration_seconds=duration_seconds,
         width=args.transition_width,
         height=args.transition_height,
         frame_rate=args.transition_fps,
