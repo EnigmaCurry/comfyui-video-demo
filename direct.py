@@ -2467,6 +2467,22 @@ def interactive_setup(args):
 
 # ── Freeform Director TUI ────────────────────────────────────────────
 
+FREEFORM_KEYFRAME_SYS = """\
+You are a text-to-image prompt engineer. Given a short scene description, \
+expand it into a detailed, vivid prompt for a high-quality AI image generator.
+
+Rules:
+- 2-4 sentences of pure visual description.
+- Include: composition, lighting, color palette, camera angle, depth of field, \
+textures, materials, atmosphere.
+- Use concrete, specific details — no vague or abstract language.
+- Do NOT include instructions like "generate" or "create".
+- Just describe the image as if it already exists.
+
+Respond with a JSON array containing one string: your expanded prompt. \
+No other text.\
+"""
+
 FREEFORM_SCENE_SYS = """\
 You are a visual director helping to plan a single scene in an improvised video.
 
@@ -2551,6 +2567,7 @@ class FreeformDirectorTUI:
         if not description:
             description = "A cinematic establishing shot"
 
+        description = self._extrapolate_keyframe(description)
         kf = Keyframe(0, description)
         self.keyframes.append(kf)
         self._render_keyframe_terminal(0)
@@ -2831,7 +2848,8 @@ class FreeformDirectorTUI:
                 "voiceover": "",
             }
 
-        end_kf_desc = scene_data.get("end_keyframe", scene_prompt)
+        end_kf_desc = self._extrapolate_keyframe(
+            scene_data.get("end_keyframe", scene_prompt))
         transition_desc = scene_data.get("transition", scene_prompt)
         voiceover_text = scene_data.get("voiceover", "")
 
@@ -2873,6 +2891,24 @@ class FreeformDirectorTUI:
         self.current = tr_idx
         self._save_session()
         self._resume_curses()
+
+    # ── LLM helpers ──────────────────────────────────────────────────
+
+    def _extrapolate_keyframe(self, short_desc):
+        """Use LLM to expand a short description into a rich T2I prompt."""
+        print(f"\n  Extrapolating keyframe prompt via LLM...")
+        sys.stdout.write("  streaming: ")
+        sys.stdout.flush()
+        try:
+            result = call_llm(self.llm_url, self.llm_model,
+                              FREEFORM_KEYFRAME_SYS, short_desc,
+                              temperature=0.8, api_key=self.llm_api_key)
+            expanded = result[0] if result else short_desc
+            print(f"  Expanded: {expanded[:80]}...")
+            return expanded
+        except (SystemExit, Exception) as e:
+            print(f"  LLM failed: {e}, using original")
+            return short_desc
 
     # ── rendering ────────────────────────────────────────────────────
 
@@ -3075,8 +3111,8 @@ class FreeformDirectorTUI:
         if not new_desc or new_desc == kf.description:
             self.status_msg = "No changes"
             return
-        kf.description = new_desc
         self._leave_curses()
+        kf.description = self._extrapolate_keyframe(new_desc)
         self._render_keyframe_terminal(kf.index)
 
         # Show keyframe and ask for approval
