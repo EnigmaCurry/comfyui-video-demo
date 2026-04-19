@@ -2123,15 +2123,14 @@ class TransitionDirectorTUI:
         print(f"  Rendering {n_sections} soundtrack sections...")
         print(f"{'='*60}")
 
+        # Delete old soundtrack files so fresh prompts always render
+        import glob as _glob
+        for old in _glob.glob(os.path.join(self.run_dir, "soundtrack_*.mp3")):
+            os.unlink(old)
+
         soundtrack_files = []
         for i, sec in enumerate(sections):
             output_mp3 = os.path.join(self.run_dir, f"soundtrack_{i+1:02d}.mp3")
-
-            # Skip if already exists
-            if os.path.exists(output_mp3):
-                print(f"\n  Section {i+1} exists: {output_mp3}")
-                soundtrack_files.append(output_mp3)
-                continue
 
             noise_seed = random.randint(0, 2**53)
             print(f"\n  Section {i+1}/{n_sections}")
