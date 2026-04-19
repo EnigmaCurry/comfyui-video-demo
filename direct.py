@@ -3677,17 +3677,17 @@ def main():
         with open(theme_path, "w") as f:
             f.write(args.theme)
 
+    # ── freeform mode ────────────────────────────────────────────────
+    if args.mode == "freeform":
+        _run_freeform_mode(args, run_dir, base_url, llm_url, llm_model,
+                           llm_api_key, style, strip_audio)
+        return
+
     # ── transition mode ─────────────────────────────────────────────
     is_transition = args.mode == "transition" or style.get("mode") == "transition"
     if is_transition:
         _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
                              llm_api_key, style, strip_audio, length)
-        return
-
-    # ── freeform mode ────────────────────────────────────────────────
-    if args.mode == "freeform":
-        _run_freeform_mode(args, run_dir, base_url, llm_url, llm_model,
-                           llm_api_key, style, strip_audio)
         return
 
     workflow_template = load_workflow(args.workflow)
