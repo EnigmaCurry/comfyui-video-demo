@@ -76,6 +76,8 @@ def main():
                         help="Voiceover volume (default: 1.0)")
     parser.add_argument("--voice-delay", type=float, default=0.0,
                         help="Extra delay in seconds added after centering (default: 0.0)")
+    parser.add_argument("--pattern", default="segment",
+                        help="Video file pattern prefix (default: segment, also: transition)")
 
     args = parser.parse_args()
 
@@ -83,7 +85,7 @@ def main():
     run_dir = get_run_dir(args.output_dir, args.seed)
 
     # Find segment videos and voiceover files
-    seg_videos = sorted(glob.glob(os.path.join(run_dir, "segment_*.mp4")))
+    seg_videos = sorted(glob.glob(os.path.join(run_dir, f"{args.pattern}_*.mp4")))
     vo_files = sorted(glob.glob(os.path.join(run_dir, "voiceover_*.wav")))
 
     if not seg_videos:

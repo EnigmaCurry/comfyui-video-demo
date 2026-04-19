@@ -66,6 +66,19 @@ def _build_prompts(style_name, duration):
     return visual_sys, voiceover_sys, base_prompt
 
 
+def _build_transition_prompts(style_name, duration):
+    """Build keyframe, transition, and voiceover prompts for transition mode."""
+    style = load_style(style_name)
+    keyframe_sys = style["keyframe_system_prompt"]
+    transition_sys = style["transition_system_prompt"].format(duration=duration)
+    wlo, whi = _voiceover_word_range(duration)
+    vo_template = style.get("voiceover_system_prompt") or DEFAULT_VOICEOVER_SYSTEM_PROMPT_TEMPLATE
+    voiceover_sys = vo_template.format(duration=duration, word_lo=wlo, word_hi=whi)
+    base_prompt = style.get("base_prompt")
+    negative_prompt = style.get("negative_prompt", "")
+    return keyframe_sys, transition_sys, voiceover_sys, base_prompt, negative_prompt
+
+
 # For backward compat with write_script_manual.py imports
 _default_style = load_style(DEFAULT_STYLE)
 VISUAL_SYSTEM_PROMPT_TEMPLATE = _default_style["visual_system_prompt"]
@@ -208,6 +221,135 @@ def call_llm(base_url, model, system_prompt, user_msg, temperature=0.9, api_key=
     return items
 
 
+def _generate_transition_script(args, run_dir, base_url, model, api_key):
+    """Generate keyframes.json, transitions.json, and voiceover.json for transition mode."""
+    keyframe_sys, transition_sys, voiceover_sys, base_prompt, neg_prompt = \
+        _build_transition_prompts(args.style, args.duration)
+
+    keyframes_path = os.path.join(run_dir, "keyframes.json")
+    transitions_path = os.path.join(run_dir, "transitions.json")
+    voiceover_path = os.path.join(run_dir, "voiceover.json")
+
+    # ── Keyframe descriptions ────────────────────────────────────────
+    if not args.voiceover_only:
+        if os.path.exists(keyframes_path) and not args.force:
+            print(f"Keyframes exist: {keyframes_path} (use --force to regenerate)")
+            with open(keyframes_path) as f:
+                keyframes = json.load(f)
+        else:
+            print(f"Generating {args.segments} keyframe descriptions...")
+            print(f"  theme: {args.theme}")
+            print(f"  LLM:   {base_url} ({model})")
+            sys.stdout.write("  streaming: ")
+            sys.stdout.flush()
+
+            user_msg = f"Theme: {args.theme}\nNumber of keyframes: {args.segments}"
+            keyframes = call_llm(base_url, model, keyframe_sys, user_msg,
+                                 temperature=args.temperature, api_key=api_key)
+
+            if len(keyframes) > args.segments:
+                keyframes = keyframes[:args.segments]
+
+            if args.print_only:
+                print("\n=== Keyframe descriptions ===")
+                print(json.dumps(keyframes, indent=2))
+            else:
+                with open(keyframes_path, "w") as f:
+                    json.dump(keyframes, f, indent=2)
+                    f.write("\n")
+                print(f"  saved: {keyframes_path}")
+
+        # ── Transition descriptions ──────────────────────────────────
+        if os.path.exists(transitions_path) and not args.force:
+            print(f"Transitions exist: {transitions_path} (use --force to regenerate)")
+        else:
+            n_transitions = len(keyframes) - 1
+            print(f"\nGenerating {n_transitions} transition descriptions...")
+            sys.stdout.write("  streaming: ")
+            sys.stdout.flush()
+
+            kf_list = "\n".join(
+                f"  Keyframe {i+1}: {k}" for i, k in enumerate(keyframes))
+            trans_user_msg = (f"Theme: {args.theme}\n"
+                              f"Number of keyframes: {len(keyframes)}\n\n"
+                              f"Keyframe descriptions:\n{kf_list}")
+
+            transitions = call_llm(base_url, model, transition_sys, trans_user_msg,
+                                   temperature=args.temperature, api_key=api_key)
+
+            if len(transitions) > n_transitions:
+                transitions = transitions[:n_transitions]
+            if len(transitions) < n_transitions:
+                print(f"  warning: LLM returned {len(transitions)} transitions, "
+                      f"expected {n_transitions} — will cycle", file=sys.stderr)
+
+            if args.print_only:
+                print("\n=== Transition descriptions ===")
+                print(json.dumps(transitions, indent=2))
+            else:
+                with open(transitions_path, "w") as f:
+                    json.dump(transitions, f, indent=2)
+                    f.write("\n")
+                print(f"  saved: {transitions_path}")
+    else:
+        if not os.path.exists(keyframes_path):
+            print(f"Error: {keyframes_path} not found (needed for --voiceover-only)",
+                  file=sys.stderr)
+            sys.exit(1)
+        with open(keyframes_path) as f:
+            keyframes = json.load(f)
+
+    # ── Voiceover ────────────────────────────────────────────────────
+    if not args.visual_only:
+        if os.path.exists(voiceover_path) and not args.force:
+            print(f"\nVoiceover exists: {voiceover_path} (use --force to regenerate)")
+        else:
+            # Load transitions for context
+            if os.path.exists(transitions_path):
+                with open(transitions_path) as f:
+                    transitions = json.load(f)
+            else:
+                print(f"Error: {transitions_path} not found (needed for voiceover)",
+                      file=sys.stderr)
+                sys.exit(1)
+
+            print(f"\nGenerating voiceover for {len(transitions)} transitions...")
+            sys.stdout.write("  streaming: ")
+            sys.stdout.flush()
+
+            kf_list = "\n".join(
+                f"  Keyframe {i+1}: {k}" for i, k in enumerate(keyframes))
+            tr_list = "\n".join(
+                f"  Transition {i+1} (keyframe {i+1} → {i+2}): {t}"
+                for i, t in enumerate(transitions))
+            vo_msg = (f"Theme: {args.theme}\n"
+                      f"Number of transitions: {len(transitions)}\n\n"
+                      f"Keyframe descriptions:\n{kf_list}\n\n"
+                      f"Transition descriptions:\n{tr_list}")
+
+            voiceover = call_llm(base_url, model, voiceover_sys, vo_msg,
+                                 temperature=args.temperature, api_key=api_key)
+
+            if len(voiceover) > len(transitions):
+                voiceover = voiceover[:len(transitions)]
+
+            if args.print_only:
+                print("\n=== Voiceover ===")
+                print(json.dumps(voiceover, indent=2))
+            else:
+                with open(voiceover_path, "w") as f:
+                    json.dump(voiceover, f, indent=2)
+                    f.write("\n")
+                print(f"  saved: {voiceover_path}")
+
+    if not args.print_only:
+        print(f"\nNext steps:")
+        print(f"  1. Review/edit: {keyframes_path}")
+        print(f"     Review/edit: {transitions_path}")
+        print(f"  2. Run transition director:")
+        print(f"     just transition --seed {args.seed}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate video chain script from an LLM"
@@ -249,14 +391,12 @@ def main():
     api_key = args.api_key or os.environ.get("LLM_API_KEY", "")
 
     # Resolve duration from style if not explicitly set
+    style_data = load_style(args.style)
     if args.duration is None:
-        style_data = load_style(args.style)
         args.duration = style_data.get("default_duration", DEFAULT_DURATION)
 
-    # Build duration-aware prompts from style
-    visual_sys, voiceover_sys, style_base_prompt = _build_prompts(args.style, args.duration)
-    if args.base_prompt is None:
-        args.base_prompt = style_base_prompt
+    # Detect transition mode from style
+    is_transition = style_data.get("mode") == "transition"
 
     from run_dir import make_run_dir
     run_dir = make_run_dir("output", args.seed, theme=args.theme)
@@ -266,6 +406,15 @@ def main():
     if not os.path.exists(theme_path):
         with open(theme_path, "w") as f:
             f.write(args.theme)
+
+    if is_transition:
+        _generate_transition_script(args, run_dir, base_url, model, api_key)
+        return
+
+    # Build duration-aware prompts from style
+    visual_sys, voiceover_sys, style_base_prompt = _build_prompts(args.style, args.duration)
+    if args.base_prompt is None:
+        args.base_prompt = style_base_prompt
 
     script_path = os.path.join(run_dir, "script.json")
     voiceover_path = os.path.join(run_dir, "voiceover.json")

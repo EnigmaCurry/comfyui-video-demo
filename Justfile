@@ -254,6 +254,29 @@ direct *ARGS:
     fi
     python3 direct.py "${theme_args[@]}" "${extra_args[@]}"
 
+# Interactive transition director mode: keyframes → transitions → movie
+transition *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -- {{ARGS}}
+    # Parse --theme with multi-word support, pass everything else through
+    theme="" extra_args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --theme) shift; theme=""
+                while [[ $# -gt 0 ]] && [[ "$1" != --* ]]; do
+                    theme="$theme $1"; shift
+                done
+                theme="${theme# }" ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+    theme_args=()
+    if [ -n "$theme" ]; then
+        theme_args+=(--theme $theme)
+    fi
+    python3 direct.py --mode transition --style transition-story "${theme_args[@]}" "${extra_args[@]}"
+
 # Clean output directory
 [confirm("Remove output/ directory?")]
 clean:

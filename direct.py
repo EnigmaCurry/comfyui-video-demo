@@ -54,7 +54,13 @@ from mux import get_duration, pad_audio_centered
 from render_voiceover import TTS_DEMO_DIR, render_segment_tts
 from run_dir import make_run_dir
 from styles import DEFAULT_STYLE, load_style
-from write_script import _build_prompts, call_llm
+from transition import (
+    T2I_WORKFLOW,
+    TRANSITION_WORKFLOW,
+    patch_t2i_workflow,
+    patch_transition_workflow,
+)
+from write_script import _build_prompts, _build_transition_prompts, call_llm
 
 LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
@@ -137,6 +143,46 @@ class Scene:
         self._backup_suffix = None
         self._backup_voiceover = None
         self.has_draft = False
+
+
+# ── Transition mode data ────────────────────────────────────────────
+
+class Keyframe:
+    def __init__(self, index, description):
+        self.index = index
+        self.description = description
+        self.status = "pending"  # pending | generated | approved
+
+    @property
+    def num(self):
+        return self.index + 1
+
+    def image_path(self, d):
+        return os.path.join(d, f"keyframe_{self.num:02d}.png")
+
+    def has_image(self, d):
+        return os.path.exists(self.image_path(d))
+
+
+class TransitionClip:
+    def __init__(self, index, description, voiceover_text=""):
+        self.index = index
+        self.description = description
+        self.voiceover_text = voiceover_text
+        self.status = "pending"  # pending | rendered | approved
+
+    @property
+    def num(self):
+        return self.index + 1
+
+    def video_path(self, d):
+        return os.path.join(d, f"transition_{self.num:02d}.mp4")
+
+    def has_video(self, d):
+        return os.path.exists(self.video_path(d))
+
+    def vo_path(self, d):
+        return os.path.join(d, f"voiceover_{self.num:02d}.wav")
 
 
 # ── File backup helpers ──────────────────────────────────────────────
@@ -1194,6 +1240,817 @@ class DirectorTUI:
         self._save_session()
 
 
+# ── Transition Director TUI ──────────────────────────────────────────
+
+class TransitionDirectorTUI:
+    """Interactive TUI for transition mode: keyframes → transitions → movie."""
+
+    PHASE_KEYFRAMES = "keyframes"
+    PHASE_TRANSITIONS = "transitions"
+
+    def __init__(self, *, keyframes, transitions, run_dir, t2i_template,
+                 transition_template, base_url, base_prompt, negative_prompt,
+                 duration_frames, width, height, frame_rate, strip_audio,
+                 voice, tts_dir, tts_seed, seed, timeout, has_voiceover,
+                 style_name, llm_url, llm_model, llm_api_key):
+        self.keyframes = keyframes
+        self.transitions = transitions
+        self.run_dir = run_dir
+        self.t2i_template = t2i_template
+        self.transition_template = transition_template
+        self.base_url = base_url
+        self.base_prompt = base_prompt
+        self.negative_prompt = negative_prompt
+        self.duration_frames = duration_frames
+        self.width = width
+        self.height = height
+        self.frame_rate = frame_rate
+        self.strip_audio = strip_audio
+        self.voice = voice
+        self.tts_dir = tts_dir
+        self.tts_seed = tts_seed
+        self.seed = seed
+        self.timeout = timeout
+        self.has_voiceover = has_voiceover
+        self.style_name = style_name
+        self.llm_url = llm_url
+        self.llm_model = llm_model
+        self.llm_api_key = llm_api_key
+        self.current = 0
+        self.phase = self.PHASE_KEYFRAMES
+        self.stdscr = None
+        self.status_msg = ""
+        self.should_quit = False
+
+    def run(self):
+        if self._load_session():
+            print(f"Resumed session: {self.phase} phase, position {self.current + 1}")
+        else:
+            # First run — render keyframe 1
+            if not self.keyframes[0].has_image(self.run_dir):
+                self._render_keyframe_terminal(0)
+            else:
+                self.keyframes[0].status = "generated"
+            self._save_session()
+        curses.wrapper(self._main)
+        print(f"Session saved. Resume with the same --seed {self.seed}")
+
+    def _main(self, stdscr):
+        self.stdscr = stdscr
+        curses.curs_set(0)
+        curses.use_default_colors()
+        if curses.has_colors():
+            curses.init_pair(C_APPROVED, curses.COLOR_GREEN, -1)
+            curses.init_pair(C_RENDERED, curses.COLOR_CYAN, -1)
+            curses.init_pair(C_PENDING, curses.COLOR_YELLOW, -1)
+            curses.init_pair(C_DRAFT, curses.COLOR_MAGENTA, -1)
+            curses.init_pair(C_DIM, curses.COLOR_WHITE, -1)
+            curses.init_pair(C_KEY, curses.COLOR_CYAN, -1)
+
+        while not self.should_quit:
+            self._draw()
+            key = stdscr.getch()
+            self._handle_key(key)
+        self._save_session()
+
+    def _leave_curses(self):
+        curses.endwin()
+
+    def _resume_curses(self):
+        self.stdscr.clear()
+        self.stdscr.refresh()
+
+    def _safe(self, y, x, text, attr=0):
+        h, w = self.stdscr.getmaxyx()
+        if 0 <= y < h and 0 <= x < w:
+            try:
+                self.stdscr.addnstr(y, x, text, w - x, attr)
+            except curses.error:
+                pass
+
+    def _hline(self, y, left, mid, right, w):
+        self._safe(y, 0, left + mid * (w - 2) + right)
+
+    def _row(self, y, text, w, attr=0):
+        padded = " " + text[:w - 4]
+        self._safe(y, 0, "│" + padded.ljust(w - 2) + "│", attr)
+
+    def _input_text(self, message, prefill=""):
+        self._leave_curses()
+        print()
+        print(message)
+        if prefill:
+            def hook():
+                readline.insert_text(prefill)
+                readline.redisplay()
+            readline.set_pre_input_hook(hook)
+        try:
+            result = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            result = ""
+        finally:
+            readline.set_pre_input_hook()
+        self._resume_curses()
+        return result
+
+    # ── drawing ──────────────────────────────────────────────────────
+
+    def _draw(self):
+        self.stdscr.clear()
+        h, w = self.stdscr.getmaxyx()
+        bw = min(w, 80)
+        y = 0
+
+        self._hline(y, "┌", "─", "┐", bw); y += 1
+
+        if self.phase == self.PHASE_KEYFRAMES:
+            self._draw_keyframe_phase(y, bw)
+        else:
+            self._draw_transition_phase(y, bw)
+
+    def _draw_keyframe_phase(self, y, bw):
+        kf = self.keyframes[self.current]
+
+        title = "TRANSITION DIRECTOR — Keyframes"
+        info = f"Keyframe {kf.num} / {len(self.keyframes)}"
+        gap = bw - 4 - len(title) - len(info)
+        self._safe(y, 0, "│ " + title + " " * max(1, gap) + info + " │",
+                   curses.A_BOLD)
+        y += 1
+
+        # Status
+        st, sc = self._kf_status_label(kf)
+        self._row(y, f"Status: {st}", bw, sc); y += 1
+
+        # Strip
+        self._hline(y, "├", "─", "┤", bw); y += 1
+        strip = self._kf_strip(bw - 4)
+        self._row(y, strip, bw); y += 1
+
+        # Description
+        self._hline(y, "├", "─", "┤", bw); y += 1
+        self._row(y, "Description:", bw, curses.A_BOLD); y += 1
+        for line in textwrap.wrap(kf.description, width=bw - 8)[:5]:
+            self._row(y, f"  {line}", bw); y += 1
+
+        # Actions
+        self._hline(y, "├", "─", "┤", bw); y += 1
+        self._row(y, "", bw); y += 1
+        self._row(y, "[Space] View keyframe  [Left/Right] Navigate", bw); y += 1
+        self._row(y, "", bw); y += 1
+
+        has_img = kf.has_image(self.run_dir)
+        if has_img and kf.status == "generated":
+            self._row(y, "[a] Approve    [Enter] Regenerate (new seed)", bw); y += 1
+        elif has_img and kf.status == "approved":
+            self._row(y, "[Enter] Regenerate    (already approved)", bw); y += 1
+        else:
+            self._row(y, "[Enter] Generate keyframe image", bw); y += 1
+
+        self._row(y, "[v] Edit description   [r] Render movie", bw); y += 1
+        self._row(y, "[q] Quit", bw); y += 1
+
+        all_approved = all(k.status == "approved" for k in self.keyframes)
+        if all_approved:
+            self._row(y, "", bw); y += 1
+            self._row(y, "All keyframes approved! Press [g] to enter transition phase",
+                      bw, curses.color_pair(C_APPROVED) | curses.A_BOLD); y += 1
+
+        self._row(y, "", bw); y += 1
+        if self.status_msg:
+            self._row(y, self.status_msg, bw, curses.A_DIM); y += 1
+
+        self._hline(y, "└", "─", "┘", bw)
+        self.stdscr.refresh()
+
+    def _draw_transition_phase(self, y, bw):
+        tr = self.transitions[self.current]
+        kf_from = self.keyframes[tr.index]
+        kf_to = self.keyframes[tr.index + 1]
+
+        title = "TRANSITION DIRECTOR — Transitions"
+        info = f"Transition {tr.num} / {len(self.transitions)}"
+        gap = bw - 4 - len(title) - len(info)
+        self._safe(y, 0, "│ " + title + " " * max(1, gap) + info + " │",
+                   curses.A_BOLD)
+        y += 1
+
+        st, sc = self._tr_status_label(tr)
+        dur_str = f"{self.duration_frames / self.frame_rate:.0f}s"
+        self._row(y, f"Status: {st}    Duration: {dur_str}", bw, sc); y += 1
+
+        # Strip
+        self._hline(y, "├", "─", "┤", bw); y += 1
+        strip = self._tr_strip(bw - 4)
+        self._row(y, strip, bw); y += 1
+
+        # From/To keyframes
+        self._hline(y, "├", "─", "┤", bw); y += 1
+        self._row(y, f"From keyframe {kf_from.num}:", bw, curses.A_BOLD); y += 1
+        for line in textwrap.wrap(kf_from.description, width=bw - 8)[:2]:
+            self._row(y, f"  {line}", bw); y += 1
+
+        self._row(y, f"To keyframe {kf_to.num}:", bw, curses.A_BOLD); y += 1
+        for line in textwrap.wrap(kf_to.description, width=bw - 8)[:2]:
+            self._row(y, f"  {line}", bw); y += 1
+
+        # Transition prompt
+        self._row(y, "", bw); y += 1
+        self._row(y, "Transition:", bw, curses.A_BOLD); y += 1
+        for line in textwrap.wrap(tr.description, width=bw - 8)[:3]:
+            self._row(y, f"  {line}", bw); y += 1
+
+        # Voiceover
+        if self.has_voiceover:
+            self._row(y, "", bw); y += 1
+            self._row(y, "Voiceover:", bw, curses.A_BOLD); y += 1
+            vo = tr.voiceover_text or "(none)"
+            for line in textwrap.wrap(vo, width=bw - 8)[:2]:
+                self._row(y, f"  {line}", bw); y += 1
+
+        # Actions
+        self._hline(y, "├", "─", "┤", bw); y += 1
+        self._row(y, "", bw); y += 1
+        self._row(y, "[Space] Play  [Left/Right] Navigate", bw); y += 1
+        self._row(y, "", bw); y += 1
+
+        has_vid = tr.has_video(self.run_dir)
+        if has_vid:
+            self._row(y, "[a] Approve    [Enter] Regenerate (new seed)", bw); y += 1
+            self._row(y, "[e] Edit transition prompt    [o] Edit voiceover",
+                      bw); y += 1
+        else:
+            self._row(y, "[Enter] Render transition", bw); y += 1
+            self._row(y, "[e] Edit transition prompt", bw); y += 1
+
+        self._row(y, "[b] Back to keyframes  [r] Render movie  [q] Quit",
+                  bw); y += 1
+
+        self._row(y, "", bw); y += 1
+        if self.status_msg:
+            self._row(y, self.status_msg, bw, curses.A_DIM); y += 1
+
+        self._hline(y, "└", "─", "┘", bw)
+        self.stdscr.refresh()
+
+    def _kf_status_label(self, kf):
+        if kf.status == "approved":
+            return "APPROVED", curses.color_pair(C_APPROVED) | curses.A_BOLD
+        elif kf.status == "generated":
+            return "GENERATED", curses.color_pair(C_RENDERED) | curses.A_BOLD
+        return "PENDING", curses.color_pair(C_PENDING)
+
+    def _tr_status_label(self, tr):
+        if tr.status == "approved":
+            return "APPROVED", curses.color_pair(C_APPROVED) | curses.A_BOLD
+        elif tr.status == "rendered":
+            return "RENDERED", curses.color_pair(C_RENDERED) | curses.A_BOLD
+        return "PENDING", curses.color_pair(C_PENDING)
+
+    def _kf_strip(self, width):
+        parts = []
+        for i, kf in enumerate(self.keyframes):
+            if i == self.current:
+                if kf.status == "approved":
+                    parts.append(f"[{kf.num}]")
+                elif kf.status == "generated":
+                    parts.append(f"({kf.num})")
+                else:
+                    parts.append(f"<{kf.num}>")
+            else:
+                if kf.status == "approved":
+                    parts.append(f" {kf.num} ")
+                elif kf.status == "generated":
+                    parts.append(f" {kf.num} ")
+                else:
+                    parts.append(f" . ")
+            test = " ".join(parts)
+            if len(test) > width - 4:
+                parts[-1] = "..."
+                break
+        return " ".join(parts)
+
+    def _tr_strip(self, width):
+        parts = []
+        for i, tr in enumerate(self.transitions):
+            if i == self.current:
+                if tr.status == "approved":
+                    parts.append(f"[{tr.num}]")
+                elif tr.status == "rendered":
+                    parts.append(f"({tr.num})")
+                else:
+                    parts.append(f"<{tr.num}>")
+            else:
+                if tr.status == "approved":
+                    parts.append(f" {tr.num} ")
+                elif tr.status == "rendered":
+                    parts.append(f" {tr.num} ")
+                else:
+                    parts.append(f" . ")
+            test = " ".join(parts)
+            if len(test) > width - 4:
+                parts[-1] = "..."
+                break
+        return " ".join(parts)
+
+    # ── key handling ─────────────────────────────────────────────────
+
+    def _handle_key(self, key):
+        if self.phase == self.PHASE_KEYFRAMES:
+            self._handle_key_keyframes(key)
+        else:
+            self._handle_key_transitions(key)
+
+    def _handle_key_keyframes(self, key):
+        if key == ord("\n") or key == curses.KEY_ENTER:
+            self._generate_keyframe()
+        elif key == ord(" "):
+            self._view_keyframe()
+        elif key == curses.KEY_LEFT or key == ord("h"):
+            if self.current > 0:
+                self.current -= 1
+                self.status_msg = ""
+        elif key == curses.KEY_RIGHT or key == ord("l"):
+            max_nav = len(self.keyframes) - 1
+            # Allow navigating to any keyframe that's generated or earlier
+            for i, kf in enumerate(self.keyframes):
+                if kf.status == "pending" and i > 0:
+                    max_nav = i
+                    break
+            if self.current < max_nav:
+                self.current += 1
+                self.status_msg = ""
+        elif key == curses.KEY_HOME:
+            self.current = 0
+            self.status_msg = ""
+        elif key == curses.KEY_END:
+            # Go to last generated keyframe
+            last = 0
+            for i, kf in enumerate(self.keyframes):
+                if kf.status != "pending":
+                    last = i
+            self.current = last
+            self.status_msg = ""
+        elif key == ord("a"):
+            self._approve_keyframe()
+        elif key == ord("v"):
+            self._edit_keyframe_description()
+        elif key == ord("g"):
+            all_approved = all(k.status == "approved" for k in self.keyframes)
+            if all_approved:
+                self.phase = self.PHASE_TRANSITIONS
+                self.current = 0
+                self.status_msg = "Entered transition phase"
+            else:
+                self.status_msg = "Approve all keyframes first"
+        elif key == ord("r"):
+            self._render_movie()
+        elif key == ord("q"):
+            self._quit_confirm()
+
+    def _handle_key_transitions(self, key):
+        if key == ord("\n") or key == curses.KEY_ENTER:
+            self._render_transition()
+        elif key == ord(" "):
+            self._play_transition()
+        elif key == curses.KEY_LEFT or key == ord("h"):
+            if self.current > 0:
+                self.current -= 1
+                self.status_msg = ""
+        elif key == curses.KEY_RIGHT or key == ord("l"):
+            if self.current < len(self.transitions) - 1:
+                self.current += 1
+                self.status_msg = ""
+        elif key == curses.KEY_HOME:
+            self.current = 0
+            self.status_msg = ""
+        elif key == curses.KEY_END:
+            self.current = len(self.transitions) - 1
+            self.status_msg = ""
+        elif key == ord("a"):
+            self._approve_transition()
+        elif key == ord("e"):
+            self._edit_transition_prompt()
+        elif key == ord("o"):
+            self._edit_transition_voiceover()
+        elif key == ord("b"):
+            self.phase = self.PHASE_KEYFRAMES
+            self.current = 0
+            self.status_msg = "Back to keyframes"
+        elif key == ord("r"):
+            self._render_movie()
+        elif key == ord("q"):
+            self._quit_confirm()
+
+    def _quit_confirm(self):
+        self.status_msg = "Press Q again to quit"
+        self._draw()
+        confirm = self.stdscr.getch()
+        if confirm == ord("q") or confirm == ord("Q"):
+            self.should_quit = True
+        else:
+            self.status_msg = ""
+
+    # ── keyframe actions ─────────────────────────────────────────────
+
+    def _view_keyframe(self):
+        kf = self.keyframes[self.current]
+        if not kf.has_image(self.run_dir):
+            self.status_msg = "No image to view"
+            return
+        if not shutil.which("mpv"):
+            self.status_msg = "mpv not found"
+            return
+        self._leave_curses()
+        subprocess.run(["mpv", "--really-quiet", kf.image_path(self.run_dir)],
+                       check=False)
+        self._resume_curses()
+
+    def _generate_keyframe(self):
+        kf = self.keyframes[self.current]
+        self._leave_curses()
+        self._render_keyframe_terminal(self.current)
+        self._save_session()
+        self._resume_curses()
+
+    def _render_keyframe_terminal(self, idx):
+        kf = self.keyframes[idx]
+        prompt = kf.description
+        if self.base_prompt:
+            prompt = self.base_prompt + " " + prompt
+
+        noise_seed = random.randint(0, 2**53)
+        output_png = kf.image_path(self.run_dir)
+
+        print(f"\n{'='*60}")
+        print(f"  Generating keyframe {kf.num}")
+        print(f"  Prompt: {prompt[:70]}...")
+        print(f"  Seed:   {noise_seed}")
+        print(f"{'='*60}")
+
+        wf = patch_t2i_workflow(
+            self.t2i_template,
+            prompt_text=prompt,
+            negative_prompt_text=self.negative_prompt,
+            seed_value=noise_seed,
+            output_prefix=f"{self.seed}/keyframe_{kf.num:02d}",
+        )
+
+        start = time.time()
+        try:
+            history = run_workflow(self.base_url, wf, timeout=self.timeout)
+            download_output(self.base_url, history, output_png,
+                            output_type="images")
+            elapsed = time.time() - start
+            print(f"  Generated in {fmt_duration(elapsed)}")
+            kf.status = "generated"
+        except Exception as e:
+            print(f"  Generation failed: {e}")
+
+    def _approve_keyframe(self):
+        kf = self.keyframes[self.current]
+        if kf.status == "pending":
+            self.status_msg = "Keyframe not yet generated"
+            return
+        kf.status = "approved"
+        self._save_session()
+
+        # Auto-advance to next ungenerated keyframe
+        next_idx = None
+        for i in range(len(self.keyframes)):
+            if self.keyframes[i].status == "pending":
+                next_idx = i
+                break
+
+        if next_idx is not None:
+            self._leave_curses()
+            self._render_keyframe_terminal(next_idx)
+            self.current = next_idx
+            self._save_session()
+            self._resume_curses()
+        else:
+            all_approved = all(k.status == "approved" for k in self.keyframes)
+            if all_approved:
+                self.status_msg = "All keyframes approved! Press [g] for transitions"
+            else:
+                # Find next non-approved
+                for i, k in enumerate(self.keyframes):
+                    if k.status != "approved":
+                        self.current = i
+                        break
+                self.status_msg = f"Keyframe {kf.num} approved"
+
+    def _edit_keyframe_description(self):
+        kf = self.keyframes[self.current]
+        new_desc = self._input_text(
+            f"Current description:\n  {kf.description}\n\n"
+            "Enter new description (or Enter to cancel):\n",
+            prefill=kf.description,
+        )
+        if not new_desc or new_desc == kf.description:
+            self.status_msg = "No changes"
+            return
+        kf.description = new_desc
+        # Re-generate with new description
+        self._leave_curses()
+        self._render_keyframe_terminal(self.current)
+        self._save_session()
+        self._resume_curses()
+
+    # ── transition actions ───────────────────────────────────────────
+
+    def _render_transition(self):
+        tr = self.transitions[self.current]
+        self._leave_curses()
+        self._render_transition_terminal(self.current)
+        self._save_session()
+        self._resume_curses()
+
+    def _render_transition_terminal(self, idx):
+        tr = self.transitions[idx]
+        kf_from = self.keyframes[idx]
+        kf_to = self.keyframes[idx + 1]
+
+        first_img = kf_from.image_path(self.run_dir)
+        last_img = kf_to.image_path(self.run_dir)
+
+        if not os.path.exists(first_img):
+            print(f"  Error: keyframe {kf_from.num} image missing")
+            return
+        if not os.path.exists(last_img):
+            print(f"  Error: keyframe {kf_to.num} image missing")
+            return
+
+        # Voiceover first
+        if self.has_voiceover and tr.voiceover_text and self.tts_dir:
+            vo_path = tr.vo_path(self.run_dir)
+            if not os.path.exists(vo_path):
+                print(f"\n{'='*60}")
+                print(f"  Rendering voiceover {tr.num}...")
+                print(f"  Text: {tr.voiceover_text[:70]}")
+                print(f"{'='*60}")
+                try:
+                    render_segment_tts(
+                        self.tts_dir, self.base_url,
+                        tr.voiceover_text, self.voice, vo_path,
+                        seed=self.tts_seed + idx,
+                    )
+                    print(f"  Saved: {vo_path}")
+                except Exception as e:
+                    print(f"  Voiceover failed: {e} (continuing)")
+
+        noise_seed = random.randint(0, 2**53)
+        output_video = tr.video_path(self.run_dir)
+
+        print(f"\n{'='*60}")
+        print(f"  Rendering transition {tr.num}")
+        print(f"  From:     keyframe {kf_from.num}")
+        print(f"  To:       keyframe {kf_to.num}")
+        print(f"  Prompt:   {tr.description[:70]}...")
+        print(f"  Seed:     {noise_seed}")
+        print(f"  Duration: {self.duration_frames / self.frame_rate:.0f}s "
+              f"({self.duration_frames} frames)")
+        print(f"{'='*60}")
+
+        uploaded_first = upload_image(self.base_url, first_img)
+        uploaded_last = upload_image(self.base_url, last_img)
+
+        wf = patch_transition_workflow(
+            self.transition_template,
+            first_image_name=uploaded_first,
+            last_image_name=uploaded_last,
+            prompt_text=tr.description,
+            negative_prompt_text=self.negative_prompt,
+            seed_value=noise_seed,
+            width=self.width,
+            height=self.height,
+            frame_rate=self.frame_rate,
+            duration_frames=self.duration_frames,
+            output_prefix=f"{self.seed}/transition_{tr.num:02d}",
+        )
+
+        start = time.time()
+        try:
+            history = run_workflow(self.base_url, wf, timeout=self.timeout)
+            download_output(self.base_url, history, output_video,
+                            strip_audio=self.strip_audio)
+            elapsed = time.time() - start
+            actual_dur = get_duration(output_video)
+            if actual_dur is not None:
+                print(f"  Rendered in {fmt_duration(elapsed)}, "
+                      f"clip duration: {actual_dur:.1f}s")
+            else:
+                print(f"  Rendered in {fmt_duration(elapsed)}")
+            tr.status = "rendered"
+        except Exception as e:
+            print(f"  Render failed: {e}")
+
+    def _play_transition(self):
+        tr = self.transitions[self.current]
+        if not tr.has_video(self.run_dir):
+            self.status_msg = "No video to play"
+            return
+        if not shutil.which("mpv"):
+            self.status_msg = "mpv not found"
+            return
+        self._leave_curses()
+        subprocess.run(["mpv", "--really-quiet", tr.video_path(self.run_dir)],
+                       check=False)
+        self._resume_curses()
+
+    def _approve_transition(self):
+        tr = self.transitions[self.current]
+        if tr.status == "pending":
+            self.status_msg = "Transition not yet rendered"
+            return
+        tr.status = "approved"
+        self._save_session()
+
+        # Auto-advance and render next transition
+        next_idx = self.current + 1
+        if next_idx < len(self.transitions):
+            tr_next = self.transitions[next_idx]
+            if tr_next.status == "pending":
+                self._leave_curses()
+                self._render_transition_terminal(next_idx)
+                self.current = next_idx
+                self._save_session()
+                self._resume_curses()
+            else:
+                self.current = next_idx
+                self.status_msg = ""
+        else:
+            self.status_msg = "All transitions done! Press [r] to render movie"
+
+    def _edit_transition_prompt(self):
+        tr = self.transitions[self.current]
+        new_desc = self._input_text(
+            f"Current transition prompt:\n  {tr.description}\n\n"
+            "Enter new prompt (or Enter to cancel):\n",
+            prefill=tr.description,
+        )
+        if not new_desc or new_desc == tr.description:
+            self.status_msg = "No changes"
+            return
+        tr.description = new_desc
+        self._save_session()
+        self.status_msg = "Prompt updated. Press Enter to re-render."
+
+    def _edit_transition_voiceover(self):
+        if not self.has_voiceover:
+            self.status_msg = "Voiceover disabled"
+            return
+        tr = self.transitions[self.current]
+        new_vo = self._input_text(
+            f"Current voiceover:\n  {tr.voiceover_text}\n\n"
+            "Enter new voiceover (or Enter to cancel):\n",
+            prefill=tr.voiceover_text,
+        )
+        if not new_vo or new_vo == tr.voiceover_text:
+            self.status_msg = "No changes"
+            return
+        tr.voiceover_text = new_vo
+        # Re-render voiceover WAV
+        if self.tts_dir:
+            vo_path = tr.vo_path(self.run_dir)
+            _delete_if_exists(vo_path)
+            self._leave_curses()
+            print(f"\nRendering voiceover for transition {tr.num}...")
+            try:
+                render_segment_tts(
+                    self.tts_dir, self.base_url,
+                    tr.voiceover_text, self.voice, vo_path,
+                    seed=self.tts_seed + tr.index,
+                )
+                print(f"  Saved: {vo_path}")
+            except Exception as e:
+                print(f"  Failed: {e}")
+            self._resume_curses()
+        self._save_session()
+        self.status_msg = "Voiceover updated"
+
+    # ── render movie ─────────────────────────────────────────────────
+
+    def _render_movie(self):
+        self._save_session()
+        self._leave_curses()
+        print()
+        print("=" * 60)
+        usable = [tr for tr in self.transitions if tr.has_video(self.run_dir)]
+        print(f"  RENDERING MOVIE  ({len(usable)} transitions)")
+        print("=" * 60)
+
+        try:
+            cmd = ["python3", "mux.py", "--seed", str(self.seed),
+                   "--pattern", "transition"]
+            subprocess.run(cmd, check=True)
+            dir_name = os.path.basename(self.run_dir)
+            final_path = os.path.join(self.run_dir, f"{dir_name}.mp4")
+            if os.path.exists(final_path):
+                if shutil.which("mpv"):
+                    print(f"\nPlaying: {final_path}")
+                    subprocess.run(["mpv", "--really-quiet", final_path],
+                                   check=False)
+                else:
+                    print(f"\nSaved: {final_path} (install mpv to auto-play)")
+        except subprocess.CalledProcessError as e:
+            print(f"  Mux failed: {e}")
+
+        self._resume_curses()
+
+    # ── persistence ──────────────────────────────────────────────────
+
+    def _session_path(self):
+        return os.path.join(self.run_dir, "session.json")
+
+    def _save_session(self):
+        session = {
+            "mode": "transition",
+            "phase": self.phase,
+            "current": self.current,
+            "style": self.style_name,
+            "duration_frames": self.duration_frames,
+            "width": self.width,
+            "height": self.height,
+            "frame_rate": self.frame_rate,
+            "keyframes": [
+                {"description": kf.description, "status": kf.status}
+                for kf in self.keyframes
+            ],
+            "transitions": [
+                {
+                    "description": tr.description,
+                    "voiceover_text": tr.voiceover_text,
+                    "status": tr.status,
+                }
+                for tr in self.transitions
+            ],
+        }
+        with open(self._session_path(), "w") as f:
+            json.dump(session, f, indent=2)
+            f.write("\n")
+
+    def _load_session(self):
+        path = self._session_path()
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path) as f:
+                session = json.load(f)
+        except (json.JSONDecodeError, KeyError):
+            return False
+
+        if session.get("mode") != "transition":
+            return False
+
+        self.phase = session.get("phase", self.PHASE_KEYFRAMES)
+        self.current = session.get("current", 0)
+        if session.get("duration_frames"):
+            self.duration_frames = session["duration_frames"]
+        if session.get("width"):
+            self.width = session["width"]
+        if session.get("height"):
+            self.height = session["height"]
+        if session.get("frame_rate"):
+            self.frame_rate = session["frame_rate"]
+
+        saved_kf = session.get("keyframes", [])
+        for i, skf in enumerate(saved_kf):
+            if i >= len(self.keyframes):
+                break
+            kf = self.keyframes[i]
+            kf.description = skf["description"]
+            if skf["status"] in ("generated", "approved") and kf.has_image(self.run_dir):
+                kf.status = skf["status"]
+            elif kf.has_image(self.run_dir):
+                kf.status = "generated"
+            else:
+                kf.status = "pending"
+
+        saved_tr = session.get("transitions", [])
+        for i, str_ in enumerate(saved_tr):
+            if i >= len(self.transitions):
+                break
+            tr = self.transitions[i]
+            tr.description = str_["description"]
+            tr.voiceover_text = str_.get("voiceover_text", "")
+            if str_["status"] in ("rendered", "approved") and tr.has_video(self.run_dir):
+                tr.status = str_["status"]
+            elif tr.has_video(self.run_dir):
+                tr.status = "rendered"
+            else:
+                tr.status = "pending"
+
+        # Clamp current position
+        if self.phase == self.PHASE_KEYFRAMES:
+            self.current = min(self.current, len(self.keyframes) - 1)
+        else:
+            self.current = min(self.current, len(self.transitions) - 1)
+
+        has_any = any(kf.status != "pending" for kf in self.keyframes)
+        return has_any
+
+
 # ── interactive setup ────────────────────────────────────────────────
 
 def _ask(prompt, default=None):
@@ -1276,18 +2133,177 @@ def interactive_setup(args):
     print()
 
 
+def _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
+                         llm_api_key, style, strip_audio, length):
+    """Run the transition director TUI."""
+    negative_prompt = args.negative_prompt or style.get("negative_prompt", "")
+    duration_frames = args.duration * args.transition_fps
+    has_voiceover = not args.no_voiceover
+
+    keyframes_path = os.path.join(run_dir, "keyframes.json")
+    transitions_path = os.path.join(run_dir, "transitions.json")
+    voiceover_path = os.path.join(run_dir, "voiceover.json")
+
+    # Generate or load keyframe descriptions
+    if os.path.exists(keyframes_path):
+        print(f"Loading keyframes: {keyframes_path}")
+        with open(keyframes_path) as f:
+            kf_descs = json.load(f)
+    else:
+        keyframe_sys, transition_sys, voiceover_sys, _, _ = \
+            _build_transition_prompts(args.style, args.duration)
+
+        print(f"Generating {args.segments} keyframe descriptions...")
+        user_msg = f"Theme: {args.theme}\nNumber of keyframes: {args.segments}"
+        sys.stdout.write("  streaming: ")
+        sys.stdout.flush()
+        kf_descs = call_llm(llm_url, llm_model, keyframe_sys, user_msg,
+                            api_key=llm_api_key)
+        if len(kf_descs) > args.segments:
+            kf_descs = kf_descs[:args.segments]
+        with open(keyframes_path, "w") as f:
+            json.dump(kf_descs, f, indent=2)
+            f.write("\n")
+        print(f"  Saved: {keyframes_path}")
+
+    # Generate or load transition descriptions
+    if os.path.exists(transitions_path):
+        print(f"Loading transitions: {transitions_path}")
+        with open(transitions_path) as f:
+            tr_descs = json.load(f)
+    else:
+        keyframe_sys, transition_sys, voiceover_sys, _, _ = \
+            _build_transition_prompts(args.style, args.duration)
+
+        n_transitions = len(kf_descs) - 1
+        print(f"\nGenerating {n_transitions} transition descriptions...")
+        kf_list = "\n".join(
+            f"  Keyframe {i+1}: {k}" for i, k in enumerate(kf_descs))
+        trans_user_msg = (f"Theme: {args.theme}\n"
+                          f"Number of keyframes: {len(kf_descs)}\n\n"
+                          f"Keyframe descriptions:\n{kf_list}")
+        sys.stdout.write("  streaming: ")
+        sys.stdout.flush()
+        tr_descs = call_llm(llm_url, llm_model, transition_sys, trans_user_msg,
+                            api_key=llm_api_key)
+        if len(tr_descs) > n_transitions:
+            tr_descs = tr_descs[:n_transitions]
+        with open(transitions_path, "w") as f:
+            json.dump(tr_descs, f, indent=2)
+            f.write("\n")
+        print(f"  Saved: {transitions_path}")
+
+    # Generate or load voiceover
+    voiceover = [""] * len(tr_descs)
+    if has_voiceover:
+        if os.path.exists(voiceover_path):
+            print(f"Loading voiceover: {voiceover_path}")
+            with open(voiceover_path) as f:
+                voiceover = json.load(f)
+        else:
+            keyframe_sys, transition_sys, voiceover_sys, _, _ = \
+                _build_transition_prompts(args.style, args.duration)
+
+            print("Generating voiceover text...")
+            kf_list = "\n".join(
+                f"  Keyframe {i+1}: {k}" for i, k in enumerate(kf_descs))
+            tr_list = "\n".join(
+                f"  Transition {i+1}: {t}" for i, t in enumerate(tr_descs))
+            vo_msg = (f"Theme: {args.theme}\n"
+                      f"Number of transitions: {len(tr_descs)}\n\n"
+                      f"Keyframe descriptions:\n{kf_list}\n\n"
+                      f"Transition descriptions:\n{tr_list}")
+            sys.stdout.write("  streaming: ")
+            sys.stdout.flush()
+            voiceover = call_llm(llm_url, llm_model, voiceover_sys, vo_msg,
+                                 api_key=llm_api_key)
+            if len(voiceover) > len(tr_descs):
+                voiceover = voiceover[:len(tr_descs)]
+            with open(voiceover_path, "w") as f:
+                json.dump(voiceover, f, indent=2)
+                f.write("\n")
+            print(f"  Saved: {voiceover_path}")
+
+    while len(voiceover) < len(tr_descs):
+        voiceover.append("")
+
+    # Print overview
+    print(f"\nKeyframes: {len(kf_descs)}")
+    for i, k in enumerate(kf_descs):
+        text = k[:80] + "..." if len(k) > 80 else k
+        print(f"  [KF {i+1:2d}] {text}")
+    print(f"\nTransitions: {len(tr_descs)}")
+    for i, t in enumerate(tr_descs):
+        text = t[:80] + "..." if len(t) > 80 else t
+        print(f"  [TR {i+1:2d}] {text}")
+    print()
+
+    # Resolve TTS
+    tts_dir = None
+    if has_voiceover:
+        tts_dir = TTS_DEMO_DIR
+        if not os.path.isdir(tts_dir):
+            print(f"Warning: tts-demo not found at {tts_dir}")
+            print("  Voiceover audio will be disabled.")
+            tts_dir = None
+
+    # Build data model
+    keyframes = [Keyframe(i, kf_descs[i]) for i in range(len(kf_descs))]
+    transitions = [TransitionClip(i, tr_descs[i], voiceover[i] or "")
+                   for i in range(len(tr_descs))]
+
+    # Load workflow templates
+    t2i_template = load_workflow(args.t2i_workflow)
+    transition_template = load_workflow(args.transition_workflow)
+
+    tui = TransitionDirectorTUI(
+        keyframes=keyframes,
+        transitions=transitions,
+        run_dir=run_dir,
+        t2i_template=t2i_template,
+        transition_template=transition_template,
+        base_url=base_url,
+        base_prompt=args.base_prompt or "",
+        negative_prompt=negative_prompt,
+        duration_frames=duration_frames,
+        width=args.transition_width,
+        height=args.transition_height,
+        frame_rate=args.transition_fps,
+        strip_audio=strip_audio,
+        voice=args.voice,
+        tts_dir=tts_dir,
+        tts_seed=args.tts_seed,
+        seed=args.seed,
+        timeout=args.timeout,
+        has_voiceover=has_voiceover,
+        style_name=args.style,
+        llm_url=llm_url,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
+    )
+    tui.run()
+
+
 # ── main ─────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
         description="Interactive director mode TUI for video generation"
     )
+    parser.add_argument("--mode", default="chain",
+                        choices=["chain", "transition"],
+                        help="Director mode: chain (sequential I2V) or transition (keyframe pairs)")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--theme", nargs="+", default=None)
     parser.add_argument("--style", default=None)
     parser.add_argument("--segments", type=int, default=None)
     parser.add_argument("--duration", type=int, default=None)
     parser.add_argument("--workflow", default="workflow/ltx_i2v.json")
+    parser.add_argument("--t2i-workflow", default=T2I_WORKFLOW)
+    parser.add_argument("--transition-workflow", default=TRANSITION_WORKFLOW)
+    parser.add_argument("--transition-width", type=int, default=640)
+    parser.add_argument("--transition-height", type=int, default=480)
+    parser.add_argument("--transition-fps", type=int, default=25)
     parser.add_argument("--url", default=None)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--base-prompt", default=None)
@@ -1331,14 +2347,23 @@ def main():
         from run_dir import find_run_dir
         existing = find_run_dir("output", args.seed)
         if existing and os.path.exists(os.path.join(existing, "session.json")):
-            # Resume existing session — load theme from saved files
+            # Resume existing session — load theme and mode from saved files
             resuming = True
             theme_file = os.path.join(existing, "theme.txt")
             if os.path.exists(theme_file):
                 with open(theme_file) as f:
                     args.theme = f.read().strip()
-            # Load style from session if not overridden
+            # Detect mode from saved session
             session_path = os.path.join(existing, "session.json")
+            try:
+                with open(session_path) as f:
+                    saved_session = json.load(f)
+                if saved_session.get("mode") == "transition":
+                    args.mode = "transition"
+                if saved_session.get("style"):
+                    args.style = args.style or saved_session["style"]
+            except (json.JSONDecodeError, KeyError):
+                pass
             print(f"Resuming session from {existing}/")
 
     if not resuming:
@@ -1370,6 +2395,13 @@ def main():
     if not os.path.exists(theme_path):
         with open(theme_path, "w") as f:
             f.write(args.theme)
+
+    # ── transition mode ─────────────────────────────────────────────
+    is_transition = args.mode == "transition" or style.get("mode") == "transition"
+    if is_transition:
+        _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
+                             llm_api_key, style, strip_audio, length)
+        return
 
     workflow_template = load_workflow(args.workflow)
     script_path = os.path.join(run_dir, "script.json")
