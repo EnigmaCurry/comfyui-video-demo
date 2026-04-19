@@ -1854,10 +1854,48 @@ class TransitionDirectorTUI:
         if not shutil.which("mpv"):
             self.status_msg = "mpv not found"
             return
+        preview = self._make_transition_preview(tr)
         self._leave_curses()
-        subprocess.run(["mpv", "--really-quiet", tr.video_path(self.run_dir)],
-                       check=False)
+        subprocess.run(["mpv", "--really-quiet", preview], check=False)
         self._resume_curses()
+
+    def _make_transition_preview(self, tr):
+        """Mux voiceover into transition video for preview, or return plain video."""
+        video = tr.video_path(self.run_dir)
+        vo_wav = tr.vo_path(self.run_dir)
+        preview = os.path.join(self.run_dir, f"preview_{tr.num:02d}.mp4")
+
+        if not os.path.exists(vo_wav):
+            return video
+
+        # Check if preview is up to date
+        if os.path.exists(preview):
+            ptime = os.path.getmtime(preview)
+            if (ptime > os.path.getmtime(video) and
+                    ptime > os.path.getmtime(vo_wav)):
+                return preview
+
+        vid_dur = get_duration(video)
+        if vid_dur is None:
+            return video
+
+        padded = os.path.join(self.run_dir, f"_pad_{tr.num:02d}.wav")
+        try:
+            pad_audio_centered(vo_wav, vid_dur, padded)
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", video, "-i", padded,
+                 "-map", "0:v", "-map", "1:a",
+                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                 "-shortest", preview],
+                capture_output=True,
+            )
+            if os.path.exists(padded):
+                os.unlink(padded)
+            if result.returncode == 0:
+                return preview
+        except Exception:
+            pass
+        return video
 
     def _approve_transition(self):
         tr = self.transitions[self.current]
