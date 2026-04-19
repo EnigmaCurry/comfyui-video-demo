@@ -3,6 +3,7 @@
 Provides patching functions for:
 - HiDream T2I workflow (keyframe image generation)
 - LTX 2.3 transition workflow (two-frame video transitions)
+- AceStep 1.5 audio generation (soundtrack)
 """
 
 import copy
@@ -36,9 +37,19 @@ TRANS_DURATION_NODE = "139:143"
 TRANS_OUTPUT_NODE = "68"
 TRANS_OUTPUT_FIELD = "filename_prefix"
 
+# ── AceStep audio node IDs ───────────────────────────────────────────
+AUDIO_PROMPT_NODE = "94"
+AUDIO_SEED_NODE = "3"
+AUDIO_SEED_FIELD = "seed"
+AUDIO_DURATION_NODE = "98"
+AUDIO_DURATION_FIELD = "seconds"
+AUDIO_OUTPUT_NODE = "107"
+AUDIO_OUTPUT_FIELD = "filename_prefix"
+
 # ── Default workflow paths ───────────────────────────────────────────
 T2I_WORKFLOW = os.path.join(os.path.dirname(__file__), "workflow", "hidream_t2i.json")
 TRANSITION_WORKFLOW = os.path.join(os.path.dirname(__file__), "workflow", "ltx_transition.json")
+AUDIO_WORKFLOW = os.path.join(os.path.dirname(__file__), "workflow", "acestep_audio.json")
 
 
 def patch_t2i_workflow(workflow, *, prompt_text, negative_prompt_text="",
@@ -78,5 +89,27 @@ def patch_transition_workflow(workflow, *, first_image_name, last_image_name,
     wf[TRANS_FRAMERATE_NODE]["inputs"]["value"] = frame_rate
     wf[TRANS_DURATION_NODE]["inputs"]["value"] = duration_seconds
     wf[TRANS_OUTPUT_NODE]["inputs"][TRANS_OUTPUT_FIELD] = output_prefix
+
+    return wf
+
+
+def patch_audio_workflow(workflow, *, prompt_text, seed_value,
+                          duration_seconds=120, bpm=120, keyscale="C major",
+                          output_prefix="audio/soundtrack"):
+    """Patch AceStep 1.5 audio workflow for soundtrack generation.
+
+    The prompt node has many fields; we patch tags, seed, duration, bpm, keyscale.
+    The latent node's seconds must match the prompt node's duration.
+    """
+    wf = copy.deepcopy(workflow)
+
+    wf[AUDIO_PROMPT_NODE]["inputs"]["tags"] = prompt_text
+    wf[AUDIO_PROMPT_NODE]["inputs"]["seed"] = seed_value
+    wf[AUDIO_PROMPT_NODE]["inputs"]["duration"] = duration_seconds
+    wf[AUDIO_PROMPT_NODE]["inputs"]["bpm"] = bpm
+    wf[AUDIO_PROMPT_NODE]["inputs"]["keyscale"] = keyscale
+    wf[AUDIO_SEED_NODE]["inputs"][AUDIO_SEED_FIELD] = seed_value
+    wf[AUDIO_DURATION_NODE]["inputs"][AUDIO_DURATION_FIELD] = duration_seconds
+    wf[AUDIO_OUTPUT_NODE]["inputs"][AUDIO_OUTPUT_FIELD] = output_prefix
 
     return wf

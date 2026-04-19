@@ -55,8 +55,10 @@ from render_voiceover import TTS_DEMO_DIR, render_segment_tts
 from run_dir import make_run_dir
 from styles import DEFAULT_STYLE, load_style
 from transition import (
+    AUDIO_WORKFLOW,
     T2I_WORKFLOW,
     TRANSITION_WORKFLOW,
+    patch_audio_workflow,
     patch_t2i_workflow,
     patch_transition_workflow,
 )
@@ -1249,15 +1251,16 @@ class TransitionDirectorTUI:
     PHASE_TRANSITIONS = "transitions"
 
     def __init__(self, *, keyframes, transitions, run_dir, t2i_template,
-                 transition_template, base_url, base_prompt, negative_prompt,
-                 duration_seconds, width, height, frame_rate, strip_audio,
-                 voice, tts_dir, tts_seed, seed, timeout, has_voiceover,
-                 style_name, llm_url, llm_model, llm_api_key):
+                 transition_template, audio_template, base_url, base_prompt,
+                 negative_prompt, duration_seconds, width, height, frame_rate,
+                 strip_audio, voice, tts_dir, tts_seed, seed, timeout,
+                 has_voiceover, style_name, llm_url, llm_model, llm_api_key):
         self.keyframes = keyframes
         self.transitions = transitions
         self.run_dir = run_dir
         self.t2i_template = t2i_template
         self.transition_template = transition_template
+        self.audio_template = audio_template
         self.base_url = base_url
         self.base_prompt = base_prompt
         self.negative_prompt = negative_prompt
@@ -1485,7 +1488,8 @@ class TransitionDirectorTUI:
 
         self._row(y, "[A] Auto-approve all   [b] Back to keyframes",
                   bw); y += 1
-        self._row(y, "[r] Render movie       [q] Quit", bw); y += 1
+        self._row(y, "[r] Render movie       [s] Soundtrack", bw); y += 1
+        self._row(y, "[q] Quit", bw); y += 1
 
         self._row(y, "", bw); y += 1
         if self.status_msg:
@@ -1644,6 +1648,8 @@ class TransitionDirectorTUI:
             self.status_msg = "Back to keyframes"
         elif key == ord("r"):
             self._render_movie()
+        elif key == ord("s"):
+            self._soundtrack_director()
         elif key == ord("q"):
             self._quit_confirm()
 
@@ -2021,6 +2027,194 @@ class TransitionDirectorTUI:
         self._save_session()
         self.status_msg = "Voiceover updated"
 
+    # ── soundtrack director ─────────────────────────────────────────
+
+    def _soundtrack_director(self):
+        """Interactive soundtrack director: divide video into sections, prompt each, render audio."""
+        # Check if final movie exists
+        dir_name = os.path.basename(self.run_dir)
+        final_path = os.path.join(self.run_dir, f"{dir_name}.mp4")
+        if not os.path.exists(final_path):
+            self.status_msg = "Render movie first with [r]"
+            return
+
+        total_dur = get_duration(final_path)
+        if total_dur is None:
+            self.status_msg = "Could not get movie duration"
+            return
+
+        self._leave_curses()
+        print(f"\n{'='*60}")
+        print(f"  SOUNDTRACK DIRECTOR")
+        print(f"  Movie: {final_path}")
+        print(f"  Duration: {total_dur:.1f}s")
+        print(f"{'='*60}")
+
+        # Ask how many sections
+        raw = input(f"\nHow many soundtrack sections? [1]: ").strip()
+        try:
+            n_sections = int(raw) if raw else 1
+            n_sections = max(1, n_sections)
+        except ValueError:
+            n_sections = 1
+
+        section_dur = total_dur / n_sections
+        print(f"\n  {n_sections} sections, ~{section_dur:.1f}s each")
+
+        # Collect prompts for each section
+        sections = []
+        for i in range(n_sections):
+            start = section_dur * i
+            end = section_dur * (i + 1)
+            print(f"\n  Section {i+1}/{n_sections} ({start:.0f}s - {end:.0f}s)")
+            print(f"  Enter music description (paste text, Ctrl-D to finish):")
+            lines = []
+            try:
+                first = input("  > ")
+                lines.append(first)
+                while True:
+                    lines.append(input())
+            except EOFError:
+                pass
+            prompt = " ".join("\n".join(lines).split()).strip()
+            if not prompt:
+                prompt = "cinematic orchestral soundtrack"
+            sections.append({
+                "prompt": prompt,
+                "duration": int(round(section_dur)),
+                "start": start,
+            })
+            print(f"  Prompt: {prompt[:80]}...")
+
+        # Ask for musical parameters
+        print()
+        bpm_raw = input("BPM [120]: ").strip()
+        bpm = int(bpm_raw) if bpm_raw else 120
+
+        keyscale_raw = input("Key/scale [C minor]: ").strip()
+        keyscale = keyscale_raw if keyscale_raw else "C minor"
+
+        # Render each section
+        print(f"\n{'='*60}")
+        print(f"  Rendering {n_sections} soundtrack sections...")
+        print(f"{'='*60}")
+
+        soundtrack_files = []
+        for i, sec in enumerate(sections):
+            output_mp3 = os.path.join(self.run_dir, f"soundtrack_{i+1:02d}.mp3")
+
+            # Skip if already exists
+            if os.path.exists(output_mp3):
+                print(f"\n  Section {i+1} exists: {output_mp3}")
+                soundtrack_files.append(output_mp3)
+                continue
+
+            noise_seed = random.randint(0, 2**53)
+            print(f"\n  Section {i+1}/{n_sections}")
+            print(f"  Duration: {sec['duration']}s")
+            print(f"  Prompt:   {sec['prompt'][:70]}...")
+            print(f"  BPM:      {bpm}")
+            print(f"  Key:      {keyscale}")
+            print(f"  Seed:     {noise_seed}")
+
+            wf = patch_audio_workflow(
+                self.audio_template,
+                prompt_text=sec["prompt"],
+                seed_value=noise_seed,
+                duration_seconds=sec["duration"],
+                bpm=bpm,
+                keyscale=keyscale,
+                output_prefix=f"{self.seed}/soundtrack_{i+1:02d}",
+            )
+
+            start = time.time()
+            try:
+                history = run_workflow(self.base_url, wf, timeout=self.timeout)
+                download_output(self.base_url, history, output_mp3,
+                                output_type="audio")
+                elapsed = time.time() - start
+                print(f"  Rendered in {fmt_duration(elapsed)}")
+                soundtrack_files.append(output_mp3)
+            except Exception as e:
+                print(f"  Render failed: {e}")
+
+        if not soundtrack_files:
+            print("\n  No soundtrack files rendered.")
+            self._resume_curses()
+            return
+
+        # Concatenate soundtrack sections
+        print(f"\n{'='*60}")
+        print(f"  Muxing soundtrack into movie...")
+        print(f"{'='*60}")
+
+        import tempfile
+        tmpdir = tempfile.mkdtemp(prefix="soundtrack-")
+        try:
+            # Concat all soundtrack sections into one file
+            if len(soundtrack_files) == 1:
+                full_soundtrack = soundtrack_files[0]
+            else:
+                slist = os.path.join(tmpdir, "soundtrack.txt")
+                with open(slist, "w") as f:
+                    for sf in soundtrack_files:
+                        f.write(f"file '{os.path.abspath(sf)}'\n")
+                full_soundtrack = os.path.join(tmpdir, "soundtrack_full.mp3")
+                subprocess.run(
+                    ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                     "-i", slist, "-c", "copy", full_soundtrack],
+                    capture_output=True, check=True,
+                )
+
+            # Mux soundtrack into the video
+            scored_path = os.path.join(self.run_dir, f"{dir_name}_scored.mp4")
+
+            # Check if video already has audio
+            probe = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-select_streams", "a",
+                 "-show_entries", "stream=index", "-of", "csv=p=0",
+                 final_path],
+                capture_output=True, text=True,
+            )
+            has_audio = bool(probe.stdout.strip())
+
+            if has_audio:
+                # Mix existing audio with soundtrack
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", final_path, "-i", full_soundtrack,
+                     "-filter_complex",
+                     "[0:a]volume=1.0[orig];"
+                     "[1:a]volume=0.5[music];"
+                     "[orig][music]amix=inputs=2:duration=first[aout]",
+                     "-map", "0:v", "-map", "[aout]",
+                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                     scored_path],
+                    capture_output=True,
+                )
+            else:
+                # Just add soundtrack
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", final_path, "-i", full_soundtrack,
+                     "-map", "0:v", "-map", "1:a",
+                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                     "-shortest", scored_path],
+                    capture_output=True,
+                )
+
+            if result.returncode != 0:
+                print(f"  Mux failed: {result.stderr.decode(errors='replace')[:200]}")
+            elif os.path.exists(scored_path):
+                print(f"\n  Saved: {scored_path}")
+                if shutil.which("mpv"):
+                    print(f"  Playing...")
+                    subprocess.run(["mpv", "--really-quiet", scored_path],
+                                   check=False)
+        finally:
+            import shutil as shutil_mod
+            shutil_mod.rmtree(tmpdir, ignore_errors=True)
+
+        self._resume_curses()
+
     # ── render movie ─────────────────────────────────────────────────
 
     def _render_movie(self):
@@ -2369,6 +2563,7 @@ def _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
     # Load workflow templates
     t2i_template = load_workflow(args.t2i_workflow)
     transition_template = load_workflow(args.transition_workflow)
+    audio_template = load_workflow(args.audio_workflow)
 
     tui = TransitionDirectorTUI(
         keyframes=keyframes,
@@ -2376,6 +2571,7 @@ def _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
         run_dir=run_dir,
         t2i_template=t2i_template,
         transition_template=transition_template,
+        audio_template=audio_template,
         base_url=base_url,
         base_prompt=args.base_prompt or "",
         negative_prompt=negative_prompt,
@@ -2418,6 +2614,7 @@ def main():
     parser.add_argument("--transition-width", type=int, default=640)
     parser.add_argument("--transition-height", type=int, default=480)
     parser.add_argument("--transition-fps", type=int, default=25)
+    parser.add_argument("--audio-workflow", default=AUDIO_WORKFLOW)
     parser.add_argument("--url", default=None)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--base-prompt", default=None)
