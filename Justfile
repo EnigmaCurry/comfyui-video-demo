@@ -277,6 +277,28 @@ transition *ARGS:
     fi
     python3 direct.py --mode transition --style transition-story "${theme_args[@]}" "${extra_args[@]}"
 
+# Freeform director mode: improvise scenes one at a time
+freeform *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -- {{ARGS}}
+    theme="" extra_args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --theme) shift; theme=""
+                while [[ $# -gt 0 ]] && [[ "$1" != --* ]]; do
+                    theme="$theme $1"; shift
+                done
+                theme="${theme# }" ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+    theme_args=()
+    if [ -n "$theme" ]; then
+        theme_args+=(--theme $theme)
+    fi
+    python3 direct.py --mode freeform "${theme_args[@]}" "${extra_args[@]}"
+
 # Clean output directory
 [confirm("Remove output/ directory?")]
 clean:

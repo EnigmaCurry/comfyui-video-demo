@@ -2446,7 +2446,7 @@ def interactive_setup(args):
     if args.style is None:
         args.style = _ask_choice("Style", styles, default=DEFAULT_STYLE)
 
-    if args.segments is None:
+    if args.mode != "freeform" and args.segments is None:
         raw = _ask("Segments", default=16)
         try:
             args.segments = int(raw)
@@ -2463,6 +2463,948 @@ def interactive_setup(args):
             args.duration = style_default
 
     print()
+
+
+# ── Freeform Director TUI ────────────────────────────────────────────
+
+FREEFORM_SCENE_SYS = """\
+You are a visual director helping to plan a single scene in an improvised video.
+
+Given a user's scene idea, generate THREE things as a JSON object:
+1. "end_keyframe": A vivid 1-3 sentence description of a STILL IMAGE showing \
+what the scene ends on. Concrete, specific, visual — no abstract language.
+2. "transition": A 1-3 sentence description of the MOTION and TRANSFORMATION \
+from the previous keyframe to the ending keyframe. Use active verbs: drifts, \
+sweeps, dissolves, pulls back, rushes forward.
+3. "voiceover": Spoken narration text for this scene, exactly {word_lo}-{word_hi} \
+words. Poetic, contemplative, or dramatic — complements the visuals without \
+describing them literally.
+
+Respond with a JSON object with keys "end_keyframe", "transition", "voiceover". \
+No other text.\
+"""
+
+
+class FreeformDirectorTUI:
+    """Interactive TUI for freeform improvised video creation."""
+
+    def __init__(self, *, run_dir, t2i_template, transition_template,
+                 audio_template, base_url, negative_prompt,
+                 default_duration, width, height, frame_rate, strip_audio,
+                 voice, tts_dir, tts_seed, seed, timeout, has_voiceover,
+                 llm_url, llm_model, llm_api_key):
+        self.keyframes = []       # list of Keyframe
+        self.transitions = []     # list of TransitionClip
+        self.run_dir = run_dir
+        self.t2i_template = t2i_template
+        self.transition_template = transition_template
+        self.audio_template = audio_template
+        self.base_url = base_url
+        self.negative_prompt = negative_prompt
+        self.default_duration = default_duration
+        self.width = width
+        self.height = height
+        self.frame_rate = frame_rate
+        self.strip_audio = strip_audio
+        self.voice = voice
+        self.tts_dir = tts_dir
+        self.tts_seed = tts_seed
+        self.seed = seed
+        self.timeout = timeout
+        self.has_voiceover = has_voiceover
+        self.llm_url = llm_url
+        self.llm_model = llm_model
+        self.llm_api_key = llm_api_key
+        self.current = 0  # index into transitions (scenes)
+        self.stdscr = None
+        self.status_msg = ""
+        self.should_quit = False
+
+    def run(self):
+        if self._load_session():
+            print(f"Resumed session: {len(self.transitions)} scenes")
+        else:
+            # First run — need initial keyframe
+            self._create_first_keyframe()
+            self._save_session()
+
+        curses.wrapper(self._main)
+        print(f"Session saved. Resume with the same --seed {self.seed}")
+
+    def _create_first_keyframe(self):
+        """Prompt for and generate the initial keyframe."""
+        print(f"\n{'='*60}")
+        print(f"  FREEFORM DIRECTOR — First Keyframe")
+        print(f"{'='*60}")
+        print(f"\nDescribe the opening image (paste text, Ctrl-D to finish):")
+        lines = []
+        try:
+            first = input("> ")
+            lines.append(first)
+            print("  (continue pasting, then Ctrl-D on empty line to finish)")
+            while True:
+                lines.append(input())
+        except EOFError:
+            pass
+        description = " ".join("\n".join(lines).split()).strip()
+        if not description:
+            description = "A cinematic establishing shot"
+
+        kf = Keyframe(0, description)
+        self.keyframes.append(kf)
+        self._render_keyframe_terminal(0)
+
+    def _main(self, stdscr):
+        self.stdscr = stdscr
+        curses.curs_set(0)
+        curses.use_default_colors()
+        if curses.has_colors():
+            curses.init_pair(C_APPROVED, curses.COLOR_GREEN, -1)
+            curses.init_pair(C_RENDERED, curses.COLOR_CYAN, -1)
+            curses.init_pair(C_PENDING, curses.COLOR_YELLOW, -1)
+            curses.init_pair(C_DRAFT, curses.COLOR_MAGENTA, -1)
+            curses.init_pair(C_DIM, curses.COLOR_WHITE, -1)
+            curses.init_pair(C_KEY, curses.COLOR_CYAN, -1)
+
+        while not self.should_quit:
+            self._draw()
+            key = stdscr.getch()
+            self._handle_key(key)
+        self._save_session()
+
+    def _leave_curses(self):
+        if self.stdscr is not None:
+            curses.endwin()
+
+    def _resume_curses(self):
+        if self.stdscr is not None:
+            self.stdscr.clear()
+            self.stdscr.refresh()
+
+    def _safe(self, y, x, text, attr=0):
+        h, w = self.stdscr.getmaxyx()
+        if 0 <= y < h and 0 <= x < w:
+            try:
+                self.stdscr.addnstr(y, x, text, w - x, attr)
+            except curses.error:
+                pass
+
+    def _hline(self, y, left, mid, right, w):
+        self._safe(y, 0, left + mid * (w - 2) + right)
+
+    def _row(self, y, text, w, attr=0):
+        padded = " " + text[:w - 4]
+        self._safe(y, 0, "│" + padded.ljust(w - 2) + "│", attr)
+
+    def _input_text(self, message, prefill=""):
+        self._leave_curses()
+        print()
+        print(message)
+        if prefill:
+            def hook():
+                readline.insert_text(prefill)
+                readline.redisplay()
+            readline.set_pre_input_hook(hook)
+        try:
+            result = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            result = ""
+        finally:
+            readline.set_pre_input_hook()
+        self._resume_curses()
+        return result
+
+    def _input_multiline(self, message):
+        self._leave_curses()
+        print()
+        print(message)
+        lines = []
+        try:
+            first = input("> ")
+            lines.append(first)
+            print("  (continue pasting, then Ctrl-D on empty line to finish)")
+            while True:
+                lines.append(input())
+        except EOFError:
+            pass
+        self._resume_curses()
+        return " ".join("\n".join(lines).split()).strip()
+
+    # ── drawing ──────────────────────────────────────────────────────
+
+    def _draw(self):
+        self.stdscr.clear()
+        h, w = self.stdscr.getmaxyx()
+        bw = min(w, 80)
+        y = 0
+
+        self._hline(y, "┌", "─", "┐", bw); y += 1
+
+        n_scenes = len(self.transitions)
+        title = "FREEFORM DIRECTOR"
+        if n_scenes == 0:
+            info = "No scenes yet"
+        else:
+            info = f"Scene {self.current + 1} / {n_scenes}"
+        gap = bw - 4 - len(title) - len(info)
+        self._safe(y, 0, "│ " + title + " " * max(1, gap) + info + " │",
+                   curses.A_BOLD)
+        y += 1
+
+        if n_scenes == 0:
+            # No scenes yet — just show the first keyframe
+            kf = self.keyframes[0] if self.keyframes else None
+            if kf:
+                self._row(y, f"Opening keyframe:", bw, curses.A_BOLD); y += 1
+                for line in textwrap.wrap(kf.description, width=bw - 8)[:3]:
+                    self._row(y, f"  {line}", bw); y += 1
+
+            self._hline(y, "├", "─", "┤", bw); y += 1
+            self._row(y, "", bw); y += 1
+            self._row(y, "[Space] View keyframe   [n] Add new scene", bw); y += 1
+            self._row(y, "[r] Render movie        [q] Quit", bw); y += 1
+        else:
+            tr = self.transitions[self.current]
+            kf_from = self.keyframes[tr.index]
+            kf_to = self.keyframes[tr.index + 1]
+
+            # Status
+            st, sc = ("RENDERED", curses.color_pair(C_RENDERED) | curses.A_BOLD) \
+                if tr.has_video(self.run_dir) else \
+                ("PENDING", curses.color_pair(C_PENDING))
+            self._row(y, f"Status: {st}", bw, sc); y += 1
+
+            # Strip
+            self._hline(y, "├", "─", "┤", bw); y += 1
+            parts = []
+            for i, t in enumerate(self.transitions):
+                marker = f"[{i+1}]" if i == self.current else f" {i+1} "
+                parts.append(marker)
+            self._row(y, " ".join(parts), bw); y += 1
+
+            # Keyframes
+            self._hline(y, "├", "─", "┤", bw); y += 1
+            self._row(y, f"From keyframe {kf_from.num}:", bw, curses.A_BOLD); y += 1
+            for line in textwrap.wrap(kf_from.description, width=bw - 8)[:2]:
+                self._row(y, f"  {line}", bw); y += 1
+
+            self._row(y, f"To keyframe {kf_to.num}:", bw, curses.A_BOLD); y += 1
+            for line in textwrap.wrap(kf_to.description, width=bw - 8)[:2]:
+                self._row(y, f"  {line}", bw); y += 1
+
+            # Transition
+            self._row(y, "", bw); y += 1
+            self._row(y, "Transition:", bw, curses.A_BOLD); y += 1
+            for line in textwrap.wrap(tr.description, width=bw - 8)[:3]:
+                self._row(y, f"  {line}", bw); y += 1
+
+            # Voiceover
+            if self.has_voiceover and tr.voiceover_text:
+                self._row(y, "", bw); y += 1
+                self._row(y, "Voiceover:", bw, curses.A_BOLD); y += 1
+                for line in textwrap.wrap(tr.voiceover_text, width=bw - 8)[:2]:
+                    self._row(y, f"  {line}", bw); y += 1
+
+            # Actions
+            self._hline(y, "├", "─", "┤", bw); y += 1
+            self._row(y, "", bw); y += 1
+            self._row(y, "[Space] Play  [Left/Right] Navigate", bw); y += 1
+            self._row(y, "", bw); y += 1
+            self._row(y, "[n] Add new scene       [Enter] Re-render", bw); y += 1
+            self._row(y, "[e] Edit transition     [v] Edit end keyframe", bw); y += 1
+            self._row(y, "[o] Edit voiceover      [s] Soundtrack", bw); y += 1
+            self._row(y, "[r] Render movie        [q] Quit", bw); y += 1
+
+        self._row(y, "", bw); y += 1
+        if self.status_msg:
+            self._row(y, self.status_msg, bw, curses.A_DIM); y += 1
+
+        self._hline(y, "└", "─", "┘", bw)
+        self.stdscr.refresh()
+
+    # ── key handling ─────────────────────────────────────────────────
+
+    def _handle_key(self, key):
+        n_scenes = len(self.transitions)
+
+        if key == ord("n"):
+            self._add_scene()
+        elif key == ord(" "):
+            self._play_current()
+        elif key == ord("\n") or key == curses.KEY_ENTER:
+            if n_scenes > 0:
+                self._rerender_current()
+        elif key == curses.KEY_LEFT or key == ord("h"):
+            if self.current > 0:
+                self.current -= 1
+                self.status_msg = ""
+        elif key == curses.KEY_RIGHT or key == ord("l"):
+            if self.current < n_scenes - 1:
+                self.current += 1
+                self.status_msg = ""
+        elif key == curses.KEY_HOME:
+            self.current = 0
+            self.status_msg = ""
+        elif key == curses.KEY_END:
+            if n_scenes > 0:
+                self.current = n_scenes - 1
+                self.status_msg = ""
+        elif key == ord("e") and n_scenes > 0:
+            self._edit_transition()
+        elif key == ord("v") and n_scenes > 0:
+            self._edit_end_keyframe()
+        elif key == ord("o") and n_scenes > 0:
+            self._edit_voiceover()
+        elif key == ord("s"):
+            self._soundtrack_director()
+        elif key == ord("r"):
+            self._render_movie()
+        elif key == ord("q"):
+            self.status_msg = "Press Q again to quit"
+            self._draw()
+            confirm = self.stdscr.getch()
+            if confirm == ord("q") or confirm == ord("Q"):
+                self.should_quit = True
+            else:
+                self.status_msg = ""
+
+    # ── add scene ────────────────────────────────────────────────────
+
+    def _add_scene(self):
+        """Add a new scene: get prompt, LLM extrapolates, generate keyframe + transition."""
+        self._leave_curses()
+
+        # Duration
+        raw = input(f"\nScene duration in seconds [{self.default_duration}]: ").strip()
+        try:
+            duration = int(raw) if raw else self.default_duration
+        except ValueError:
+            duration = self.default_duration
+
+        # Scene prompt
+        print(f"\nDescribe what happens in this scene (paste text, Ctrl-D to finish):")
+        lines = []
+        try:
+            first = input("> ")
+            lines.append(first)
+            print("  (continue pasting, then Ctrl-D on empty line to finish)")
+            while True:
+                lines.append(input())
+        except EOFError:
+            pass
+        scene_prompt = " ".join("\n".join(lines).split()).strip()
+        if not scene_prompt:
+            print("  Cancelled.")
+            self._resume_curses()
+            return
+
+        # LLM extrapolation
+        from write_script import _voiceover_word_range
+        wlo, whi = _voiceover_word_range(duration)
+        sys_prompt = FREEFORM_SCENE_SYS.format(word_lo=wlo, word_hi=whi)
+
+        prev_kf = self.keyframes[-1]
+        user_msg = (f"Previous keyframe (what we're starting from):\n"
+                    f"  {prev_kf.description}\n\n"
+                    f"Scene duration: {duration} seconds\n\n"
+                    f"Scene idea:\n  {scene_prompt}")
+
+        print(f"\n  Generating scene details via LLM...")
+        sys.stdout.write("  streaming: ")
+        sys.stdout.flush()
+        try:
+            result = call_llm(self.llm_url, self.llm_model, sys_prompt,
+                              user_msg, temperature=0.8, api_key=self.llm_api_key)
+            if isinstance(result, list) and result:
+                scene_data = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+            elif isinstance(result, dict):
+                scene_data = result
+            else:
+                raise ValueError(f"Unexpected LLM response: {type(result)}")
+        except Exception as e:
+            print(f"  LLM failed: {e}")
+            print(f"  Using scene prompt directly.")
+            scene_data = {
+                "end_keyframe": scene_prompt,
+                "transition": scene_prompt,
+                "voiceover": "",
+            }
+
+        end_kf_desc = scene_data.get("end_keyframe", scene_prompt)
+        transition_desc = scene_data.get("transition", scene_prompt)
+        voiceover_text = scene_data.get("voiceover", "")
+
+        print(f"\n  End keyframe: {end_kf_desc[:80]}...")
+        print(f"  Transition:   {transition_desc[:80]}...")
+        if voiceover_text:
+            print(f"  Voiceover:    {voiceover_text[:80]}...")
+
+        # Create the new keyframe and transition
+        new_kf_idx = len(self.keyframes)
+        new_kf = Keyframe(new_kf_idx, end_kf_desc)
+        self.keyframes.append(new_kf)
+
+        tr_idx = len(self.transitions)
+        new_tr = TransitionClip(tr_idx, transition_desc, voiceover_text)
+        self.transitions.append(new_tr)
+
+        # Generate end keyframe image
+        self._render_keyframe_terminal(new_kf_idx)
+
+        # Render voiceover
+        if self.has_voiceover and voiceover_text and self.tts_dir:
+            vo_path = new_tr.vo_path(self.run_dir)
+            if not os.path.exists(vo_path):
+                print(f"\n  Rendering voiceover...")
+                try:
+                    render_segment_tts(
+                        self.tts_dir, self.base_url,
+                        voiceover_text, self.voice, vo_path,
+                        seed=self.tts_seed + tr_idx,
+                    )
+                    print(f"  Saved: {vo_path}")
+                except Exception as e:
+                    print(f"  Voiceover failed: {e}")
+
+        # Render transition
+        self._render_transition_terminal(tr_idx, duration)
+
+        self.current = tr_idx
+        self._save_session()
+        self._resume_curses()
+
+    # ── rendering ────────────────────────────────────────────────────
+
+    def _render_keyframe_terminal(self, idx):
+        kf = self.keyframes[idx]
+        noise_seed = random.randint(0, 2**53)
+        output_png = kf.image_path(self.run_dir)
+
+        print(f"\n{'='*60}")
+        print(f"  Generating keyframe {kf.num}")
+        print(f"  Prompt: {kf.description[:70]}...")
+        print(f"  Seed:   {noise_seed}")
+        print(f"{'='*60}")
+
+        wf = patch_t2i_workflow(
+            self.t2i_template,
+            prompt_text=kf.description,
+            negative_prompt_text=self.negative_prompt,
+            seed_value=noise_seed,
+            output_prefix=f"{self.seed}/keyframe_{kf.num:02d}",
+        )
+
+        start = time.time()
+        try:
+            history = run_workflow(self.base_url, wf, timeout=self.timeout)
+            download_output(self.base_url, history, output_png,
+                            output_type="images")
+            elapsed = time.time() - start
+            print(f"  Generated in {fmt_duration(elapsed)}")
+            kf.status = "approved"
+        except Exception as e:
+            print(f"  Generation failed: {e}")
+
+    def _render_transition_terminal(self, idx, duration_seconds=None):
+        tr = self.transitions[idx]
+        kf_from = self.keyframes[idx]
+        kf_to = self.keyframes[idx + 1]
+
+        if duration_seconds is None:
+            duration_seconds = self.default_duration
+
+        first_img = kf_from.image_path(self.run_dir)
+        last_img = kf_to.image_path(self.run_dir)
+
+        if not os.path.exists(first_img) or not os.path.exists(last_img):
+            print(f"  Error: keyframe images missing")
+            return
+
+        noise_seed = random.randint(0, 2**53)
+        output_video = tr.video_path(self.run_dir)
+
+        total_frames = duration_seconds * self.frame_rate + 1
+        print(f"\n{'='*60}")
+        print(f"  Rendering scene {tr.num}")
+        print(f"  From:     keyframe {kf_from.num}")
+        print(f"  To:       keyframe {kf_to.num}")
+        print(f"  Prompt:   {tr.description[:70]}...")
+        print(f"  Seed:     {noise_seed}")
+        print(f"  Duration: {duration_seconds}s ({total_frames} frames)")
+        print(f"{'='*60}")
+
+        uploaded_first = upload_image(self.base_url, first_img)
+        uploaded_last = upload_image(self.base_url, last_img)
+
+        wf = patch_transition_workflow(
+            self.transition_template,
+            first_image_name=uploaded_first,
+            last_image_name=uploaded_last,
+            prompt_text=tr.description,
+            negative_prompt_text=self.negative_prompt,
+            seed_value=noise_seed,
+            width=self.width,
+            height=self.height,
+            frame_rate=self.frame_rate,
+            duration_seconds=duration_seconds,
+            output_prefix=f"{self.seed}/transition_{tr.num:02d}",
+        )
+
+        start = time.time()
+        try:
+            history = run_workflow(self.base_url, wf, timeout=self.timeout)
+            download_output(self.base_url, history, output_video,
+                            strip_audio=self.strip_audio)
+            elapsed = time.time() - start
+            actual_dur = get_duration(output_video)
+            if actual_dur is not None:
+                print(f"  Rendered in {fmt_duration(elapsed)}, "
+                      f"clip duration: {actual_dur:.1f}s")
+            else:
+                print(f"  Rendered in {fmt_duration(elapsed)}")
+            tr.status = "rendered"
+        except Exception as e:
+            print(f"  Render failed: {e}")
+
+    # ── playback ─────────────────────────────────────────────────────
+
+    def _play_current(self):
+        if not self.transitions:
+            # Play the opening keyframe
+            if self.keyframes and self.keyframes[0].has_image(self.run_dir):
+                if not shutil.which("mpv"):
+                    self.status_msg = "mpv not found"
+                    return
+                self._leave_curses()
+                subprocess.run(["mpv", "--really-quiet",
+                               self.keyframes[0].image_path(self.run_dir)],
+                               check=False)
+                self._resume_curses()
+            return
+
+        tr = self.transitions[self.current]
+        if not tr.has_video(self.run_dir):
+            self.status_msg = "No video to play"
+            return
+        if not shutil.which("mpv"):
+            self.status_msg = "mpv not found"
+            return
+
+        # Mux voiceover for preview
+        preview = self._make_preview(tr)
+        self._leave_curses()
+        subprocess.run(["mpv", "--really-quiet", preview], check=False)
+        self._resume_curses()
+
+    def _make_preview(self, tr):
+        video = tr.video_path(self.run_dir)
+        vo_wav = tr.vo_path(self.run_dir)
+        preview = os.path.join(self.run_dir, f"preview_{tr.num:02d}.mp4")
+
+        if not os.path.exists(vo_wav):
+            return video
+
+        if os.path.exists(preview):
+            ptime = os.path.getmtime(preview)
+            if (ptime > os.path.getmtime(video) and
+                    ptime > os.path.getmtime(vo_wav)):
+                return preview
+
+        vid_dur = get_duration(video)
+        if vid_dur is None:
+            return video
+
+        padded = os.path.join(self.run_dir, f"_pad_{tr.num:02d}.wav")
+        try:
+            pad_audio_centered(vo_wav, vid_dur, padded)
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", video, "-i", padded,
+                 "-map", "0:v", "-map", "1:a",
+                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                 "-shortest", preview],
+                capture_output=True,
+            )
+            if os.path.exists(padded):
+                os.unlink(padded)
+            if result.returncode == 0:
+                return preview
+        except Exception:
+            pass
+        return video
+
+    # ── editing ──────────────────────────────────────────────────────
+
+    def _rerender_current(self):
+        if not self.transitions:
+            return
+        tr = self.transitions[self.current]
+        _delete_if_exists(tr.video_path(self.run_dir))
+        _delete_if_exists(os.path.join(self.run_dir, f"preview_{tr.num:02d}.mp4"))
+        self._leave_curses()
+        self._render_transition_terminal(self.current)
+        self._save_session()
+        self._resume_curses()
+
+    def _edit_transition(self):
+        tr = self.transitions[self.current]
+        new_desc = self._input_text(
+            f"Current transition prompt:\n  {tr.description}\n\n"
+            "Enter new prompt (or Enter to cancel):\n",
+            prefill=tr.description,
+        )
+        if not new_desc or new_desc == tr.description:
+            self.status_msg = "No changes"
+            return
+        tr.description = new_desc
+        _delete_if_exists(tr.video_path(self.run_dir))
+        _delete_if_exists(os.path.join(self.run_dir, f"preview_{tr.num:02d}.mp4"))
+        self._leave_curses()
+        self._render_transition_terminal(self.current)
+        self._save_session()
+        self._resume_curses()
+
+    def _edit_end_keyframe(self):
+        tr = self.transitions[self.current]
+        kf = self.keyframes[tr.index + 1]
+        new_desc = self._input_text(
+            f"Current end keyframe description:\n  {kf.description}\n\n"
+            "Enter new description (or Enter to cancel):\n",
+            prefill=kf.description,
+        )
+        if not new_desc or new_desc == kf.description:
+            self.status_msg = "No changes"
+            return
+        kf.description = new_desc
+        self._leave_curses()
+        self._render_keyframe_terminal(kf.index)
+        # Re-render this transition and invalidate later ones
+        _delete_if_exists(tr.video_path(self.run_dir))
+        _delete_if_exists(os.path.join(self.run_dir, f"preview_{tr.num:02d}.mp4"))
+        self._render_transition_terminal(self.current)
+        # Invalidate transitions after this one (they depend on this keyframe)
+        for i in range(self.current + 1, len(self.transitions)):
+            later = self.transitions[i]
+            _delete_if_exists(later.video_path(self.run_dir))
+            _delete_if_exists(os.path.join(self.run_dir, f"preview_{later.num:02d}.mp4"))
+            later.status = "pending"
+        self._save_session()
+        self._resume_curses()
+
+    def _edit_voiceover(self):
+        if not self.has_voiceover:
+            self.status_msg = "Voiceover disabled"
+            return
+        tr = self.transitions[self.current]
+        new_vo = self._input_text(
+            f"Current voiceover:\n  {tr.voiceover_text}\n\n"
+            "Enter new voiceover (or Enter to cancel):\n",
+            prefill=tr.voiceover_text,
+        )
+        if not new_vo or new_vo == tr.voiceover_text:
+            self.status_msg = "No changes"
+            return
+        tr.voiceover_text = new_vo
+        if self.tts_dir:
+            vo_path = tr.vo_path(self.run_dir)
+            _delete_if_exists(vo_path)
+            _delete_if_exists(os.path.join(self.run_dir, f"preview_{tr.num:02d}.mp4"))
+            self._leave_curses()
+            print(f"\nRendering voiceover for scene {tr.num}...")
+            try:
+                render_segment_tts(
+                    self.tts_dir, self.base_url,
+                    tr.voiceover_text, self.voice, vo_path,
+                    seed=self.tts_seed + tr.index,
+                )
+                print(f"  Saved: {vo_path}")
+            except Exception as e:
+                print(f"  Failed: {e}")
+            self._resume_curses()
+        self._save_session()
+        self.status_msg = "Voiceover updated"
+
+    # ── soundtrack (reuse from TransitionDirectorTUI) ────────────────
+
+    def _soundtrack_director(self):
+        dir_name = os.path.basename(self.run_dir)
+        final_path = os.path.join(self.run_dir, f"{dir_name}.mp4")
+        if not os.path.exists(final_path):
+            self.status_msg = "Render movie first with [r]"
+            return
+
+        total_dur = get_duration(final_path)
+        if total_dur is None:
+            self.status_msg = "Could not get movie duration"
+            return
+
+        self._leave_curses()
+        print(f"\n{'='*60}")
+        print(f"  SOUNDTRACK DIRECTOR")
+        print(f"  Movie: {final_path}")
+        print(f"  Duration: {total_dur:.1f}s")
+        print(f"{'='*60}")
+
+        raw = input(f"\nHow many soundtrack sections? [1]: ").strip()
+        try:
+            n_sections = int(raw) if raw else 1
+            n_sections = max(1, n_sections)
+        except ValueError:
+            n_sections = 1
+
+        section_dur = total_dur / n_sections
+        sections = []
+        for i in range(n_sections):
+            start = section_dur * i
+            end = section_dur * (i + 1)
+            print(f"\n  Section {i+1}/{n_sections} ({start:.0f}s - {end:.0f}s)")
+            print(f"  Enter music description (paste text, Ctrl-D to finish):")
+            lines = []
+            try:
+                first = input("  > ")
+                lines.append(first)
+                while True:
+                    lines.append(input())
+            except EOFError:
+                pass
+            prompt = " ".join("\n".join(lines).split()).strip()
+            if not prompt:
+                prompt = "cinematic orchestral soundtrack"
+            sections.append({"prompt": prompt, "duration": int(round(section_dur))})
+
+        bpm = int(input("\nBPM [120]: ").strip() or "120")
+        keyscale = input("Key/scale [C minor]: ").strip() or "C minor"
+
+        print(f"\n{'='*60}")
+        print(f"  Rendering {n_sections} soundtrack sections...")
+        print(f"{'='*60}")
+
+        soundtrack_files = []
+        for i, sec in enumerate(sections):
+            output_mp3 = os.path.join(self.run_dir, f"soundtrack_{i+1:02d}.mp3")
+            if os.path.exists(output_mp3):
+                print(f"\n  Section {i+1} exists: {output_mp3}")
+                soundtrack_files.append(output_mp3)
+                continue
+
+            noise_seed = random.randint(0, 2**53)
+            wf = patch_audio_workflow(
+                self.audio_template,
+                prompt_text=sec["prompt"],
+                seed_value=noise_seed,
+                duration_seconds=sec["duration"],
+                bpm=bpm, keyscale=keyscale,
+                output_prefix=f"{self.seed}/soundtrack_{i+1:02d}",
+            )
+            try:
+                history = run_workflow(self.base_url, wf, timeout=self.timeout)
+                download_output(self.base_url, history, output_mp3,
+                                output_type="audio")
+                soundtrack_files.append(output_mp3)
+            except Exception as e:
+                print(f"  Render failed: {e}")
+
+        if not soundtrack_files:
+            self._resume_curses()
+            return
+
+        import tempfile
+        tmpdir = tempfile.mkdtemp(prefix="soundtrack-")
+        try:
+            if len(soundtrack_files) == 1:
+                full_st = soundtrack_files[0]
+            else:
+                slist = os.path.join(tmpdir, "st.txt")
+                with open(slist, "w") as f:
+                    for sf in soundtrack_files:
+                        f.write(f"file '{os.path.abspath(sf)}'\n")
+                full_st = os.path.join(tmpdir, "full.mp3")
+                subprocess.run(
+                    ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                     "-i", slist, "-c", "copy", full_st],
+                    capture_output=True, check=True)
+
+            scored_path = os.path.join(self.run_dir, f"{dir_name}_scored.mp4")
+            probe = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-select_streams", "a",
+                 "-show_entries", "stream=index", "-of", "csv=p=0", final_path],
+                capture_output=True, text=True)
+            has_audio = bool(probe.stdout.strip())
+
+            if has_audio:
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", final_path, "-i", full_st,
+                     "-filter_complex",
+                     "[0:a]volume=1.0[orig];[1:a]volume=0.5[music];"
+                     "[orig][music]amix=inputs=2:duration=first[aout]",
+                     "-map", "0:v", "-map", "[aout]",
+                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                     scored_path], capture_output=True)
+            else:
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", final_path, "-i", full_st,
+                     "-map", "0:v", "-map", "1:a",
+                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                     "-shortest", scored_path], capture_output=True)
+
+            if result.returncode == 0 and os.path.exists(scored_path):
+                print(f"\n  Saved: {scored_path}")
+                if shutil.which("mpv"):
+                    subprocess.run(["mpv", "--really-quiet", scored_path], check=False)
+        finally:
+            import shutil as shutil_mod
+            shutil_mod.rmtree(tmpdir, ignore_errors=True)
+
+        self._resume_curses()
+
+    # ── render movie ─────────────────────────────────────────────────
+
+    def _render_movie(self):
+        if not self.transitions:
+            self.status_msg = "No scenes to render"
+            return
+        self._save_session()
+        self._leave_curses()
+        print()
+        print("=" * 60)
+        usable = [tr for tr in self.transitions if tr.has_video(self.run_dir)]
+        print(f"  RENDERING MOVIE  ({len(usable)} scenes)")
+        print("=" * 60)
+
+        try:
+            cmd = ["python3", "mux.py", "--seed", str(self.seed),
+                   "--pattern", "transition"]
+            subprocess.run(cmd, check=True)
+            dir_name = os.path.basename(self.run_dir)
+            final_path = os.path.join(self.run_dir, f"{dir_name}.mp4")
+            if os.path.exists(final_path):
+                if shutil.which("mpv"):
+                    print(f"\nPlaying: {final_path}")
+                    subprocess.run(["mpv", "--really-quiet", final_path],
+                                   check=False)
+                else:
+                    print(f"\nSaved: {final_path} (install mpv to auto-play)")
+        except subprocess.CalledProcessError as e:
+            print(f"  Mux failed: {e}")
+
+        self._resume_curses()
+
+    # ── persistence ──────────────────────────────────────────────────
+
+    def _session_path(self):
+        return os.path.join(self.run_dir, "session.json")
+
+    def _save_session(self):
+        session = {
+            "mode": "freeform",
+            "current": self.current,
+            "default_duration": self.default_duration,
+            "width": self.width,
+            "height": self.height,
+            "frame_rate": self.frame_rate,
+            "keyframes": [
+                {"description": kf.description, "status": kf.status}
+                for kf in self.keyframes
+            ],
+            "transitions": [
+                {
+                    "description": tr.description,
+                    "voiceover_text": tr.voiceover_text,
+                    "status": tr.status,
+                }
+                for tr in self.transitions
+            ],
+        }
+        with open(self._session_path(), "w") as f:
+            json.dump(session, f, indent=2)
+            f.write("\n")
+
+    def _load_session(self):
+        path = self._session_path()
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path) as f:
+                session = json.load(f)
+        except (json.JSONDecodeError, KeyError):
+            return False
+
+        if session.get("mode") != "freeform":
+            return False
+
+        self.current = session.get("current", 0)
+        if session.get("default_duration"):
+            self.default_duration = session["default_duration"]
+        if session.get("width"):
+            self.width = session["width"]
+        if session.get("height"):
+            self.height = session["height"]
+        if session.get("frame_rate"):
+            self.frame_rate = session["frame_rate"]
+
+        self.keyframes = []
+        for i, skf in enumerate(session.get("keyframes", [])):
+            kf = Keyframe(i, skf["description"])
+            if skf["status"] in ("generated", "approved") and kf.has_image(self.run_dir):
+                kf.status = skf["status"]
+            elif kf.has_image(self.run_dir):
+                kf.status = "generated"
+            self.keyframes.append(kf)
+
+        self.transitions = []
+        for i, str_ in enumerate(session.get("transitions", [])):
+            tr = TransitionClip(i, str_["description"], str_.get("voiceover_text", ""))
+            if str_["status"] in ("rendered", "approved") and tr.has_video(self.run_dir):
+                tr.status = str_["status"]
+            elif tr.has_video(self.run_dir):
+                tr.status = "rendered"
+            self.transitions.append(tr)
+
+        self.current = min(self.current, max(0, len(self.transitions) - 1))
+        return bool(self.keyframes)
+
+
+def _run_freeform_mode(args, run_dir, base_url, llm_url, llm_model,
+                       llm_api_key, style, strip_audio):
+    """Run the freeform director TUI."""
+    negative_prompt = args.negative_prompt or style.get("negative_prompt", "")
+    has_voiceover = not args.no_voiceover
+    default_duration = args.duration if args.duration else style.get("default_duration", 10)
+
+    tts_dir = None
+    if has_voiceover:
+        tts_dir = TTS_DEMO_DIR
+        if not os.path.isdir(tts_dir):
+            print(f"Warning: tts-demo not found at {tts_dir}")
+            print("  Voiceover audio will be disabled.")
+            tts_dir = None
+
+    t2i_template = load_workflow(args.t2i_workflow)
+    transition_template = load_workflow(args.transition_workflow)
+    audio_template = load_workflow(args.audio_workflow)
+
+    tui = FreeformDirectorTUI(
+        run_dir=run_dir,
+        t2i_template=t2i_template,
+        transition_template=transition_template,
+        audio_template=audio_template,
+        base_url=base_url,
+        negative_prompt=negative_prompt,
+        default_duration=default_duration,
+        width=args.transition_width,
+        height=args.transition_height,
+        frame_rate=args.transition_fps,
+        strip_audio=strip_audio,
+        voice=args.voice,
+        tts_dir=tts_dir,
+        tts_seed=args.tts_seed,
+        seed=args.seed,
+        timeout=args.timeout,
+        has_voiceover=has_voiceover,
+        llm_url=llm_url,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
+    )
+    tui.run()
 
 
 def _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
@@ -2625,8 +3567,8 @@ def main():
         description="Interactive director mode TUI for video generation"
     )
     parser.add_argument("--mode", default="chain",
-                        choices=["chain", "transition"],
-                        help="Director mode: chain (sequential I2V) or transition (keyframe pairs)")
+                        choices=["chain", "transition", "freeform"],
+                        help="Director mode: chain (sequential I2V), transition (keyframe pairs), freeform (improvised scenes)")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--theme", nargs="+", default=None)
     parser.add_argument("--style", default=None)
@@ -2697,6 +3639,8 @@ def main():
                     saved_session = json.load(f)
                 if saved_session.get("mode") == "transition":
                     args.mode = "transition"
+                elif saved_session.get("mode") == "freeform":
+                    args.mode = "freeform"
                 if saved_session.get("style"):
                     args.style = args.style or saved_session["style"]
             except (json.JSONDecodeError, KeyError):
@@ -2738,6 +3682,12 @@ def main():
     if is_transition:
         _run_transition_mode(args, run_dir, base_url, llm_url, llm_model,
                              llm_api_key, style, strip_audio, length)
+        return
+
+    # ── freeform mode ────────────────────────────────────────────────
+    if args.mode == "freeform":
+        _run_freeform_mode(args, run_dir, base_url, llm_url, llm_model,
+                           llm_api_key, style, strip_audio)
         return
 
     workflow_template = load_workflow(args.workflow)
