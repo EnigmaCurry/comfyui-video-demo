@@ -1407,8 +1407,8 @@ class TransitionDirectorTUI:
         else:
             self._row(y, "[Enter] Generate keyframe image", bw); y += 1
 
-        self._row(y, "[v] Edit description   [r] Render movie", bw); y += 1
-        self._row(y, "[q] Quit", bw); y += 1
+        self._row(y, "[v] Edit description   [A] Auto-approve all", bw); y += 1
+        self._row(y, "[r] Render movie       [q] Quit", bw); y += 1
 
         all_approved = all(k.status == "approved" for k in self.keyframes)
         if all_approved:
@@ -1483,8 +1483,9 @@ class TransitionDirectorTUI:
             self._row(y, "[Enter] Render transition", bw); y += 1
             self._row(y, "[e] Edit transition prompt", bw); y += 1
 
-        self._row(y, "[b] Back to keyframes  [r] Render movie  [q] Quit",
+        self._row(y, "[A] Auto-approve all   [b] Back to keyframes",
                   bw); y += 1
+        self._row(y, "[r] Render movie       [q] Quit", bw); y += 1
 
         self._row(y, "", bw); y += 1
         if self.status_msg:
@@ -1595,6 +1596,8 @@ class TransitionDirectorTUI:
             self._approve_keyframe()
         elif key == ord("v"):
             self._edit_keyframe_description()
+        elif key == ord("A"):
+            self._auto_approve_keyframes()
         elif key == ord("g"):
             all_approved = all(k.status == "approved" for k in self.keyframes)
             if all_approved:
@@ -1629,6 +1632,8 @@ class TransitionDirectorTUI:
             self.status_msg = ""
         elif key == ord("a"):
             self._approve_transition()
+        elif key == ord("A"):
+            self._auto_approve_transitions()
         elif key == ord("e"):
             self._edit_transition_prompt()
         elif key == ord("o"):
@@ -1756,6 +1761,54 @@ class TransitionDirectorTUI:
         self._render_keyframe_terminal(self.current)
         self._save_session()
         self._resume_curses()
+
+    # ── auto-approve ─────────────────────────────────────────────────
+
+    def _auto_approve_keyframes(self):
+        """Generate and approve all remaining keyframes without interaction."""
+        self._leave_curses()
+        print(f"\n{'='*60}")
+        print(f"  AUTO-APPROVE: generating all remaining keyframes")
+        print(f"{'='*60}")
+
+        for i, kf in enumerate(self.keyframes):
+            if kf.status == "approved":
+                continue
+            if not kf.has_image(self.run_dir):
+                self._render_keyframe_terminal(i)
+            if kf.has_image(self.run_dir):
+                kf.status = "approved"
+                print(f"  Keyframe {kf.num} approved")
+            self.current = i
+            self._save_session()
+
+        print(f"\n  All keyframes approved. Entering transition phase.")
+        self.phase = self.PHASE_TRANSITIONS
+        self.current = 0
+        self._save_session()
+        self._resume_curses()
+
+    def _auto_approve_transitions(self):
+        """Render and approve all remaining transitions without interaction."""
+        self._leave_curses()
+        print(f"\n{'='*60}")
+        print(f"  AUTO-APPROVE: rendering all remaining transitions")
+        print(f"{'='*60}")
+
+        for i, tr in enumerate(self.transitions):
+            if tr.status == "approved":
+                continue
+            if not tr.has_video(self.run_dir):
+                self._render_transition_terminal(i)
+            if tr.has_video(self.run_dir):
+                tr.status = "approved"
+                print(f"  Transition {tr.num} approved")
+            self.current = i
+            self._save_session()
+
+        print(f"\n  All transitions approved. Press [r] to render movie.")
+        self._resume_curses()
+        self.status_msg = "All transitions approved! Press [r] to render movie"
 
     # ── transition actions ───────────────────────────────────────────
 
