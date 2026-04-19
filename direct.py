@@ -2123,10 +2123,11 @@ class TransitionDirectorTUI:
         print(f"  Rendering {n_sections} soundtrack sections...")
         print(f"{'='*60}")
 
-        # Delete old soundtrack files so fresh prompts always render
+        # Delete old soundtrack files and scored video so everything re-renders
         import glob as _glob
         for old in _glob.glob(os.path.join(self.run_dir, "soundtrack_*.mp3")):
             os.unlink(old)
+        _delete_if_exists(os.path.join(self.run_dir, f"{dir_name}_scored.mp4"))
 
         soundtrack_files = []
         for i, sec in enumerate(sections):
@@ -3178,10 +3179,11 @@ class FreeformDirectorTUI:
         print(f"  Rendering {n_sections} soundtrack sections...")
         print(f"{'='*60}")
 
-        # Delete old soundtrack files so fresh prompts always render
+        # Delete old soundtrack files and scored video so everything re-renders
         import glob as _glob
         for old in _glob.glob(os.path.join(self.run_dir, "soundtrack_*.mp3")):
             os.unlink(old)
+        _delete_if_exists(os.path.join(self.run_dir, f"{dir_name}_scored.mp4"))
 
         soundtrack_files = []
         for i, sec in enumerate(sections):
