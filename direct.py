@@ -2106,6 +2106,28 @@ def _ask(prompt, default=None):
     return value if value else (str(default) if default is not None else "")
 
 
+def _ask_multiline(prompt):
+    """Read free-form multiline input terminated by Ctrl-D (EOF) or a single Enter on a short input."""
+    print(f"{prompt}:")
+    lines = []
+    try:
+        first = input("> ")
+        lines.append(first)
+        # If the first line looks complete (non-empty, no trailing indication of more),
+        # check if there's more input coming by reading until EOF
+        print("  (continue pasting, then press Ctrl-D on an empty line to finish)")
+        while True:
+            lines.append(input())
+    except EOFError:
+        pass
+    except KeyboardInterrupt:
+        print()
+        sys.exit(0)
+    text = "\n".join(lines).strip()
+    # Collapse to single line for use as theme (newlines → spaces)
+    return " ".join(text.split())
+
+
 def _ask_choice(prompt, choices, default=None):
     """Prompt the user to pick from a list of choices."""
     for i, c in enumerate(choices):
@@ -2137,7 +2159,7 @@ def interactive_setup(args):
     print()
 
     if not args.theme:
-        args.theme = _ask("Theme")
+        args.theme = _ask_multiline("Theme (paste text, then Ctrl-D to finish)")
         if not args.theme:
             print("Error: theme is required")
             sys.exit(1)
