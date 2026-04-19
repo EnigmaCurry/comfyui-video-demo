@@ -2470,7 +2470,7 @@ def interactive_setup(args):
 FREEFORM_SCENE_SYS = """\
 You are a visual director helping to plan a single scene in an improvised video.
 
-Given a user's scene idea, generate THREE things as a JSON object:
+Given a user's scene idea, generate THREE things:
 1. "end_keyframe": A vivid 1-3 sentence description of a STILL IMAGE showing \
 what the scene ends on. Concrete, specific, visual — no abstract language.
 2. "transition": A 1-3 sentence description of the MOTION and TRANSFORMATION \
@@ -2480,8 +2480,9 @@ sweeps, dissolves, pulls back, rushes forward.
 words. Poetic, contemplative, or dramatic — complements the visuals without \
 describing them literally.
 
-Respond with a JSON object with keys "end_keyframe", "transition", "voiceover". \
-No other text.\
+Respond with a JSON array containing one object with keys "end_keyframe", \
+"transition", "voiceover". Example: [{{"end_keyframe": "...", "transition": \
+"...", "voiceover": "..."}}]. No other text.\
 """
 
 
@@ -2815,13 +2816,13 @@ class FreeformDirectorTUI:
         try:
             result = call_llm(self.llm_url, self.llm_model, sys_prompt,
                               user_msg, temperature=0.8, api_key=self.llm_api_key)
-            if isinstance(result, list) and result:
-                scene_data = result[0] if isinstance(result[0], dict) else json.loads(result[0])
-            elif isinstance(result, dict):
-                scene_data = result
+            # call_llm returns a list; we expect [{"end_keyframe":..., ...}]
+            item = result[0]
+            if isinstance(item, str):
+                scene_data = json.loads(item)
             else:
-                raise ValueError(f"Unexpected LLM response: {type(result)}")
-        except Exception as e:
+                scene_data = item
+        except (SystemExit, Exception) as e:
             print(f"  LLM failed: {e}")
             print(f"  Using scene prompt directly.")
             scene_data = {
