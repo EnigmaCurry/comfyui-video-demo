@@ -194,48 +194,32 @@
     node.focus();
   }
 
-  async function handleFullscreenKeydown(e) {
+  function handleFullscreenKeydown(e) {
     if (e.key === 'Escape') {
       fullscreen = false;
-      return;
     }
-    // Ctrl+C: copy image to clipboard
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c' && imageUrl) {
-      e.preventDefault();
-      try {
-        const resp = await fetch(imageUrl);
-        const blob = await resp.blob();
-        await navigator.clipboard.write([
-          new ClipboardItem({ [blob.type]: blob })
-        ]);
-        onstatus({ detail: `Keyframe ${index + 1} copied to clipboard.` });
-      } catch (err) {
-        onstatus({ detail: `Copy failed: ${err.message}` });
-      }
-    }
-    // Ctrl+V: paste image from clipboard
-    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-      e.preventDefault();
-      try {
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-          const imageType = item.types.find(t => t.startsWith('image/'));
-          if (imageType) {
-            const blob = await item.getType(imageType);
-            const file = new File([blob], 'pasted.png', { type: imageType });
-            onstatus({ detail: `Pasting replacement for keyframe ${index + 1}...` });
-            const result = await uploadKeyframeImage(keyframe.id, file);
-            keyframe.image_filename = result.image_filename;
-            keyframe.seed = result.seed;
-            keyframe.status = result.status;
-            fullscreen = false;
-            onstatus({ detail: `Keyframe ${index + 1} replaced from clipboard.` });
-            return;
-          }
+  }
+
+  async function handleFullscreenPaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+        onstatus({ detail: `Pasting replacement for keyframe ${index + 1}...` });
+        try {
+          const result = await uploadKeyframeImage(keyframe.id, blob);
+          keyframe.image_filename = result.image_filename;
+          keyframe.seed = result.seed;
+          keyframe.status = result.status;
+          fullscreen = false;
+          onstatus({ detail: `Keyframe ${index + 1} replaced from clipboard.` });
+        } catch (err) {
+          onstatus({ detail: `Paste failed: ${err.message}` });
         }
-        onstatus({ detail: 'No image found in clipboard.' });
-      } catch (err) {
-        onstatus({ detail: `Paste failed: ${err.message}` });
+        return;
       }
     }
   }
@@ -376,10 +360,10 @@
 {#if fullscreen && imageUrl}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fullscreen-overlay" onclick={() => fullscreen = false}
-       onkeydown={handleFullscreenKeydown} tabindex="-1"
-       use:focusOverlay>
+       onkeydown={handleFullscreenKeydown} onpaste={handleFullscreenPaste}
+       tabindex="-1" use:focusOverlay>
     <img src={imageUrl} alt="Keyframe {index + 1} full size" />
-    <div class="fullscreen-hint">Ctrl+C copy / Ctrl+V paste / Esc close</div>
+    <div class="fullscreen-hint">Ctrl+V paste / Esc close</div>
   </div>
 {/if}
 
