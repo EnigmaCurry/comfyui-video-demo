@@ -592,6 +592,14 @@ async def api_lock_transitions():
     return {"project": proj.model_dump()}
 
 
+@app.put("/api/narration/direction")
+async def api_set_narration_direction(body: dict):
+    proj = _get_project()
+    proj.narration_direction = body.get("direction", "")
+    _save()
+    return {"direction": proj.narration_direction}
+
+
 @app.put("/api/narration/{transition_id}")
 async def api_update_narration(transition_id: str, body: dict):
     tr = _get_transition(transition_id)
@@ -628,14 +636,6 @@ async def api_regenerate_narration(body: dict | None = None):
     proj.narration_active_index = 0
     _save()
     return {"project": proj.model_dump()}
-
-
-@app.put("/api/narration/direction")
-async def api_set_narration_direction(body: dict):
-    proj = _get_project()
-    proj.narration_direction = body.get("direction", "")
-    _save()
-    return {"direction": proj.narration_direction}
 
 
 # ── File serving ────────────────────────────────────────────────────
