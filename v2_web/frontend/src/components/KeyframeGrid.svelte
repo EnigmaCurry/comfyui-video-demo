@@ -2,20 +2,22 @@
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import KeyframeCard from './KeyframeCard.svelte';
-  import { reorderKeyframes, renderKeyframe } from '../lib/api.js';
+  import { reorderKeyframes, renderKeyframe, setActiveIndex } from '../lib/api.js';
 
-  let { keyframes = $bindable([]), onupdated, onstatus } = $props();
+  let { keyframes = $bindable([]), projectId = '', onupdated, onstatus } = $props();
 
-  // Index of the card currently being reviewed (has the approve button)
   let activeIndex = $state(0);
 
   const flipDurationMs = 200;
 
-  // Reset active index when keyframes are replaced (new generation)
+  // Allow parent to set activeIndex when loading a project
+  export function setActive(idx) {
+    activeIndex = idx;
+  }
+
   let prevLength = $state(0);
   $effect(() => {
     if (keyframes.length > 0 && keyframes.length !== prevLength) {
-      // Only reset if this looks like a fresh generation (went from 0 or changed count)
       if (prevLength === 0) {
         activeIndex = 0;
       }
@@ -41,9 +43,9 @@
     const id = event.detail;
     const deletedIdx = keyframes.findIndex(kf => kf.id === id);
     keyframes = keyframes.filter(kf => kf.id !== id);
-    // Adjust activeIndex if needed
     if (deletedIdx <= activeIndex && activeIndex > 0) {
       activeIndex--;
+      setActiveIndex(activeIndex);
     }
   }
 
@@ -51,8 +53,8 @@
     const nextIndex = activeIndex + 1;
     if (nextIndex < keyframes.length) {
       activeIndex = nextIndex;
+      setActiveIndex(activeIndex);
       const nextKf = keyframes[nextIndex];
-      // Render the next keyframe
       if (nextKf.status === 'pending') {
         onstatus({ detail: `Approved #${activeIndex}. Rendering #${nextIndex + 1}...` });
         try {
@@ -66,7 +68,8 @@
       }
     } else {
       onstatus({ detail: 'All keyframes approved!' });
-      activeIndex = keyframes.length; // no active card
+      activeIndex = keyframes.length;
+      setActiveIndex(activeIndex);
     }
   }
 </script>
@@ -82,6 +85,7 @@
           keyframe={kf}
           index={i}
           active={i === activeIndex}
+          {projectId}
           {onstatus}
           {onupdated}
           ondelete={handleDelete}

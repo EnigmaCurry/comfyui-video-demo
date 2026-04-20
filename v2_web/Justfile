@@ -75,5 +75,5 @@ build:
 # Clean output and build artifacts
 [confirm("Remove output/ and frontend/dist/?")]
 clean:
-    rm -rf backend/output/ frontend/dist/ backend/__pycache__/
+    rm -rf backend/projects/ backend/output/ frontend/dist/ backend/__pycache__/
     @echo "Cleaned"

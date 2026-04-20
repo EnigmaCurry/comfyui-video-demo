@@ -1,4 +1,5 @@
 output/
+projects/
 __pycache__/
 .env
 .venv/

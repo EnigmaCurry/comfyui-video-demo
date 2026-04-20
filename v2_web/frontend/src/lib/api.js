@@ -20,6 +20,26 @@ async function request(method, path, body = null) {
   return resp.json();
 }
 
+// ── Projects ──
+
+export async function listProjects() {
+  return request('GET', '/projects');
+}
+
+export async function getCurrentProject() {
+  return request('GET', '/projects/current');
+}
+
+export async function loadProject(id) {
+  return request('POST', `/projects/${id}/load`);
+}
+
+export async function deleteProject(id) {
+  return request('DELETE', `/projects/${id}`);
+}
+
+// ── Keyframes ──
+
 export async function listKeyframes() {
   return request('GET', '/keyframes');
 }
@@ -58,4 +78,8 @@ export async function lockKeyframe(id) {
 
 export async function unlockKeyframe(id) {
   return request('POST', `/keyframes/${id}/unlock`);
+}
+
+export async function setActiveIndex(activeIndex) {
+  return request('PUT', '/active-index', { active_index: activeIndex });
 }

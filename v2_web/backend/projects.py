@@ -1,0 +1,89 @@
+"""Project persistence — JSON files on disk.
+
+Each project is stored as a directory under PROJECTS_DIR:
+  projects/{id}/project.json   — project metadata + keyframes
+  projects/{id}/images/        — rendered keyframe images
+"""
+
+import json
+import os
+from datetime import datetime, timezone
+
+from config import settings
+from models import Keyframe, KeyframeStatus, Project
+
+PROJECTS_DIR = os.path.join(os.path.dirname(__file__), "projects")
+
+
+def _project_dir(project_id: str) -> str:
+    return os.path.join(PROJECTS_DIR, project_id)
+
+
+def _project_file(project_id: str) -> str:
+    return os.path.join(_project_dir(project_id), "project.json")
+
+
+def images_dir(project_id: str) -> str:
+    d = os.path.join(_project_dir(project_id), "images")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def save_project(project: Project) -> None:
+    """Write project state to disk."""
+    project.updated_at = datetime.now(timezone.utc).isoformat()
+    d = _project_dir(project.id)
+    os.makedirs(d, exist_ok=True)
+    # Don't persist transient rendering status — reset to pending or done
+    data = project.model_dump()
+    for kf in data["keyframes"]:
+        if kf["status"] == "rendering":
+            kf["status"] = "done" if kf["image_filename"] else "pending"
+        kf.pop("error_message", None)
+    with open(_project_file(project.id), "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+
+def load_project(project_id: str) -> Project | None:
+    path = _project_file(project_id)
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return Project(**json.load(f))
+
+
+def list_projects() -> list[dict]:
+    """Return summaries of all projects, most recent first."""
+    results = []
+    if not os.path.isdir(PROJECTS_DIR):
+        return results
+    for name in os.listdir(PROJECTS_DIR):
+        path = _project_file(name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            results.append({
+                "id": data["id"],
+                "name": data["name"],
+                "theme": data["theme"],
+                "scene_count": data["scene_count"],
+                "keyframe_count": len(data.get("keyframes", [])),
+                "created_at": data.get("created_at", ""),
+                "updated_at": data.get("updated_at", ""),
+            })
+        except (json.JSONDecodeError, KeyError):
+            continue
+    results.sort(key=lambda p: p.get("updated_at", ""), reverse=True)
+    return results
+
+
+def delete_project(project_id: str) -> bool:
+    import shutil
+    d = _project_dir(project_id)
+    if os.path.isdir(d):
+        shutil.rmtree(d)
+        return True
+    return False

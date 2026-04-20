@@ -3,7 +3,7 @@
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
            lockKeyframe, unlockKeyframe, getKeyframeStatus } from '../lib/api.js';
 
-  let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false } = $props();
+  let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false, projectId = '' } = $props();
 
   let editing = $state(false);
   let editPrompt = $state('');
@@ -12,8 +12,8 @@
   let fullscreen = $state(false);
 
   $effect(() => {
-    if (keyframe.image_filename) {
-      imageUrl = `/api/images/${keyframe.image_filename}`;
+    if (keyframe.image_filename && projectId) {
+      imageUrl = `/api/projects/${projectId}/images/${keyframe.image_filename}`;
     } else {
       imageUrl = null;
     }
@@ -35,7 +35,6 @@
         keyframe.error_message = status.error_message;
         if (status.image_url) {
           keyframe.image_filename = status.image_url.split('/').pop();
-          imageUrl = status.image_url;
         }
       } catch {
         break;

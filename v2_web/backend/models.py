@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -25,6 +26,18 @@ class Keyframe(BaseModel):
     image_filename: Optional[str] = None
     locked: bool = False
     error_message: Optional[str] = None
+
+
+class Project(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    name: str
+    theme: str
+    scene_count: int
+    style: str = "transition-story"
+    active_index: int = 0
+    keyframes: list[Keyframe] = Field(default_factory=list)
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class GenerateRequest(BaseModel):

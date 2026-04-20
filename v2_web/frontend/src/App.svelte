@@ -1,47 +1,89 @@
 <script>
   import PromptPanel from './components/PromptPanel.svelte';
   import KeyframeGrid from './components/KeyframeGrid.svelte';
+  import ProjectSelector from './components/ProjectSelector.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import { listKeyframes } from './lib/api.js';
+  import { getCurrentProject, renderKeyframe } from './lib/api.js';
 
   let keyframes = $state([]);
+  let projectId = $state('');
+  let projectName = $state('');
+  let activeIndex = $state(0);
   let statusMessage = $state('');
+  let gridRef = $state(null);
 
-  async function refreshKeyframes() {
+  // Load last project on startup
+  async function init() {
     try {
-      const data = await listKeyframes();
-      keyframes = data.keyframes;
-    } catch (e) {
-      statusMessage = `Error: ${e.message}`;
+      const data = await getCurrentProject();
+      if (data.project) {
+        applyProject(data.project);
+      }
+    } catch {
+      // No project loaded yet, that's fine
     }
   }
 
-  function handleGenerated(event) {
-    keyframes = [...keyframes, ...event.detail];
-    statusMessage = `Generated ${event.detail.length} keyframes`;
+  function applyProject(project) {
+    projectId = project.id;
+    projectName = project.name;
+    keyframes = project.keyframes;
+    activeIndex = project.active_index || 0;
+    if (gridRef) {
+      gridRef.setActive(activeIndex);
+    }
+  }
+
+  function handleProject(event) {
+    applyProject(event.detail);
+    // First keyframe render was already triggered by PromptPanel
+  }
+
+  function handleLoadProject(event) {
+    const project = event.detail;
+    applyProject(project);
+    // If active keyframe needs rendering, kick it off
+    if (activeIndex < keyframes.length) {
+      const kf = keyframes[activeIndex];
+      if (kf.status === 'pending') {
+        renderKeyframe(kf.id).catch(e =>
+          statusMessage = `Render error: ${e.message}`
+        );
+      }
+    }
   }
 
   function handleUpdated() {
-    refreshKeyframes();
+    // Keyframes are mutated in place; no need to refetch
   }
 
   function handleStatus(event) {
     statusMessage = event.detail;
   }
+
+  init();
 </script>
 
 <header>
-  <h1>Film Director</h1>
-  <p class="subtitle">Keyframe-driven video production with ComfyUI</p>
+  <div class="header-row">
+    <div>
+      <h1>Film Director</h1>
+      <p class="subtitle">Keyframe-driven video production with ComfyUI</p>
+    </div>
+    <ProjectSelector onload={handleLoadProject} onstatus={handleStatus} />
+  </div>
 </header>
 
 <PromptPanel
-  ongenerated={handleGenerated}
+  onproject={handleProject}
   onstatus={handleStatus}
+  {projectName}
 />
 
 <KeyframeGrid
+  bind:this={gridRef}
   bind:keyframes
+  {projectId}
   onupdated={handleUpdated}
   onstatus={handleStatus}
 />
@@ -51,6 +93,13 @@
 <style>
   header {
     margin-bottom: 32px;
+  }
+
+  .header-row {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 16px;
   }
 
   h1 {

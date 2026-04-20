@@ -120,6 +120,47 @@ async def call_llm(system_prompt: str, user_msg: str,
     return items
 
 
+async def call_llm_text(system_prompt: str, user_msg: str,
+                        temperature: float = 0.7) -> str:
+    """Call the LLM and return raw text (not parsed as JSON)."""
+    payload = {
+        "model": settings.llm_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": temperature,
+        "max_tokens": 100,
+        "stream": False,
+    }
+
+    headers = {"Content-Type": "application/json"}
+    if settings.llm_api_key:
+        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+
+    base = settings.llm_url.rstrip("/")
+    if base.endswith("/v1"):
+        url = f"{base}/chat/completions"
+    else:
+        url = f"{base}/v1/chat/completions"
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        resp_json = resp.json()
+        return resp_json["choices"][0]["message"]["content"].strip()
+
+
+async def generate_project_name(theme: str) -> str:
+    """Generate a short project name from the theme."""
+    system_prompt = (
+        "Generate a short, evocative project title (2-5 words) for a film based on "
+        "the given initial conditions. Reply with ONLY the title, no quotes, no punctuation, "
+        "no explanation."
+    )
+    return await call_llm_text(system_prompt, theme)
+
+
 async def generate_keyframe_descriptions(theme: str, count: int,
                                          style: str = "transition-story") -> list[str]:
     """Generate keyframe descriptions via LLM."""

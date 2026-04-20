@@ -1,7 +1,7 @@
 <script>
   import { generateKeyframes, renderKeyframe } from '../lib/api.js';
 
-  let { ongenerated, onstatus } = $props();
+  let { onproject, onstatus, projectName = '' } = $props();
 
   let theme = $state('');
   let count = $state(6);
@@ -10,17 +10,17 @@
   async function handleGenerate() {
     if (!theme.trim()) return;
     generating = true;
-    onstatus({ detail: 'Generating keyframe descriptions...' });
+    onstatus({ detail: 'Generating story and project name...' });
 
     try {
       const data = await generateKeyframes(theme.trim(), count);
-      const newKeyframes = data.keyframes;
-      ongenerated({ detail: newKeyframes });
+      const project = data.project;
+      onproject({ detail: project });
+      onstatus({ detail: `Created "${project.name}" with ${project.keyframes.length} scenes. Rendering #1...` });
 
-      // Only render the first keyframe
-      if (newKeyframes.length > 0) {
-        onstatus({ detail: `Generated ${newKeyframes.length} keyframes. Rendering #1...` });
-        renderKeyframe(newKeyframes[0].id).catch(e =>
+      // Render the first keyframe
+      if (project.keyframes.length > 0) {
+        renderKeyframe(project.keyframes[0].id).catch(e =>
           onstatus({ detail: `Render error: ${e.message}` })
         );
       }
@@ -40,6 +40,12 @@
 </script>
 
 <div class="prompt-panel">
+  {#if projectName}
+    <div class="current-project">
+      <span class="project-label">Project:</span>
+      <span class="project-name">{projectName}</span>
+    </div>
+  {/if}
   <div class="input-row">
     <textarea
       placeholder="Describe the setting, characters, and situation to begin your story..."
@@ -78,6 +84,25 @@
     border-radius: var(--radius-lg);
     padding: 20px;
     margin-bottom: 24px;
+  }
+
+  .current-project {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .project-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-right: 8px;
+  }
+
+  .project-name {
+    font-weight: 600;
+    color: var(--text);
   }
 
   .input-row {
