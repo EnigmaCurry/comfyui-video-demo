@@ -685,7 +685,7 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
                 "-i", video_path,
                 "-i", audio_path,
                 "-filter_complex",
-                f"[1:a]adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo];"
+                f"[1:a]volume=2.0,adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo];"
                 f"[0:a][vo]amix=inputs=2:duration=first:dropout_transition=0[aout]",
                 "-map", "0:v", "-map", "[aout]",
                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
@@ -707,7 +707,7 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
                     "-i", video_path,
                     "-i", audio_path,
                     "-filter_complex",
-                    f"[1:a]adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo]",
+                    f"[1:a]volume=2.0,adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo]",
                     "-map", "0:v", "-map", "[vo]",
                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                     "-shortest",
