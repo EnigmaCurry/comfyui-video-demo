@@ -9,11 +9,12 @@
   let initialized = $state(false);
   let editing = $state({});
   let editTexts = $state({});
-  let direction = $state(initialDirection);
+  const DEFAULT_DIRECTION = "A contemplative, poetic narrator experiencing the scene firsthand. Stream of consciousness, present tense.";
+  let direction = $state(initialDirection || DEFAULT_DIRECTION);
   let regenerating = $state(false);
   let directionDirty = $state(false);
 
-  $effect(() => { direction = initialDirection; });
+  $effect(() => { direction = initialDirection || DEFAULT_DIRECTION; });
 
   // All narrations are "approved" once you've reviewed them — no rendering needed.
   // The active index tracks which one you're currently reviewing.
@@ -111,11 +112,11 @@
   <div class="direction-panel">
     <h3>Narrator Direction</h3>
     <p class="direction-hint">
-      Guide the narrator's voice, style, and vocabulary. This is combined with the story when generating narration.
+      Define who is speaking — their voice, perspective, vocabulary, and mannerisms. This drives all narration generation.
     </p>
     <textarea
       class="direction-input"
-      placeholder="e.g. Speak in the voice of an old sea captain. Use nautical metaphors. Short, weathered sentences. No flowery language."
+      placeholder="e.g. First person as the main character, stream of consciousness. Short fragmented thoughts. Present tense."
       bind:value={direction}
       oninput={handleDirectionInput}
       rows="3"

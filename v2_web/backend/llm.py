@@ -240,16 +240,14 @@ async def generate_narration(keyframe_prompts: list[str],
     wlo, whi = _voiceover_word_range(duration)
     vo_template = style_data.get("voiceover_system_prompt", "")
     system_prompt = vo_template.format(duration=duration, word_lo=wlo, word_hi=whi)
-    if direction.strip():
-        system_prompt += (
-            f"\n\nADDITIONAL DIRECTION FROM THE DIRECTOR:\n{direction.strip()}"
-        )
 
     kf_list = "\n".join(f"  Keyframe {i+1}: {k}" for i, k in enumerate(keyframe_prompts))
     tr_list = "\n".join(
         f"  Transition {i+1} (keyframe {i+1} -> {i+2}): {t}"
         for i, t in enumerate(transition_prompts))
-    user_msg = (f"Number of transitions: {len(transition_prompts)}\n\n"
+    dir_text = direction.strip() if direction.strip() else "A contemplative, poetic narrator experiencing the scene firsthand."
+    user_msg = (f"NARRATOR DIRECTION:\n{dir_text}\n\n"
+                f"Number of transitions: {len(transition_prompts)}\n\n"
                 f"Keyframe descriptions:\n{kf_list}\n\n"
                 f"Transition descriptions:\n{tr_list}")
 
