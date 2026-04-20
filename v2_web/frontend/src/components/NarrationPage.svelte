@@ -111,7 +111,12 @@
     polling[tr.id] = false;
   }
 
+  function pauseAllVideos() {
+    document.querySelectorAll('.narration-card video').forEach(v => v.pause());
+  }
+
   function handleApprove() {
+    pauseAllVideos();
     const nextIndex = activeIndex + 1;
     if (nextIndex < transitions.length) {
       activeIndex = nextIndex;
