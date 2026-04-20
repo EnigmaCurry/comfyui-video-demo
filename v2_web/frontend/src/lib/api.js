@@ -75,3 +75,8 @@ export const unsplitSections = () => request('POST', '/soundtrack/unsplit');
 export const renderSoundtrack = (id) => request('POST', `/soundtrack/${id}/render`);
 export const remuxSoundtrack = (id, volumes) => request('POST', `/soundtrack/${id}/remux`, volumes);
 export const getSoundtrackStatus = (id) => request('GET', `/soundtrack/${id}/status`);
+export const lockScore = () => request('POST', '/score/lock');
+
+// ── Final ──
+export const renderFinal = () => request('POST', '/final/render');
+export const getFinalStatus = () => request('GET', '/final/status');

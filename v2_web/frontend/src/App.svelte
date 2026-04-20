@@ -6,6 +6,7 @@
   import TransitionsPage from './components/TransitionsPage.svelte';
   import NarrationPage from './components/NarrationPage.svelte';
   import FinalPage from './components/FinalPage.svelte';
+  import RenderPage from './components/RenderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import { getCurrentProject, renderKeyframe, renderTransition, renameProject } from './lib/api.js';
@@ -16,7 +17,8 @@
     { id: 'keyframes', label: 'Keyframes' },
     { id: 'transitions', label: 'Transitions' },
     { id: 'narration', label: 'Narration' },
-    { id: 'final', label: 'Score' },
+    { id: 'score', label: 'Score' },
+    { id: 'final', label: 'Final' },
   ];
 
   let activeTab = $state('premise');
@@ -35,12 +37,14 @@
   let keyframesLocked = $derived(project?.keyframes_locked || false);
   let transitionsLocked = $derived(project?.transitions_locked || false);
   let narrationLocked = $derived(project?.narration_locked || false);
+  let scoreLocked = $derived(project?.score_locked || false);
   let keyframes = $derived(project?.keyframes || []);
   let transitions = $derived(project?.transitions || []);
   let soundtrackSections = $derived(project?.soundtrack_sections || []);
 
   let enabledThrough = $derived(
-    narrationLocked ? 'final' :
+    scoreLocked ? 'final' :
+    narrationLocked ? 'score' :
     transitionsLocked ? 'narration' :
     keyframesLocked ? 'transitions' :
     storyLocked ? 'keyframes' :
@@ -53,8 +57,10 @@
       const data = await getCurrentProject();
       if (data.project) {
         project = data.project;
-        if (data.project.narration_locked) {
+        if (data.project.score_locked) {
           activeTab = 'final';
+        } else if (data.project.narration_locked) {
+          activeTab = 'score';
         } else if (data.project.transitions_locked) {
           activeTab = 'narration';
         } else if (data.project.keyframes_locked && data.project.transitions?.length > 0) {
@@ -101,13 +107,20 @@
 
   function handleLockNarration(event) {
     project = event.detail;
+    activeTab = 'score';
+  }
+
+  function handleLockScore(event) {
+    project = event.detail;
     activeTab = 'final';
   }
 
   function handleLoadProject(event) {
     project = event.detail;
-    if (project.narration_locked) {
+    if (project.score_locked) {
       activeTab = 'final';
+    } else if (project.narration_locked) {
+      activeTab = 'score';
     } else if (project.transitions_locked) {
       activeTab = 'narration';
     } else if (project.keyframes_locked && project.transitions?.length > 0) {
@@ -243,7 +256,7 @@
                    onreset={(e) => { project = e.detail; }}
                    onlocknarration={handleLockNarration} />
 
-  {:else if activeTab === 'final'}
+  {:else if activeTab === 'score'}
     <FinalPage bind:sections={mutableSections}
                transitions={transitions} {projectId}
                onstatus={handleStatus}
@@ -253,7 +266,11 @@
                  } else {
                    project = e.detail;
                  }
-               }} />
+               }}
+               onlockscore={handleLockScore} />
+
+  {:else if activeTab === 'final'}
+    <RenderPage {projectId} projectName={projectName} onstatus={handleStatus} />
   {/if}
 </main>
 

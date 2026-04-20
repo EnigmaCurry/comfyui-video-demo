@@ -64,6 +64,8 @@ class Project(BaseModel):
     narration_active_index: int = 0
     narration_direction: str = ""
     narration_locked: bool = False
+    score_locked: bool = False
+    final_filename: Optional[str] = None
     original_prompts: list[str] = Field(default_factory=list)
     keyframes: list[Keyframe] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)

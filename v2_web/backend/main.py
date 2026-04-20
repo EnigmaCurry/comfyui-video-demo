@@ -1110,6 +1110,77 @@ async def api_remux_soundtrack(section_id: str, body: dict | None = None):
     return {"id": sec.id, "status": sec.status}
 
 
+# ── Final assembly ──────────────────────────────────────────────────
+
+@app.post("/api/score/lock")
+async def api_lock_score():
+    """Lock the score and proceed to final assembly."""
+    proj = _get_project()
+    if not proj.narration_locked:
+        raise HTTPException(400, "Narration must be locked first")
+    proj.score_locked = True
+    _save()
+    return {"project": proj.model_dump()}
+
+
+@app.post("/api/final/render")
+async def api_render_final():
+    """Assemble all scored sections into one final video."""
+    proj = _get_project()
+    if not proj.score_locked:
+        raise HTTPException(400, "Score must be locked first")
+
+    import subprocess
+    img_dir = images_dir(proj.id)
+
+    # Collect preview files from all sections in order
+    ordered = sorted(proj.soundtrack_sections, key=lambda s: s.position)
+    clips = []
+    for sec in ordered:
+        if sec.preview_filename:
+            clips.append(os.path.join(img_dir, sec.preview_filename))
+
+    if not clips:
+        raise HTTPException(400, "No scored sections to assemble")
+
+    # Concat all section previews
+    concat_list = os.path.join(img_dir, "final_concat.txt")
+    with open(concat_list, "w") as f:
+        for clip in clips:
+            f.write(f"file '{os.path.abspath(clip)}'\n")
+
+    final_file = f"{proj.name.replace(' ', '_')}.mp4"
+    final_path = os.path.join(img_dir, final_file)
+
+    result = await asyncio.to_thread(
+        subprocess.run,
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+         "-i", concat_list, "-c", "copy", final_path],
+        capture_output=True, text=True, timeout=120,
+    )
+    if os.path.exists(concat_list):
+        os.unlink(concat_list)
+
+    if result.returncode != 0:
+        raise HTTPException(500, f"Assembly failed: {result.stderr[:300]}")
+
+    proj.final_filename = final_file
+    _save()
+    return {
+        "filename": final_file,
+        "url": f"/api/projects/{proj.id}/videos/{final_file}",
+    }
+
+
+@app.get("/api/final/status")
+async def api_final_status():
+    proj = _get_project()
+    url = None
+    if proj.final_filename:
+        url = f"/api/projects/{proj.id}/videos/{proj.final_filename}"
+    return {"filename": proj.final_filename, "url": url}
+
+
 # ── File serving ────────────────────────────────────────────────────
 
 @app.get("/api/projects/{project_id}/images/{filename}")

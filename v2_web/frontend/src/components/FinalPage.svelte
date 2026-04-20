@@ -1,15 +1,19 @@
 <script>
-  import { Sparkles, RefreshCw, Play, RotateCcw, Scissors, Merge } from 'lucide-svelte';
+  import { Sparkles, RefreshCw, Play, RotateCcw, Scissors, Merge, ArrowRight } from 'lucide-svelte';
   import { updateSection, suggestSoundtrackPrompt, renderSoundtrack,
-           remuxSoundtrack, getSoundtrackStatus, splitSections, unsplitSections } from '../lib/api.js';
+           remuxSoundtrack, getSoundtrackStatus, splitSections, unsplitSections,
+           lockScore } from '../lib/api.js';
 
   let { sections = $bindable([]), transitions = [], projectId = '',
-        onstatus, onreset } = $props();
+        onstatus, onreset, onlockscore } = $props();
 
   let polling = $state({});
   let renderVersion = $state({});
   let suggesting = $state({});
   let volumeTimers = $state({});
+  let locking = $state(false);
+
+  let allDone = $derived(sections.length > 0 && sections.every(s => s.status === 'done'));
 
   // Poll any rendering sections on load
   $effect(() => {
@@ -121,6 +125,20 @@
         sec.status = 'error';
       }
     }, 800);
+  }
+
+  async function handleGoToFinal() {
+    locking = true;
+    onstatus({ detail: 'Locking score...' });
+    try {
+      const data = await lockScore();
+      if (onlockscore) onlockscore({ detail: data.project });
+      onstatus({ detail: 'Score locked. Assembling final film.' });
+    } catch (e) {
+      onstatus({ detail: `Failed: ${e.message}` });
+    } finally {
+      locking = false;
+    }
   }
 
   async function handleSplitAt(sectionIndex, splitAfterTrIndex) {
@@ -280,6 +298,15 @@
       </div>
     {/each}
   </div>
+
+  {#if allDone}
+    <div class="all-done">
+      <span>All sections scored!</span>
+      <button class="go-btn" onclick={handleGoToFinal} disabled={locking}>
+        {locking ? 'Locking...' : 'Go to Final'} <ArrowRight size={16} />
+      </button>
+    </div>
+  {/if}
 {:else}
   <div class="empty">
     <p>Approve all narration to proceed to soundtrack.</p>
@@ -535,6 +562,36 @@
   }
 
   .btn-render:hover:not(:disabled) { background: var(--accent-hover); }
+
+  .all-done {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+
+  .all-done span {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--success);
+  }
+
+  .go-btn {
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    padding: 10px 24px;
+    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .go-btn:hover:not(:disabled) { background: var(--accent-hover); }
 
   .empty {
     text-align: center;
