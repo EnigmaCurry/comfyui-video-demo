@@ -1,5 +1,5 @@
 <script>
-  import { Check, X, RotateCcw, Play, RefreshCw, Wand2, ArrowRight } from 'lucide-svelte';
+  import { Check, X, RotateCcw, Play, RefreshCw, Wand2, ArrowRight, Dice5 } from 'lucide-svelte';
   import { updateNarration, regenerateNarration, setNarrationActiveIndex,
            setNarrationDirection, renderNarration, getNarrationStatus,
            rewriteNarration, lockNarration } from '../lib/api.js';
@@ -117,12 +117,21 @@
     tr.narration_status = 'rendering';
     try {
       const v = tr.narration_voice || voice;
-      await renderNarration(tr.id, `${v}.wav`);
+      const opts = { voice: `${v}.wav` };
+      if (tr.narration_seed != null) opts.seed = tr.narration_seed;
+      const result = await renderNarration(tr.id, opts);
+      if (result.seed != null) tr.narration_seed = result.seed;
       pollStatus(tr);
     } catch (e) {
       onstatus({ detail: `Render failed: ${e.message}` });
       tr.narration_status = 'error';
     }
+  }
+
+  function randomizeSeed(tr) {
+    tr.narration_seed = Math.floor(Math.random() * 2**32);
+    // Auto-render with new seed
+    if (tr.narration.trim()) handleRender(tr);
   }
 
   async function pollStatus(tr) {
@@ -134,6 +143,7 @@
         const status = await getNarrationStatus(tr.id);
         tr.narration_status = status.status;
         tr.narration_error = status.error;
+        if (status.seed != null) tr.narration_seed = status.seed;
         if (status.video_url) {
           tr.narrated_video_filename = status.video_url.split('/').pop();
           renderVersion[tr.id] = Date.now();
@@ -379,6 +389,13 @@
               <option value={v}>{v}</option>
             {/each}
           </select>
+          <span class="seed-display" title="TTS seed">
+            {tr.narration_seed ?? '—'}
+          </span>
+          <button class="btn-icon" onclick={() => randomizeSeed(tr)} title="Randomize seed (new voice variation)"
+                  disabled={tr.narration_status === 'rendering'}>
+            <Dice5 size={16} />
+          </button>
           {#if isActive && !isEditing}
             {#if tr.narration_status === 'done'}
               <button class="btn-approve" onclick={handleApprove} title="Approve narration">
@@ -702,6 +719,14 @@
   .btn-icon:hover:not(:disabled) {
     background: var(--bg-card-hover);
     color: var(--text);
+  }
+
+  .seed-display {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--mono, monospace);
+    min-width: 40px;
+    text-align: center;
   }
 
   .voice-override {

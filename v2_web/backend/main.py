@@ -704,7 +704,7 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
                 "--url", settings.comfyui_url,
                 "--voice", voice or settings.tts_voice,
                 "--output", os.path.abspath(audio_path),
-                "--seed", str(settings.tts_seed),
+                "--seed", str(tr.narration_seed if tr.narration_seed is not None else settings.tts_seed),
                 "--no-play",
                 tr.narration,
             ]
@@ -790,8 +790,12 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
 async def api_render_narration(transition_id: str, body: dict | None = None):
     proj = _get_project()
     tr = _get_transition(transition_id)
-    # Per-transition voice overrides the request voice
     voice = tr.narration_voice or (body.get("voice") if body else None)
+    # Seed: use provided, or keep existing, or generate new
+    if body and "seed" in body and body["seed"] is not None:
+        tr.narration_seed = int(body["seed"])
+    elif tr.narration_seed is None:
+        tr.narration_seed = random.randint(0, 2**32 - 1)
     old = render_tasks.pop(f"narr_{transition_id}", None)
     if old and not old.done():
         old.cancel()
@@ -799,7 +803,7 @@ async def api_render_narration(transition_id: str, body: dict | None = None):
     tr.narration_error = None
     task = asyncio.create_task(_do_render_narration(proj.id, tr, voice=voice))
     render_tasks[f"narr_{transition_id}"] = task
-    return {"id": tr.id, "status": tr.narration_status}
+    return {"id": tr.id, "status": tr.narration_status, "seed": tr.narration_seed}
 
 
 @app.get("/api/narration/{transition_id}/status")
@@ -813,6 +817,7 @@ async def api_get_narration_status(transition_id: str):
         "id": tr.id,
         "status": tr.narration_status,
         "video_url": video_url,
+        "seed": tr.narration_seed,
         "error": tr.narration_error,
     }
 
@@ -820,10 +825,17 @@ async def api_get_narration_status(transition_id: str):
 @app.put("/api/narration/{transition_id}")
 async def api_update_narration(transition_id: str, body: dict):
     tr = _get_transition(transition_id)
-    if "narration" in body:
+    text_changed = False
+    if "narration" in body and body["narration"] != tr.narration:
         tr.narration = body["narration"]
+        text_changed = True
     if "voice" in body:
         tr.narration_voice = body["voice"]
+    if "seed" in body:
+        tr.narration_seed = int(body["seed"]) if body["seed"] is not None else None
+    # Randomize seed when text changes (unless seed explicitly set)
+    if text_changed and "seed" not in body:
+        tr.narration_seed = random.randint(0, 2**32 - 1)
     _save()
     return tr.model_dump()
 
