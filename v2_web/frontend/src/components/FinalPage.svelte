@@ -399,7 +399,7 @@
   }
 
   .num-input {
-    width: 60px;
+    width: 75px;
     text-align: center;
     font-size: 13px;
   }
