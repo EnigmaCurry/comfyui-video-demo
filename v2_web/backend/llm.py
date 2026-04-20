@@ -255,6 +255,24 @@ async def generate_transition_descriptions(keyframe_prompts: list[str],
     transitions = await call_llm(system_prompt, user_msg)
     if len(transitions) > n_expected:
         transitions = transitions[:n_expected]
+
+    # If truncated, request remaining in a follow-up call
+    while len(transitions) < n_expected:
+        remaining = n_expected - len(transitions)
+        start_idx = len(transitions)
+        partial_kf = keyframe_prompts[start_idx:start_idx + remaining + 1]
+        partial_list = "\n".join(
+            f"  Keyframe {start_idx + i + 1}: {k}" for i, k in enumerate(partial_kf))
+        partial_msg = (f"Continue generating transition descriptions. "
+                       f"You already wrote {start_idx} transitions. "
+                       f"Now write the next {remaining} transitions.\n\n"
+                       f"Keyframe descriptions:\n{partial_list}")
+        more = await call_llm(system_prompt, partial_msg)
+        if not more:
+            break
+        transitions.extend(more)
+    if len(transitions) > n_expected:
+        transitions = transitions[:n_expected]
     return transitions
 
 
@@ -285,7 +303,25 @@ async def generate_narration(keyframe_prompts: list[str],
                 f"Keyframe descriptions:\n{kf_list}\n\n"
                 f"Transition descriptions:\n{tr_list}")
 
+    n_expected = len(transition_prompts)
     narrations = await call_llm(system_prompt, user_msg)
-    if len(narrations) > len(transition_prompts):
-        narrations = narrations[:len(transition_prompts)]
+
+    # If truncated, request remaining
+    while len(narrations) < n_expected:
+        remaining = n_expected - len(narrations)
+        start_idx = len(narrations)
+        partial_tr = transition_prompts[start_idx:start_idx + remaining]
+        partial_list = "\n".join(
+            f"  Transition {start_idx + i + 1}: {t}" for i, t in enumerate(partial_tr))
+        partial_msg = (f"NARRATOR DIRECTION:\n{dir_text}\n\n"
+                       f"Continue. You already wrote {start_idx} narrations. "
+                       f"Now write the next {remaining}.\n\n"
+                       f"Transition descriptions:\n{partial_list}")
+        more = await call_llm(system_prompt, partial_msg)
+        if not more:
+            break
+        narrations.extend(more)
+
+    if len(narrations) > n_expected:
+        narrations = narrations[:n_expected]
     return narrations
