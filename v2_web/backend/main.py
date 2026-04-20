@@ -281,21 +281,34 @@ async def api_lock_keyframes():
     return {"project": proj.model_dump()}
 
 
-@app.post("/api/keyframes/auto-create")
-async def api_auto_create_keyframes():
-    """Render all pending keyframes sequentially."""
-    proj = _get_project()
+async def _auto_create_keyframes_task(proj_id: str):
+    """Background: render all pending keyframes sequentially."""
+    proj = current_project
+    if not proj or proj.id != proj_id:
+        return
     ordered = sorted(proj.keyframes, key=lambda k: k.position)
-    rendered = 0
     for kf in ordered:
         if kf.status == KeyframeStatus.pending:
             seed = random.randint(0, 2**32 - 1)
             kf.status = KeyframeStatus.rendering
-            await _do_render_keyframe(proj.id, kf, seed, 1920, 1088)
-            rendered += 1
+            await _do_render_keyframe(proj_id, kf, seed, 1920, 1088)
     proj.active_index = len(ordered)
     _save()
-    return {"rendered": rendered, "project": proj.model_dump()}
+
+
+@app.post("/api/keyframes/auto-create")
+async def api_auto_create_keyframes():
+    """Start rendering all pending keyframes in the background."""
+    proj = _get_project()
+    # Mark all pending as rendering so frontend shows spinners
+    ordered = sorted(proj.keyframes, key=lambda k: k.position)
+    count = sum(1 for kf in ordered if kf.status == KeyframeStatus.pending)
+    old = render_tasks.pop("auto_kf", None)
+    if old and not old.done():
+        old.cancel()
+    task = asyncio.create_task(_auto_create_keyframes_task(proj.id))
+    render_tasks["auto_kf"] = task
+    return {"started": count}
 
 
 @app.put("/api/active-index")

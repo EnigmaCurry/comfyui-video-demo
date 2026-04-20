@@ -4,7 +4,7 @@
   import { RotateCcw, Zap, ArrowRight } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
   import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes,
-           lockKeyframes, autoCreateKeyframes } from '../lib/api.js';
+           lockKeyframes, autoCreateKeyframes, getKeyframeStatus } from '../lib/api.js';
 
   let { keyframes = $bindable([]), projectId = '', locked = false,
         onupdated, onstatus, onreset, onlockkeyframes } = $props();
@@ -105,13 +105,35 @@
     onstatus({ detail: 'Auto-creating all keyframes...' });
     try {
       const data = await autoCreateKeyframes();
-      if (onreset) onreset({ detail: data.project });
-      onstatus({ detail: `Auto-created ${data.rendered} keyframes. All done!` });
+      onstatus({ detail: `Auto-creating ${data.started} keyframes...` });
+      // Poll each pending/rendering keyframe until all done
+      await pollAllKeyframes();
+      onstatus({ detail: 'All keyframes auto-created!' });
+      // Re-derive active index
       initialized = false;
     } catch (e) {
       onstatus({ detail: `Auto-create failed: ${e.message}` });
     } finally {
       autoCreating = false;
+    }
+  }
+
+  async function pollAllKeyframes() {
+    while (keyframes.some(kf => kf.status === 'pending' || kf.status === 'rendering')) {
+      await new Promise(r => setTimeout(r, 2000));
+      for (const kf of keyframes) {
+        if (kf.status === 'rendering' || kf.status === 'pending') {
+          try {
+            const status = await getKeyframeStatus(kf.id);
+            kf.status = status.status;
+            kf.error_message = status.error_message;
+            if (status.seed != null) kf.seed = status.seed;
+            if (status.image_url) {
+              kf.image_filename = status.image_url.split('/').pop();
+            }
+          } catch {}
+        }
+      }
     }
   }
 
