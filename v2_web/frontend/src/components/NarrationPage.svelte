@@ -20,6 +20,7 @@
   let regenerating = $state(false);
   let directionDirty = $state(false);
   let polling = $state({});
+  let renderVersion = $state({});
 
   $effect(() => { direction = initialDirection || DEFAULT_DIRECTION; });
 
@@ -55,7 +56,7 @@
 
   function narratedVideoUrl(tr) {
     if (!tr?.narrated_video_filename || !projectId) return null;
-    return `/api/projects/${projectId}/videos/${tr.narrated_video_filename}?v=${tr.narration_status}`;
+    return `/api/projects/${projectId}/videos/${tr.narrated_video_filename}?v=${renderVersion[tr.id] || 0}`;
   }
 
   function startEdit(tr) {
@@ -103,6 +104,7 @@
         tr.narration_error = status.error;
         if (status.video_url) {
           tr.narrated_video_filename = status.video_url.split('/').pop();
+          renderVersion[tr.id] = Date.now();
         }
       } catch { break; }
     }
