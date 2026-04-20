@@ -5,14 +5,18 @@
   let { onstatus, onstory, premise = '', locked = false, scenes = [] } = $props();
 
   const RESOLUTIONS = [
-    { label: '640x480', w: 640, h: 480 },
-    { label: '1280x720 (720p)', w: 1280, h: 720 },
-    { label: '1920x1080 (1080p)', w: 1920, h: 1080 },
+    { label: '512x512 (1:1)', w: 512, h: 512 },
+    { label: '768x512 (3:2)', w: 768, h: 512 },
+    { label: '1024x576 (16:9)', w: 1024, h: 576 },
+    { label: '1024x768 (4:3)', w: 1024, h: 768 },
+    { label: '1024x1024 (1:1)', w: 1024, h: 1024 },
+    { label: '1280x768 (5:3)', w: 1280, h: 768 },
+    { label: '1920x1088 (16:9 HD)', w: 1920, h: 1088 },
   ];
   let sceneCount = $state(6);
   let sceneDuration = $state(10);
-  let resWidth = $state(1280);
-  let resHeight = $state(720);
+  let resWidth = $state(1024);
+  let resHeight = $state(576);
   let generating = $state(false);
 
   let arcLabel = $derived(

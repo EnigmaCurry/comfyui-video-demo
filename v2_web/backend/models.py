@@ -59,8 +59,8 @@ class Project(BaseModel):
     transitions_locked: bool = False
     scene_count: int = 6
     scene_duration: int = 10
-    width: int = 1280
-    height: int = 720
+    width: int = 1024
+    height: int = 576
     style: str = "transition-story"
     active_index: int = 0
     transition_active_index: int = 0
