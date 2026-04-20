@@ -57,9 +57,9 @@
       const nextKf = keyframes[nextIndex];
       if (nextKf.status === 'pending') {
         onstatus({ detail: `Approved #${activeIndex}. Rendering #${nextIndex + 1}...` });
+        nextKf.status = 'rendering';
         try {
-          const result = await renderKeyframe(nextKf.id);
-          nextKf.status = result.status;
+          await renderKeyframe(nextKf.id);
         } catch (e) {
           onstatus({ detail: `Render error: ${e.message}` });
         }

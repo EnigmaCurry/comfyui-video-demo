@@ -63,9 +63,11 @@
   function handleStory(event) {
     project = event.detail;
     activeTab = 'keyframes';
-    // Render the first keyframe
+    // Render the first keyframe and mark it rendering so polling starts
     if (project.keyframes.length > 0) {
-      renderKeyframe(project.keyframes[0].id).catch(e =>
+      const kf = project.keyframes[0];
+      kf.status = 'rendering';
+      renderKeyframe(kf.id).catch(e =>
         statusMessage = `Render error: ${e.message}`
       );
     }
@@ -79,6 +81,7 @@
       if (idx < project.keyframes.length) {
         const kf = project.keyframes[idx];
         if (kf.status === 'pending') {
+          kf.status = 'rendering';
           renderKeyframe(kf.id).catch(e =>
             statusMessage = `Render error: ${e.message}`
           );
