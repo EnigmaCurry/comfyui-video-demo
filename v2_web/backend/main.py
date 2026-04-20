@@ -946,7 +946,7 @@ async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
             history = await run_workflow(patched, timeout=1200)
             audio_file = f"{sec.id}_soundtrack.wav"
             audio_path = os.path.join(img_dir, audio_file)
-            await download_output(history, audio_path, output_type="images")
+            await download_output(history, audio_path, output_type="audio")
             sec.audio_filename = audio_file
 
             # 2. Concat narrated video clips for this section
