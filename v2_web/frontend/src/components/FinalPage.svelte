@@ -39,12 +39,18 @@
     try {
       const data = await suggestSoundtrackPrompt(sec.id);
       sec.prompt = data.prompt;
+      invalidatePreview(sec);
       onstatus({ detail: 'Soundtrack prompt generated.' });
     } catch (e) {
       onstatus({ detail: `Failed: ${e.message}` });
     } finally {
       suggesting[sec.id] = false;
     }
+  }
+
+  function invalidatePreview(sec) {
+    sec.status = 'pending';
+    sec.preview_filename = null;
   }
 
   async function handleSave(sec) {
@@ -227,6 +233,7 @@
               class="prompt-input"
               placeholder="Soundtrack tags: genre, mood, instruments..."
               bind:value={sec.prompt}
+              oninput={() => invalidatePreview(sec)}
               rows="2"
             ></textarea>
             <button class="suggest-btn" onclick={() => handleSuggest(sec)}
@@ -238,11 +245,11 @@
           <div class="settings-row">
             <label>
               BPM
-              <input type="number" min="40" max="300" bind:value={sec.bpm} class="num-input" />
+              <input type="number" min="40" max="300" bind:value={sec.bpm} oninput={() => invalidatePreview(sec)} class="num-input" />
             </label>
             <label>
               Key
-              <select bind:value={sec.keyscale} class="key-select">
+              <select bind:value={sec.keyscale} onchange={() => invalidatePreview(sec)} class="key-select">
                 {#each ['C major','C minor','D major','D minor','E major','E minor',
                         'F major','F minor','G major','G minor','A major','A minor',
                         'B major','B minor'] as k}
@@ -252,7 +259,7 @@
             </label>
             <label>
               Seed
-              <input type="number" min="0" bind:value={sec.seed} class="seed-input" />
+              <input type="number" min="0" bind:value={sec.seed} oninput={() => invalidatePreview(sec)} class="seed-input" />
             </label>
           </div>
           <div class="volume-row">
