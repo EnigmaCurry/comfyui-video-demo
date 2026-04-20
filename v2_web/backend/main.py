@@ -600,6 +600,26 @@ async def api_set_narration_direction(body: dict):
     return {"direction": proj.narration_direction}
 
 
+@app.post("/api/narration/rewrite/{transition_id}")
+async def api_rewrite_narration(transition_id: str, body: dict):
+    from llm import rewrite_narration
+    proj = _get_project()
+    tr = _get_transition(transition_id)
+    instruction = body.get("instruction", "")
+    if not instruction.strip():
+        raise HTTPException(400, "Instruction is required")
+    new_text = await rewrite_narration(
+        tr.narration, instruction,
+        direction=proj.narration_direction,
+        duration=proj.scene_duration,
+    )
+    tr.narration = new_text
+    tr.narration_status = KeyframeStatus.pending
+    tr.narrated_video_filename = None
+    _save()
+    return {"narration": new_text}
+
+
 async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None = None):
     """Render TTS audio from narration text, then mux with transition video."""
     import subprocess

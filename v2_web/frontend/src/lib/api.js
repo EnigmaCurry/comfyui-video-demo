@@ -59,6 +59,7 @@ export const setTransitionActiveIndex = (activeIndex) => request('PUT', '/transi
 // ── Narration ──
 export const updateNarration = (transitionId, updates) => request('PUT', `/narration/${transitionId}`, updates);
 export const renderNarration = (transitionId, voice) => request('POST', `/narration/${transitionId}/render`, voice ? { voice } : null);
+export const rewriteNarration = (transitionId, instruction) => request('POST', `/narration/rewrite/${transitionId}`, { instruction });
 export const getNarrationStatus = (transitionId) => request('GET', `/narration/${transitionId}/status`);
 export const regenerateNarration = (direction) => request('POST', '/narration/regenerate', direction != null ? { direction } : null);
 export const setNarrationDirection = (direction) => request('PUT', '/narration/direction', { direction });

@@ -206,6 +206,24 @@ async def rewrite_keyframe_prompt(current_prompt: str, instruction: str) -> str:
     return await call_llm_text(system_prompt, user_msg, temperature=0.8)
 
 
+async def rewrite_narration(current_narration: str, instruction: str,
+                            direction: str = "", duration: int = 10) -> str:
+    """Rewrite a single narration line based on instruction."""
+    wlo, whi = _voiceover_word_range(duration)
+    system_prompt = (
+        "You are rewriting a single spoken narration line for a cinematic video.\n\n"
+        f"The narration must be {wlo}-{whi} words (to fill ~{duration} seconds of speech).\n"
+    )
+    if direction.strip():
+        system_prompt += f"\nNARRATOR DIRECTION:\n{direction.strip()}\n"
+    system_prompt += (
+        "\nRewrite the narration following the instruction while respecting the word count "
+        "and narrator direction. Reply with ONLY the new narration text, no quotes, no explanation."
+    )
+    user_msg = f"Current narration:\n{current_narration}\n\nInstruction:\n{instruction}"
+    return await call_llm_text(system_prompt, user_msg, temperature=0.8)
+
+
 async def generate_transition_descriptions(keyframe_prompts: list[str],
                                            duration: int = 10,
                                            style: str = "transition-story") -> list[str]:

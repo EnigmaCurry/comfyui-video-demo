@@ -1,7 +1,8 @@
 <script>
-  import { Pencil, Check, X, RotateCcw, Play, RefreshCw } from 'lucide-svelte';
+  import { Pencil, Check, X, RotateCcw, Play, RefreshCw, Wand2 } from 'lucide-svelte';
   import { updateNarration, regenerateNarration, setNarrationActiveIndex,
-           setNarrationDirection, renderNarration, getNarrationStatus } from '../lib/api.js';
+           setNarrationDirection, renderNarration, getNarrationStatus,
+           rewriteNarration } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
         direction: initialDirection = '', onstatus, onreset } = $props();
@@ -11,6 +12,9 @@
   let initialized = $state(false);
   let editing = $state({});
   let editTexts = $state({});
+  let rewriting = $state({});
+  let rewriteInstructions = $state({});
+  let rewriteLoading = $state({});
   const VOICES = [
     'butler', 'despotism-doc', 'feynman', 'kyle', 'linus',
     'mcgill', 'mckenna', 'mulgrew', 'nixon', 'paul-atreides', 'steve', 'wexler',
@@ -68,17 +72,44 @@
     try {
       await updateNarration(tr.id, { narration: editTexts[tr.id] });
       tr.narration = editTexts[tr.id];
-      // Narration text changed — reset render status
-      tr.narration_status = 'pending';
-      tr.narrated_video_filename = null;
       editing[tr.id] = false;
-      onstatus({ detail: `Updated narration for transition ${tr.position + 1}` });
+      onstatus({ detail: `Updated narration ${tr.position + 1}. Re-rendering...` });
+      handleRender(tr);
     } catch (e) {
       onstatus({ detail: `Update failed: ${e.message}` });
     }
   }
 
   function cancelEdit(tr) { editing[tr.id] = false; }
+
+  function startRewrite(tr) {
+    rewriteInstructions[tr.id] = '';
+    rewriting[tr.id] = true;
+  }
+
+  async function submitRewrite(tr) {
+    if (!rewriteInstructions[tr.id]?.trim()) return;
+    rewriteLoading[tr.id] = true;
+    onstatus({ detail: `Rewriting narration ${tr.position + 1}...` });
+    try {
+      const result = await rewriteNarration(tr.id, rewriteInstructions[tr.id].trim());
+      tr.narration = result.narration;
+      rewriting[tr.id] = false;
+      onstatus({ detail: `Narration ${tr.position + 1} rewritten. Re-rendering...` });
+      handleRender(tr);
+    } catch (e) {
+      onstatus({ detail: `Rewrite failed: ${e.message}` });
+    } finally {
+      rewriteLoading[tr.id] = false;
+    }
+  }
+
+  function cancelRewrite(tr) { rewriting[tr.id] = false; }
+
+  function rewriteKeydown(e, tr) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitRewrite(tr); }
+    else if (e.key === 'Escape') { cancelRewrite(tr); }
+  }
 
   async function handleRender(tr) {
     onstatus({ detail: `Rendering narration ${tr.position + 1}...` });
@@ -155,6 +186,11 @@
     tr.narration_voice = newVoice;
     try {
       await updateNarration(tr.id, { voice: newVoice });
+      // Auto-render with new voice if narration exists
+      if (tr.narration.trim()) {
+        onstatus({ detail: `Voice changed. Re-rendering narration ${tr.position + 1}...` });
+        handleRender(tr);
+      }
     } catch (e) {
       onstatus({ detail: `Failed to save voice: ${e.message}` });
     }
@@ -280,6 +316,30 @@
               </blockquote>
             {/if}
 
+            {#if rewriting[tr.id]}
+              <div class="rewrite-edit">
+                <label class="rewrite-label">Rewrite instruction</label>
+                <textarea
+                  bind:value={rewriteInstructions[tr.id]}
+                  onkeydown={(e) => rewriteKeydown(e, tr)}
+                  rows="2"
+                  class="edit-textarea"
+                  placeholder="e.g. Make it more dramatic, shorter, add a question..."
+                  disabled={rewriteLoading[tr.id]}
+                  use:autoFocus
+                ></textarea>
+                <div class="edit-actions">
+                  <button class="btn-save" onclick={() => submitRewrite(tr)}
+                          disabled={rewriteLoading[tr.id] || !rewriteInstructions[tr.id]?.trim()}>
+                    <Wand2 size={14} /> {rewriteLoading[tr.id] ? 'Rewriting...' : 'Rewrite'}
+                  </button>
+                  <button class="btn-cancel" onclick={() => cancelRewrite(tr)} disabled={rewriteLoading[tr.id]}>
+                    <X size={14} /> Cancel
+                  </button>
+                </div>
+              </div>
+            {/if}
+
             {#if tr.narration_status === 'error'}
               <p class="error-msg">{tr.narration_error || 'Unknown error'}</p>
             {/if}
@@ -289,6 +349,9 @@
         <div class="card-actions">
           <button class="btn-icon" onclick={() => startEdit(tr)} title="Edit narration">
             <Pencil size={16} />
+          </button>
+          <button class="btn-icon" onclick={() => startRewrite(tr)} title="Rewrite with AI">
+            <Wand2 size={16} />
           </button>
           <button class="btn-icon" onclick={() => handleRender(tr)} title="Re-render narration"
                   disabled={tr.narration_status === 'rendering'}>
@@ -537,6 +600,21 @@
     border-left: 3px solid var(--accent);
     background: var(--bg);
     border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .rewrite-edit {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .rewrite-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 4px;
   }
 
   .error-msg {
