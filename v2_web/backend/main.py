@@ -173,6 +173,7 @@ async def api_get_keyframe_status(keyframe_id: str):
         "id": kf.id,
         "status": kf.status,
         "image_url": image_url,
+        "seed": kf.seed,
         "error_message": kf.error_message,
     }
 

@@ -13,7 +13,9 @@
 
   $effect(() => {
     if (keyframe.image_filename && projectId) {
-      imageUrl = `/api/projects/${projectId}/images/${keyframe.image_filename}`;
+      // Cache-bust with seed so re-renders show the new image
+      const bust = keyframe.seed || Date.now();
+      imageUrl = `/api/projects/${projectId}/images/${keyframe.image_filename}?v=${bust}`;
     } else {
       imageUrl = null;
     }
@@ -33,6 +35,9 @@
         const status = await getKeyframeStatus(keyframe.id);
         keyframe.status = status.status;
         keyframe.error_message = status.error_message;
+        if (status.seed != null) {
+          keyframe.seed = status.seed;
+        }
         if (status.image_url) {
           keyframe.image_filename = status.image_url.split('/').pop();
         }
