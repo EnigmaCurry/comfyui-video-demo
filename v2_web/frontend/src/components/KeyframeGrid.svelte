@@ -6,22 +6,27 @@
 
   let { keyframes = $bindable([]), projectId = '', onupdated, onstatus } = $props();
 
-  let activeIndex = $state(0);
+  let activeIndex = $state(-1);
+  let initialized = $state(false);
 
   const flipDurationMs = 200;
 
-  // Allow parent to set activeIndex when loading a project
   export function setActive(idx) {
     activeIndex = idx;
+    initialized = true;
   }
 
-  let prevLength = $state(0);
+  // Auto-set activeIndex on first load based on keyframe statuses
   $effect(() => {
-    if (keyframes.length > 0 && keyframes.length !== prevLength) {
-      if (prevLength === 0) {
-        activeIndex = 0;
-      }
-      prevLength = keyframes.length;
+    if (initialized || keyframes.length === 0) return;
+    initialized = true;
+    const firstPending = keyframes.findIndex(kf => kf.status === 'pending');
+    if (firstPending === -1) {
+      activeIndex = keyframes.length - 1;
+    } else if (firstPending === 0) {
+      activeIndex = 0;
+    } else {
+      activeIndex = firstPending - 1;
     }
   });
 
