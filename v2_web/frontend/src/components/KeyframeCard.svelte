@@ -170,11 +170,6 @@
   </div>
 
   <div class="card-actions">
-    {#if active && keyframe.status === 'done'}
-      <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
-        <Check size={16} /> Approve
-      </button>
-    {/if}
     <button class="btn-icon" onclick={handleRerender} title="Re-render with new seed"
             disabled={keyframe.status === 'rendering'}>
       <RefreshCw size={16} />
@@ -193,6 +188,11 @@
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
     </button>
+    {#if active && keyframe.status === 'done'}
+      <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
+        <Check size={16} /> Approve
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -384,7 +384,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    margin-right: auto;
+    margin-left: auto;
   }
 
   .btn-approve:hover {
