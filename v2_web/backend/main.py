@@ -721,6 +721,16 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
             if result.returncode != 0:
                 raise RuntimeError(f"TTS failed: {result.stderr[:500]}")
 
+            # Log TTS output duration
+            dur_probe = await asyncio.to_thread(
+                subprocess.run,
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", audio_path],
+                capture_output=True, text=True,
+            )
+            tts_dur = dur_probe.stdout.strip() if dur_probe.returncode == 0 else "?"
+            print(f"TTS for {tr.id}: text={tr.narration[:50]!r}, audio={tts_dur}s, video={video_dur}s", flush=True)
+
             tr.audio_filename = f"{tr.id}_narration.wav"
 
             # 2. Get video duration for centering
