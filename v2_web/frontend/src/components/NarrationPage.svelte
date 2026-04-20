@@ -1,5 +1,5 @@
 <script>
-  import { Pencil, Check, X, RotateCcw, Play, RefreshCw, Wand2 } from 'lucide-svelte';
+  import { Check, X, RotateCcw, Play, RefreshCw, Wand2 } from 'lucide-svelte';
   import { updateNarration, regenerateNarration, setNarrationActiveIndex,
            setNarrationDirection, renderNarration, getNarrationStatus,
            rewriteNarration } from '../lib/api.js';
@@ -348,9 +348,6 @@
         </div>
 
         <div class="card-actions">
-          <button class="btn-icon" onclick={() => startEdit(tr)} title="Edit narration">
-            <Pencil size={16} />
-          </button>
           <button class="btn-icon" onclick={() => startRewrite(tr)} title="Rewrite with AI">
             <Wand2 size={16} />
           </button>
