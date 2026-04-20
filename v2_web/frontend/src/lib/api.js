@@ -21,7 +21,6 @@ export const listProjects = () => request('GET', '/projects');
 export const getCurrentProject = () => request('GET', '/projects/current');
 export const loadProject = (id) => request('POST', `/projects/${id}/load`);
 export const deleteProject = (id) => request('DELETE', `/projects/${id}`);
-
 export const renameProject = (name) => request('PUT', '/projects/current/name', { name });
 
 // ── Premise ──
@@ -33,7 +32,6 @@ export const generateStory = (scene_count, scene_duration, style = 'transition-s
   request('POST', '/story/generate', { scene_count, scene_duration, style });
 
 // ── Keyframes ──
-export const resetKeyframes = () => request('POST', '/keyframes/reset');
 export const listKeyframes = () => request('GET', '/keyframes');
 export const getKeyframeStatus = (id) => request('GET', `/keyframes/${id}/status`);
 export const renderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/render`, opts);
@@ -41,6 +39,17 @@ export const rerenderKeyframe = (id, opts = {}) => request('POST', `/keyframes/$
 export const updateKeyframe = (id, updates) => request('PUT', `/keyframes/${id}`, updates);
 export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
 export const reorderKeyframes = (ids) => request('POST', '/keyframes/reorder', ids);
-export const lockKeyframe = (id) => request('POST', `/keyframes/${id}/lock`);
-export const unlockKeyframe = (id) => request('POST', `/keyframes/${id}/unlock`);
+export const resetKeyframes = () => request('POST', '/keyframes/reset');
+export const lockKeyframes = () => request('POST', '/keyframes/lock');
+export const autoCreateKeyframes = () => request('POST', '/keyframes/auto-create');
 export const setActiveIndex = (activeIndex) => request('PUT', '/active-index', { active_index: activeIndex });
+
+// ── Transitions ──
+export const listTransitions = () => request('GET', '/transitions');
+export const getTransitionStatus = (id) => request('GET', `/transitions/${id}/status`);
+export const renderTransition = (id, opts = {}) => request('POST', `/transitions/${id}/render`, opts);
+export const rerenderTransition = (id, opts = {}) => request('POST', `/transitions/${id}/rerender`, opts);
+export const updateTransition = (id, updates) => request('PUT', `/transitions/${id}`, updates);
+export const resetTransitions = () => request('POST', '/transitions/reset');
+export const autoCreateTransitions = () => request('POST', '/transitions/auto-create');
+export const setTransitionActiveIndex = (activeIndex) => request('PUT', '/transition-active-index', { active_index: activeIndex });

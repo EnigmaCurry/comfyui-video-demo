@@ -1,14 +1,18 @@
 <script>
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
-  import { RotateCcw } from 'lucide-svelte';
+  import { RotateCcw, Zap, ArrowRight } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
-  import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes } from '../lib/api.js';
+  import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes,
+           lockKeyframes, autoCreateKeyframes } from '../lib/api.js';
 
-  let { keyframes = $bindable([]), projectId = '', onupdated, onstatus, onreset } = $props();
+  let { keyframes = $bindable([]), projectId = '', locked = false,
+        onupdated, onstatus, onreset, onlockkeyframes } = $props();
 
   let activeIndex = $state(-1);
   let initialized = $state(false);
+  let autoCreating = $state(false);
+  let locking = $state(false);
 
   const flipDurationMs = 200;
 
@@ -17,7 +21,6 @@
     initialized = true;
   }
 
-  // Auto-set activeIndex on first load based on keyframe statuses
   $effect(() => {
     if (initialized || keyframes.length === 0) return;
     initialized = true;
@@ -31,11 +34,15 @@
     }
   });
 
+  let allDone = $derived(keyframes.length > 0 && keyframes.every(kf => kf.status === 'done'));
+
   function handleDndConsider(e) {
+    if (locked) return;
     keyframes = e.detail.items;
   }
 
   async function handleDndFinalize(e) {
+    if (locked) return;
     keyframes = e.detail.items;
     try {
       const ids = keyframes.map(kf => kf.id);
@@ -52,19 +59,6 @@
     if (deletedIdx <= activeIndex && activeIndex > 0) {
       activeIndex--;
       setActiveIndex(activeIndex);
-    }
-  }
-
-  async function handleReset() {
-    if (!confirm('Reset all keyframes to the original story? All renders and edits will be lost.')) return;
-    onstatus({ detail: 'Resetting keyframes...' });
-    try {
-      const data = await resetKeyframes();
-      if (onreset) onreset({ detail: data.project });
-      onstatus({ detail: 'Keyframes reset to original story.' });
-      initialized = false;
-    } catch (e) {
-      onstatus({ detail: `Reset failed: ${e.message}` });
     }
   }
 
@@ -91,16 +85,65 @@
       setActiveIndex(activeIndex);
     }
   }
+
+  async function handleReset() {
+    if (!confirm('Reset all keyframes to the original story? All renders and edits will be lost.')) return;
+    onstatus({ detail: 'Resetting keyframes...' });
+    try {
+      const data = await resetKeyframes();
+      if (onreset) onreset({ detail: data.project });
+      onstatus({ detail: 'Keyframes reset to original story.' });
+      initialized = false;
+    } catch (e) {
+      onstatus({ detail: `Reset failed: ${e.message}` });
+    }
+  }
+
+  async function handleAutoCreate() {
+    if (!confirm('Render all remaining keyframes automatically?')) return;
+    autoCreating = true;
+    onstatus({ detail: 'Auto-creating all keyframes...' });
+    try {
+      const data = await autoCreateKeyframes();
+      if (onreset) onreset({ detail: data.project });
+      onstatus({ detail: `Auto-created ${data.rendered} keyframes. All done!` });
+      initialized = false;
+    } catch (e) {
+      onstatus({ detail: `Auto-create failed: ${e.message}` });
+    } finally {
+      autoCreating = false;
+    }
+  }
+
+  async function handleGoToTransitions() {
+    locking = true;
+    onstatus({ detail: 'Locking keyframes and generating transition descriptions...' });
+    try {
+      const data = await lockKeyframes();
+      if (onlockkeyframes) onlockkeyframes({ detail: data.project });
+      onstatus({ detail: 'Keyframes locked. Proceed to Transitions.' });
+    } catch (e) {
+      onstatus({ detail: `Failed: ${e.message}` });
+    } finally {
+      locking = false;
+    }
+  }
 </script>
 
 {#if keyframes.length > 0}
   <div class="toolbar">
-    <button class="reset-btn" onclick={handleReset}>
-      <RotateCcw size={14} /> Reset
-    </button>
+    {#if !locked}
+      <button class="toolbar-btn" onclick={handleReset}>
+        <RotateCcw size={14} /> Reset
+      </button>
+      <button class="toolbar-btn" onclick={handleAutoCreate} disabled={autoCreating || allDone}>
+        <Zap size={14} /> {autoCreating ? 'Creating...' : 'Auto Create'}
+      </button>
+    {/if}
   </div>
+
   <div class="grid"
-       use:dndzone={{ items: keyframes, flipDurationMs, type: 'keyframes' }}
+       use:dndzone={{ items: keyframes, flipDurationMs, type: 'keyframes', dragDisabled: locked }}
        onconsider={handleDndConsider}
        onfinalize={handleDndFinalize}>
     {#each keyframes as kf, i (kf.id)}
@@ -108,7 +151,7 @@
         <KeyframeCard
           keyframe={kf}
           index={i}
-          active={i === activeIndex}
+          active={!locked && i === activeIndex}
           {projectId}
           {onstatus}
           {onupdated}
@@ -118,6 +161,15 @@
       </div>
     {/each}
   </div>
+
+  {#if allDone && !locked}
+    <div class="all-done">
+      <span>All keyframes approved!</span>
+      <button class="go-btn" onclick={handleGoToTransitions} disabled={locking}>
+        {locking ? 'Generating transitions...' : 'Go to Transitions'} <ArrowRight size={16} />
+      </button>
+    </div>
+  {/if}
 {:else}
   <div class="empty">
     <p>No keyframes yet. Enter a theme above and click Generate.</p>
@@ -128,10 +180,11 @@
   .toolbar {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
     margin-bottom: 12px;
   }
 
-  .reset-btn {
+  .toolbar-btn {
     background: transparent;
     color: var(--text-muted);
     border: 1px solid var(--border);
@@ -142,7 +195,7 @@
     gap: 5px;
   }
 
-  .reset-btn:hover {
+  .toolbar-btn:hover:not(:disabled) {
     color: var(--text-dim);
     border-color: var(--text-muted);
   }
@@ -156,6 +209,38 @@
 
   .grid-item {
     min-width: 0;
+  }
+
+  .all-done {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+
+  .all-done span {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--success);
+  }
+
+  .go-btn {
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    padding: 10px 24px;
+    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .go-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
   }
 
   .empty {

@@ -191,3 +191,21 @@ async def generate_keyframe_descriptions(theme: str, count: int,
     if len(keyframes) > count:
         keyframes = keyframes[:count]
     return keyframes
+
+
+async def generate_transition_descriptions(keyframe_prompts: list[str],
+                                           duration: int = 10,
+                                           style: str = "transition-story") -> list[str]:
+    """Generate transition descriptions for consecutive keyframe pairs."""
+    style_data = _load_style(style)
+    system_prompt = style_data["transition_system_prompt"].format(duration=duration)
+
+    kf_list = "\n".join(f"  Keyframe {i+1}: {k}" for i, k in enumerate(keyframe_prompts))
+    user_msg = (f"Number of keyframes: {len(keyframe_prompts)}\n\n"
+                f"Keyframe descriptions:\n{kf_list}")
+
+    n_expected = len(keyframe_prompts) - 1
+    transitions = await call_llm(system_prompt, user_msg)
+    if len(transitions) > n_expected:
+        transitions = transitions[:n_expected]
+    return transitions

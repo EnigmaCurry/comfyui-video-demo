@@ -25,7 +25,19 @@ class Keyframe(BaseModel):
     seed: Optional[int] = None
     image_filename: Optional[str] = None
     negative_prompt: str = ""
-    locked: bool = False
+    error_message: Optional[str] = None
+
+
+class Transition(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    position: int
+    from_keyframe_id: str
+    to_keyframe_id: str
+    prompt: str
+    negative_prompt: str = ""
+    status: KeyframeStatus = KeyframeStatus.pending
+    seed: Optional[int] = None
+    video_filename: Optional[str] = None
     error_message: Optional[str] = None
 
 
@@ -36,12 +48,15 @@ class Project(BaseModel):
     premise: str = ""
     premise_locked: bool = False
     story_locked: bool = False
+    keyframes_locked: bool = False
     scene_count: int = 6
     scene_duration: int = 10
     style: str = "transition-story"
     active_index: int = 0
+    transition_active_index: int = 0
     original_prompts: list[str] = Field(default_factory=list)
     keyframes: list[Keyframe] = Field(default_factory=list)
+    transitions: list[Transition] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -63,6 +78,19 @@ class UpdateKeyframeRequest(BaseModel):
     prompt: Optional[str] = None
     negative_prompt: Optional[str] = None
     position: Optional[int] = None
+
+
+class UpdateTransitionRequest(BaseModel):
+    prompt: Optional[str] = None
+    negative_prompt: Optional[str] = None
+
+
+class TransitionRenderRequest(BaseModel):
+    seed: Optional[int] = None
+    width: int = 640
+    height: int = 480
+    frame_rate: int = 25
+    duration_seconds: int = 10
 
 
 class SuggestPremiseRequest(BaseModel):

@@ -3,10 +3,11 @@
   import PremisePage from './components/PremisePage.svelte';
   import StoryPage from './components/StoryPage.svelte';
   import KeyframeGrid from './components/KeyframeGrid.svelte';
+  import TransitionsPage from './components/TransitionsPage.svelte';
   import PlaceholderPage from './components/PlaceholderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import { getCurrentProject, renderKeyframe, renameProject } from './lib/api.js';
+  import { getCurrentProject, renderKeyframe, renderTransition, renameProject } from './lib/api.js';
 
   const tabs = [
     { id: 'premise', label: 'Premise' },
@@ -25,16 +26,17 @@
   let editingTitle = $state(false);
   let editTitle = $state('');
 
-  // Derived state from project
   let projectId = $derived(project?.id || '');
   let projectName = $derived(project?.name || '');
   let premise = $derived(project?.premise || '');
   let premiseLocked = $derived(project?.premise_locked || false);
   let storyLocked = $derived(project?.story_locked || false);
+  let keyframesLocked = $derived(project?.keyframes_locked || false);
   let keyframes = $derived(project?.keyframes || []);
+  let transitions = $derived(project?.transitions || []);
 
-  // Which tab is the furthest reachable?
   let enabledThrough = $derived(
+    keyframesLocked ? 'transitions' :
     storyLocked ? 'keyframes' :
     premiseLocked ? 'story' :
     'premise'
@@ -45,16 +47,15 @@
       const data = await getCurrentProject();
       if (data.project) {
         project = data.project;
-        // Jump to the furthest active tab
-        if (data.project.story_locked && data.project.keyframes.length > 0) {
+        if (data.project.keyframes_locked && data.project.transitions?.length > 0) {
+          activeTab = 'transitions';
+        } else if (data.project.story_locked && data.project.keyframes.length > 0) {
           activeTab = 'keyframes';
         } else if (data.project.premise_locked) {
           activeTab = 'story';
         }
       }
-    } catch {
-      // No project loaded yet
-    }
+    } catch {}
   }
 
   function handlePremise(event) {
@@ -65,35 +66,42 @@
   function handleStory(event) {
     project = event.detail;
     activeTab = 'keyframes';
-    // Render the first keyframe and mark it rendering so polling starts
     if (project.keyframes.length > 0) {
       const kf = project.keyframes[0];
       kf.status = 'rendering';
-      renderKeyframe(kf.id).catch(e =>
-        statusMessage = `Render error: ${e.message}`
-      );
+      renderKeyframe(kf.id).catch(e => statusMessage = `Render error: ${e.message}`);
+    }
+  }
+
+  function handleLockKeyframes(event) {
+    project = event.detail;
+    activeTab = 'transitions';
+    // Render the first transition
+    if (project.transitions.length > 0) {
+      const tr = project.transitions[0];
+      tr.status = 'rendering';
+      renderTransition(tr.id).catch(e => statusMessage = `Render error: ${e.message}`);
     }
   }
 
   function handleLoadProject(event) {
     project = event.detail;
-    if (project.story_locked && project.keyframes.length > 0) {
+    if (project.keyframes_locked && project.transitions?.length > 0) {
+      activeTab = 'transitions';
+    } else if (project.story_locked && project.keyframes.length > 0) {
       activeTab = 'keyframes';
       const idx = project.active_index || 0;
       if (idx < project.keyframes.length) {
         const kf = project.keyframes[idx];
         if (kf.status === 'pending') {
           kf.status = 'rendering';
-          renderKeyframe(kf.id).catch(e =>
-            statusMessage = `Render error: ${e.message}`
-          );
+          renderKeyframe(kf.id).catch(e => statusMessage = `Render error: ${e.message}`);
         }
       }
     } else if (project.premise_locked) {
       activeTab = 'story';
     } else {
       activeTab = 'premise';
-      // Restore notes/premise into the form
       if (premiseRef) {
         premiseRef.setPremiseText(project.premise || '');
         premiseRef.setNotesText(project.notes || '');
@@ -111,10 +119,7 @@
     }
   }
 
-  function handleStatus(event) {
-    statusMessage = event.detail;
-  }
-
+  function handleStatus(event) { statusMessage = event.detail; }
   function handleUpdated() {}
 
   function startEditTitle() {
@@ -127,9 +132,7 @@
       try {
         await renameProject(editTitle.trim());
         project.name = editTitle.trim();
-      } catch (e) {
-        statusMessage = `Rename failed: ${e.message}`;
-      }
+      } catch (e) { statusMessage = `Rename failed: ${e.message}`; }
     }
     editingTitle = false;
   }
@@ -139,13 +142,11 @@
     else if (e.key === 'Escape') { editingTitle = false; }
   }
 
-  // Sync keyframes mutations back into project
   let mutableKeyframes = $state([]);
-  $effect(() => {
-    if (project?.keyframes) {
-      mutableKeyframes = project.keyframes;
-    }
-  });
+  $effect(() => { if (project?.keyframes) mutableKeyframes = project.keyframes; });
+
+  let mutableTransitions = $state([]);
+  $effect(() => { if (project?.transitions) mutableTransitions = project.transitions; });
 
   init();
 </script>
@@ -156,13 +157,8 @@
       {#if projectName}
         <p class="app-label">Film Director</p>
         {#if editingTitle}
-          <input
-            class="title-edit"
-            bind:value={editTitle}
-            onkeydown={handleTitleKeydown}
-            onblur={saveTitle}
-            autofocus
-          />
+          <input class="title-edit" bind:value={editTitle}
+                 onkeydown={handleTitleKeydown} onblur={saveTitle} autofocus />
         {:else}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <h1 class="project-title clickable" onclick={startEditTitle} title="Click to rename">{projectName}</h1>
@@ -183,58 +179,40 @@
 
 <main>
   {#if activeTab === 'premise'}
-    <PremisePage
-      bind:this={premiseRef}
-      onstatus={handleStatus}
-      onpremise={handlePremise}
-      locked={premiseLocked}
-    />
+    <PremisePage bind:this={premiseRef} onstatus={handleStatus}
+                 onpremise={handlePremise} locked={premiseLocked} />
 
   {:else if activeTab === 'story'}
-    <StoryPage
-      onstatus={handleStatus}
-      onstory={handleStory}
-      {premise}
-      locked={storyLocked}
-      scenes={keyframes}
-    />
+    <StoryPage onstatus={handleStatus} onstory={handleStory}
+               {premise} locked={storyLocked} scenes={keyframes} />
 
   {:else if activeTab === 'keyframes'}
-    <KeyframeGrid
-      bind:this={gridRef}
-      bind:keyframes={mutableKeyframes}
-      {projectId}
-      onupdated={handleUpdated}
-      onstatus={handleStatus}
-      onreset={(e) => { project = e.detail; }}
-    />
-
-  {:else if activeTab === 'narration'}
-    <PlaceholderPage
-      title="Narration"
-      description="Add voiceover narration to each scene from prompts or by editing generated text."
-    />
+    <KeyframeGrid bind:this={gridRef} bind:keyframes={mutableKeyframes}
+                  {projectId} locked={keyframesLocked}
+                  onupdated={handleUpdated} onstatus={handleStatus}
+                  onreset={(e) => { project = e.detail; }}
+                  onlockkeyframes={handleLockKeyframes} />
 
   {:else if activeTab === 'transitions'}
-    <PlaceholderPage
-      title="Transitions"
-      description="Preview and render video transitions between locked keyframes."
-    />
+    <TransitionsPage bind:transitions={mutableTransitions}
+                     keyframes={keyframes} {projectId}
+                     onstatus={handleStatus}
+                     onreset={(e) => { project = e.detail; }} />
+
+  {:else if activeTab === 'narration'}
+    <PlaceholderPage title="Narration"
+      description="Add voiceover narration to each scene from prompts or by editing generated text." />
 
   {:else if activeTab === 'final'}
-    <PlaceholderPage
-      title="Final"
-      description="Preview the full sequence, add soundtrack, and render the final film."
-    />
+    <PlaceholderPage title="Final"
+      description="Preview the full sequence, add soundtrack, and render the final film." />
   {/if}
 </main>
 
 <StatusBar message={statusMessage} />
 
 <style>
-  header {
-    margin-bottom: 24px;
-  }
+  header { margin-bottom: 24px; }
 
   .header-row {
     display: flex;
@@ -243,11 +221,7 @@
     gap: 16px;
   }
 
-  h1 {
-    font-size: 28px;
-    font-weight: 600;
-    margin-bottom: 4px;
-  }
+  h1 { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
 
   .app-label {
     font-size: 12px;
@@ -257,11 +231,7 @@
     margin-bottom: 2px;
   }
 
-  .project-title {
-    font-size: 28px;
-    font-weight: 600;
-    margin-bottom: 4px;
-  }
+  .project-title { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
 
   .project-title.clickable {
     cursor: pointer;
@@ -269,14 +239,9 @@
     transition: border-color 0.15s;
   }
 
-  .project-title.clickable:hover {
-    border-bottom-color: var(--text-muted);
-  }
+  .project-title.clickable:hover { border-bottom-color: var(--text-muted); }
 
-  .subtitle {
-    color: var(--text-dim);
-    font-size: 15px;
-  }
+  .subtitle { color: var(--text-dim); font-size: 15px; }
 
   .title-edit {
     font-size: 24px;
@@ -286,11 +251,7 @@
     width: 400px;
   }
 
-  .header-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
 
   .new-btn {
     background: transparent;
@@ -300,12 +261,7 @@
     padding: 6px 12px;
   }
 
-  .new-btn:hover {
-    color: var(--text);
-    border-color: var(--text-muted);
-  }
+  .new-btn:hover { color: var(--text); border-color: var(--text-muted); }
 
-  main {
-    min-height: 300px;
-  }
+  main { min-height: 300px; }
 </style>

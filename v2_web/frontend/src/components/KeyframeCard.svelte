@@ -1,7 +1,7 @@
 <script>
-  import { RefreshCw, Pencil, Lock, Unlock, Trash2, Check, X, ChevronRight, ThumbsDown } from 'lucide-svelte';
+  import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
-           lockKeyframe, unlockKeyframe, getKeyframeStatus } from '../lib/api.js';
+           getKeyframeStatus } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false, projectId = '' } = $props();
 
@@ -120,20 +120,6 @@
     }
   }
 
-  async function toggleLock() {
-    try {
-      if (keyframe.locked) {
-        await unlockKeyframe(keyframe.id);
-        keyframe.locked = false;
-      } else {
-        await lockKeyframe(keyframe.id);
-        keyframe.locked = true;
-      }
-    } catch (e) {
-      onstatus({ detail: `Lock toggle failed: ${e.message}` });
-    }
-  }
-
   function handleApprove() {
     if (onapprove) onapprove({ detail: keyframe.id });
   }
@@ -153,7 +139,7 @@
   }
 </script>
 
-<div class="card" class:locked={keyframe.locked} class:error={keyframe.status === 'error'} class:active>
+<div class="card" class:error={keyframe.status === 'error'} class:active>
   <div class="card-header">
     <span class="position">{index + 1}</span>
     <span class="status-badge" class:pending={keyframe.status === 'pending'}
@@ -162,9 +148,6 @@
           class:error={keyframe.status === 'error'}>
       {keyframe.status}
     </span>
-    {#if keyframe.locked}
-      <span class="lock-badge">locked</span>
-    {/if}
   </div>
 
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -239,14 +222,6 @@
     <button class="btn-icon" class:btn-active={!!keyframe.negative_prompt}
             onclick={startEditNeg} title="Negative prompt">
       <ThumbsDown size={16} />
-    </button>
-    <button class="btn-icon" onclick={toggleLock}
-            title={keyframe.locked ? 'Unlock' : 'Lock'}>
-      {#if keyframe.locked}
-        <Lock size={16} />
-      {:else}
-        <Unlock size={16} />
-      {/if}
     </button>
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
