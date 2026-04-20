@@ -1,4 +1,5 @@
 <script>
+  import { RefreshCw, Pencil, Lock, Unlock, Trash2, Check, X } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
            lockKeyframe, unlockKeyframe, getKeyframeStatus } from '../lib/api.js';
 
@@ -154,8 +155,8 @@
         class="edit-textarea"
       ></textarea>
       <div class="edit-actions">
-        <button class="btn-save" onclick={saveEdit}>Save</button>
-        <button class="btn-cancel" onclick={cancelEdit}>Cancel</button>
+        <button class="btn-save" onclick={saveEdit}><Check size={14} /> Save</button>
+        <button class="btn-cancel" onclick={cancelEdit}><X size={14} /> Cancel</button>
       </div>
     {:else}
       <p class="prompt-text">{keyframe.prompt}</p>
@@ -165,17 +166,21 @@
   <div class="card-actions">
     <button class="btn-icon" onclick={handleRerender} title="Re-render with new seed"
             disabled={keyframe.status === 'rendering'}>
-      &#x21bb;
+      <RefreshCw size={16} />
     </button>
     <button class="btn-icon" onclick={startEdit} title="Edit prompt">
-      &#x270e;
+      <Pencil size={16} />
     </button>
     <button class="btn-icon" onclick={toggleLock}
             title={keyframe.locked ? 'Unlock' : 'Lock'}>
-      {keyframe.locked ? '\u{1f512}' : '\u{1f513}'}
+      {#if keyframe.locked}
+        <Lock size={16} />
+      {:else}
+        <Unlock size={16} />
+      {/if}
     </button>
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
-      &#x2715;
+      <Trash2 size={16} />
     </button>
   </div>
 </div>
@@ -330,6 +335,9 @@
     color: white;
     font-size: 12px;
     padding: 4px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .btn-cancel {
@@ -338,6 +346,9 @@
     border: 1px solid var(--border);
     font-size: 12px;
     padding: 4px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .card-actions {
