@@ -131,7 +131,12 @@
     }
   }
 
-  function handleStatus(event) { statusMessage = event.detail; }
+  let statusTimer = null;
+  function handleStatus(event) {
+    statusMessage = event.detail;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => { statusMessage = ''; }, 8000);
+  }
   function handleUpdated() {}
 
   function startEditTitle() {
