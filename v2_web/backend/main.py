@@ -644,12 +644,15 @@ async def _do_render_narration(proj_id: str, tr: Transition):
                 "--no-play",
                 tr.narration,
             ]
+            # Pass token via environment (tts.py reads COMFYUI_TOKEN)
+            env = {**os.environ}
             if settings.comfyui_token:
-                cmd.extend(["--token", settings.comfyui_token])
+                env["COMFYUI_TOKEN"] = settings.comfyui_token
 
             result = await asyncio.to_thread(
                 subprocess.run, cmd, cwd=tts_dir,
                 capture_output=True, text=True, timeout=120,
+                env=env,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"TTS failed: {result.stderr[:500]}")
