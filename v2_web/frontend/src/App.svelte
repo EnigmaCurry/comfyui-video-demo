@@ -142,6 +142,8 @@
     else if (e.key === 'Escape') { editingTitle = false; }
   }
 
+  $effect(() => { activeTab; window.scrollTo(0, 0); });
+
   let mutableKeyframes = $state([]);
   $effect(() => { if (project?.keyframes) mutableKeyframes = project.keyframes; });
 
