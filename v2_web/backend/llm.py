@@ -212,7 +212,9 @@ async def rewrite_narration(current_narration: str, instruction: str,
     wlo, whi = _voiceover_word_range(duration)
     system_prompt = (
         "You are rewriting a single spoken narration line for a cinematic video.\n\n"
-        f"The narration must be {wlo}-{whi} words (to fill ~{duration} seconds of speech).\n"
+        f"CRITICAL: The narration MUST be between {wlo} and {whi} words. "
+        f"Aim for {whi} words to fill ~{duration} seconds of speech. "
+        f"Do NOT write fewer than {wlo} words.\n"
     )
     if direction.strip():
         system_prompt += f"\nNARRATOR DIRECTION:\n{direction.strip()}\n"
