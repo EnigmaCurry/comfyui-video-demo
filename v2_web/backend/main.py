@@ -57,7 +57,11 @@ def _get_keyframe(keyframe_id: str) -> Keyframe:
 
 def _save():
     if current_project is not None:
-        save_project(current_project)
+        try:
+            save_project(current_project)
+        except Exception:
+            import logging, traceback
+            logging.error("Failed to save project: %s", traceback.format_exc())
 
 
 # ── Project endpoints ───────────────────────────────────────────────
@@ -99,6 +103,18 @@ async def api_rename_project(body: dict):
     proj.name = body.get("name", proj.name)
     _save()
     return {"name": proj.name}
+
+
+@app.get("/api/debug/projects-dir")
+async def api_debug_projects_dir():
+    from projects import PROJECTS_DIR
+    import os
+    return {
+        "projects_dir": PROJECTS_DIR,
+        "exists": os.path.isdir(PROJECTS_DIR),
+        "current_project": current_project.id if current_project else None,
+        "projects": list_projects(),
+    }
 
 
 # ── Premise flow ────────────────────────────────────────────────────
