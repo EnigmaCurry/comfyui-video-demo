@@ -28,6 +28,19 @@ render_tasks: dict[str, asyncio.Task] = {}
 _render_semaphore = asyncio.Semaphore(1)
 
 
+@app.on_event("startup")
+async def _startup():
+    """Auto-load the most recently updated project."""
+    global current_project
+    projects = list_projects()
+    if projects:
+        proj = load_project(projects[0]["id"])
+        if proj:
+            current_project = proj
+            import logging
+            logging.info("Auto-loaded project: %s (%s)", proj.name, proj.id)
+
+
 def _get_project() -> Project:
     if current_project is None:
         raise HTTPException(404, "No project loaded")

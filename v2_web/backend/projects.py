@@ -6,13 +6,24 @@ Each project is stored as a directory under PROJECTS_DIR:
 """
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 
 from config import settings
 from models import Keyframe, KeyframeStatus, Project
 
-PROJECTS_DIR = os.path.join(os.path.dirname(__file__), "projects")
+log = logging.getLogger(__name__)
+
+def _resolve_projects_dir() -> str:
+    if settings.projects_dir:
+        return settings.projects_dir
+    # Default: {repo_root}/projects
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    return os.path.join(repo_root, "projects")
+
+
+PROJECTS_DIR = _resolve_projects_dir()
 
 
 def _project_dir(project_id: str) -> str:
@@ -40,9 +51,11 @@ def save_project(project: Project) -> None:
         if kf["status"] == "rendering":
             kf["status"] = "done" if kf["image_filename"] else "pending"
         kf.pop("error_message", None)
-    with open(_project_file(project.id), "w") as f:
+    path = _project_file(project.id)
+    with open(path, "w") as f:
         json.dump(data, f, indent=2)
         f.write("\n")
+    log.info("Saved project %s (%s) to %s", project.id, project.name, path)
 
 
 def load_project(project_id: str) -> Project | None:

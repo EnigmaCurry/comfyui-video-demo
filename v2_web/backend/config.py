@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     llm_model: str = "default"
     llm_api_key: str = ""
     output_dir: str = "output"
+    projects_dir: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
