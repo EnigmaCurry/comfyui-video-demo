@@ -305,6 +305,8 @@ async def _do_render(proj_id: str, kf: Keyframe, seed: int, width: int, height: 
                 neg_parts.append(kf.negative_prompt)
             neg_prompt = ", ".join(p for p in neg_parts if p)
 
+            print(f"Rendering kf {kf.id}: seed={seed}, neg_prompt={neg_prompt[:100]!r}", flush=True)
+
             patched = patch_t2i_workflow(
                 base_wf, prompt_text=kf.prompt, negative_prompt_text=neg_prompt,
                 seed_value=seed, width=width, height=height,
