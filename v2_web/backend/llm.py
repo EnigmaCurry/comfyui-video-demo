@@ -51,7 +51,11 @@ async def call_llm(system_prompt: str, user_msg: str,
     if settings.llm_api_key:
         headers["Authorization"] = f"Bearer {settings.llm_api_key}"
 
-    url = f"{settings.llm_url}/v1/chat/completions"
+    base = settings.llm_url.rstrip("/")
+    if base.endswith("/v1"):
+        url = f"{base}/chat/completions"
+    else:
+        url = f"{base}/v1/chat/completions"
     content = ""
 
     async with httpx.AsyncClient(timeout=600.0) as client:
