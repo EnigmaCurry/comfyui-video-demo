@@ -121,7 +121,8 @@ async def call_llm(system_prompt: str, user_msg: str,
 
 
 async def call_llm_text(system_prompt: str, user_msg: str,
-                        temperature: float = 0.7) -> str:
+                        temperature: float = 0.7,
+                        max_tokens: int = 500) -> str:
     """Call the LLM and return raw text (not parsed as JSON)."""
     payload = {
         "model": settings.llm_model,
@@ -130,7 +131,7 @@ async def call_llm_text(system_prompt: str, user_msg: str,
             {"role": "user", "content": user_msg},
         ],
         "temperature": temperature,
-        "max_tokens": 100,
+        "max_tokens": max_tokens,
         "stream": False,
     }
 
@@ -149,6 +150,22 @@ async def call_llm_text(system_prompt: str, user_msg: str,
         resp.raise_for_status()
         resp_json = resp.json()
         return resp_json["choices"][0]["message"]["content"].strip()
+
+
+async def suggest_premise(notes: str) -> str:
+    """Generate a premise from freeform notes/ideas."""
+    system_prompt = (
+        "You are a screenwriter. The user will give you freeform notes — a stream of "
+        "consciousness, a list of nouns, half-formed ideas, moods, images. Your job is to "
+        "synthesize these into a clear, vivid PREMISE for a short cinematic film.\n\n"
+        "The premise should be 2-4 sentences that establish:\n"
+        "- A specific setting (where and when)\n"
+        "- A character or subject (who or what)\n"
+        "- A situation or tension (what's happening or about to happen)\n\n"
+        "Be concrete and visual. Don't explain or narrate — just state the premise.\n"
+        "Reply with ONLY the premise text, no quotes, no labels, no explanation."
+    )
+    return await call_llm_text(system_prompt, notes, temperature=0.8)
 
 
 async def generate_project_name(theme: str) -> str:

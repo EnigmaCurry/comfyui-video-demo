@@ -1,7 +1,3 @@
-/**
- * Backend API client for the film director.
- */
-
 const BASE = '/api';
 
 async function request(method, path, body = null) {
@@ -21,65 +17,27 @@ async function request(method, path, body = null) {
 }
 
 // ── Projects ──
+export const listProjects = () => request('GET', '/projects');
+export const getCurrentProject = () => request('GET', '/projects/current');
+export const loadProject = (id) => request('POST', `/projects/${id}/load`);
+export const deleteProject = (id) => request('DELETE', `/projects/${id}`);
 
-export async function listProjects() {
-  return request('GET', '/projects');
-}
+// ── Premise ──
+export const suggestPremise = (notes) => request('POST', '/premise/suggest', { notes });
+export const setPremise = (premise) => request('POST', '/premise/set', { premise });
 
-export async function getCurrentProject() {
-  return request('GET', '/projects/current');
-}
-
-export async function loadProject(id) {
-  return request('POST', `/projects/${id}/load`);
-}
-
-export async function deleteProject(id) {
-  return request('DELETE', `/projects/${id}`);
-}
+// ── Story ──
+export const generateStory = (scene_count, scene_duration, style = 'transition-story') =>
+  request('POST', '/story/generate', { scene_count, scene_duration, style });
 
 // ── Keyframes ──
-
-export async function listKeyframes() {
-  return request('GET', '/keyframes');
-}
-
-export async function generateKeyframes(theme, count, style = 'transition-story') {
-  return request('POST', '/keyframes/generate', { theme, count, style });
-}
-
-export async function getKeyframeStatus(id) {
-  return request('GET', `/keyframes/${id}/status`);
-}
-
-export async function renderKeyframe(id, opts = {}) {
-  return request('POST', `/keyframes/${id}/render`, opts);
-}
-
-export async function rerenderKeyframe(id, opts = {}) {
-  return request('POST', `/keyframes/${id}/rerender`, opts);
-}
-
-export async function updateKeyframe(id, updates) {
-  return request('PUT', `/keyframes/${id}`, updates);
-}
-
-export async function deleteKeyframe(id) {
-  return request('DELETE', `/keyframes/${id}`);
-}
-
-export async function reorderKeyframes(ids) {
-  return request('POST', '/keyframes/reorder', ids);
-}
-
-export async function lockKeyframe(id) {
-  return request('POST', `/keyframes/${id}/lock`);
-}
-
-export async function unlockKeyframe(id) {
-  return request('POST', `/keyframes/${id}/unlock`);
-}
-
-export async function setActiveIndex(activeIndex) {
-  return request('PUT', '/active-index', { active_index: activeIndex });
-}
+export const listKeyframes = () => request('GET', '/keyframes');
+export const getKeyframeStatus = (id) => request('GET', `/keyframes/${id}/status`);
+export const renderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/render`, opts);
+export const rerenderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/rerender`, opts);
+export const updateKeyframe = (id, updates) => request('PUT', `/keyframes/${id}`, updates);
+export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
+export const reorderKeyframes = (ids) => request('POST', '/keyframes/reorder', ids);
+export const lockKeyframe = (id) => request('POST', `/keyframes/${id}/lock`);
+export const unlockKeyframe = (id) => request('POST', `/keyframes/${id}/unlock`);
+export const setActiveIndex = (activeIndex) => request('PUT', '/active-index', { active_index: activeIndex });

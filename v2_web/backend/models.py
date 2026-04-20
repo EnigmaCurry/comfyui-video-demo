@@ -30,9 +30,13 @@ class Keyframe(BaseModel):
 
 class Project(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
-    name: str
-    theme: str
-    scene_count: int
+    name: str = ""
+    notes: str = ""
+    premise: str = ""
+    premise_locked: bool = False
+    story_locked: bool = False
+    scene_count: int = 6
+    scene_duration: int = 10
     style: str = "transition-story"
     active_index: int = 0
     keyframes: list[Keyframe] = Field(default_factory=list)
@@ -56,3 +60,17 @@ class RenderRequest(BaseModel):
 class UpdateKeyframeRequest(BaseModel):
     prompt: Optional[str] = None
     position: Optional[int] = None
+
+
+class SuggestPremiseRequest(BaseModel):
+    notes: str
+
+
+class SetPremiseRequest(BaseModel):
+    premise: str
+
+
+class GenerateStoryRequest(BaseModel):
+    scene_count: int = 6
+    scene_duration: int = 10
+    style: str = "transition-story"

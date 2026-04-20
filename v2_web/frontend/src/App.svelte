@@ -1,6 +1,7 @@
 <script>
   import TabBar from './components/TabBar.svelte';
-  import PromptPanel from './components/PromptPanel.svelte';
+  import PremisePage from './components/PremisePage.svelte';
+  import StoryPage from './components/StoryPage.svelte';
   import KeyframeGrid from './components/KeyframeGrid.svelte';
   import PlaceholderPage from './components/PlaceholderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
@@ -17,24 +18,36 @@
   ];
 
   let activeTab = $state('premise');
-  let keyframes = $state([]);
-  let projectId = $state('');
-  let projectName = $state('');
-  let projectTheme = $state('');
-  let activeIndex = $state(0);
+  let project = $state(null);
   let statusMessage = $state('');
   let gridRef = $state(null);
+  let premiseRef = $state(null);
 
-  let projectLoaded = $derived(!!projectId);
+  // Derived state from project
+  let projectId = $derived(project?.id || '');
+  let projectName = $derived(project?.name || '');
+  let premise = $derived(project?.premise || '');
+  let premiseLocked = $derived(project?.premise_locked || false);
+  let storyLocked = $derived(project?.story_locked || false);
+  let keyframes = $derived(project?.keyframes || []);
+
+  // Which tab is the furthest reachable?
+  let enabledThrough = $derived(
+    storyLocked ? 'keyframes' :
+    premiseLocked ? 'story' :
+    'premise'
+  );
 
   async function init() {
     try {
       const data = await getCurrentProject();
       if (data.project) {
-        applyProject(data.project);
-        // If there are keyframes, jump to the keyframes tab
-        if (data.project.keyframes.length > 0) {
+        project = data.project;
+        // Jump to the furthest active tab
+        if (data.project.story_locked && data.project.keyframes.length > 0) {
           activeTab = 'keyframes';
+        } else if (data.project.premise_locked) {
+          activeTab = 'story';
         }
       }
     } catch {
@@ -42,46 +55,60 @@
     }
   }
 
-  function applyProject(project) {
-    projectId = project.id;
-    projectName = project.name;
-    projectTheme = project.theme;
-    keyframes = project.keyframes;
-    activeIndex = project.active_index || 0;
-    if (gridRef) {
-      gridRef.setActive(activeIndex);
-    }
+  function handlePremise(event) {
+    project = event.detail;
+    activeTab = 'story';
   }
 
-  function handleProject(event) {
-    applyProject(event.detail);
-    // Auto-navigate to keyframes tab
+  function handleStory(event) {
+    project = event.detail;
     activeTab = 'keyframes';
+    // Render the first keyframe
+    if (project.keyframes.length > 0) {
+      renderKeyframe(project.keyframes[0].id).catch(e =>
+        statusMessage = `Render error: ${e.message}`
+      );
+    }
   }
 
   function handleLoadProject(event) {
-    const project = event.detail;
-    applyProject(project);
-    if (project.keyframes.length > 0) {
+    project = event.detail;
+    if (project.story_locked && project.keyframes.length > 0) {
       activeTab = 'keyframes';
+      const idx = project.active_index || 0;
+      if (idx < project.keyframes.length) {
+        const kf = project.keyframes[idx];
+        if (kf.status === 'pending') {
+          renderKeyframe(kf.id).catch(e =>
+            statusMessage = `Render error: ${e.message}`
+          );
+        }
+      }
+    } else if (project.premise_locked) {
+      activeTab = 'story';
     } else {
       activeTab = 'premise';
-    }
-    if (activeIndex < keyframes.length) {
-      const kf = keyframes[activeIndex];
-      if (kf.status === 'pending') {
-        renderKeyframe(kf.id).catch(e =>
-          statusMessage = `Render error: ${e.message}`
-        );
+      // Restore notes/premise into the form
+      if (premiseRef) {
+        premiseRef.setPremiseText(project.premise || '');
+        premiseRef.setNotesText(project.notes || '');
       }
     }
   }
 
-  function handleUpdated() {}
-
   function handleStatus(event) {
     statusMessage = event.detail;
   }
+
+  function handleUpdated() {}
+
+  // Sync keyframes mutations back into project
+  let mutableKeyframes = $state([]);
+  $effect(() => {
+    if (project?.keyframes) {
+      mutableKeyframes = project.keyframes;
+    }
+  });
 
   init();
 </script>
@@ -100,26 +127,30 @@
   </div>
 </header>
 
-<TabBar {tabs} bind:active={activeTab} {projectLoaded} />
+<TabBar {tabs} bind:active={activeTab} {enabledThrough} />
 
 <main>
   {#if activeTab === 'premise'}
-    <PromptPanel
-      onproject={handleProject}
+    <PremisePage
+      bind:this={premiseRef}
       onstatus={handleStatus}
-      {projectName}
+      onpremise={handlePremise}
+      locked={premiseLocked}
     />
 
   {:else if activeTab === 'story'}
-    <PlaceholderPage
-      title="Story"
-      description="View and edit the generated story arc, scene descriptions, and narrative beats."
+    <StoryPage
+      onstatus={handleStatus}
+      onstory={handleStory}
+      {premise}
+      locked={storyLocked}
+      scenes={keyframes}
     />
 
   {:else if activeTab === 'keyframes'}
     <KeyframeGrid
       bind:this={gridRef}
-      bind:keyframes
+      bind:keyframes={mutableKeyframes}
       {projectId}
       onupdated={handleUpdated}
       onstatus={handleStatus}

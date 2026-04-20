@@ -1,5 +1,21 @@
 <script>
-  let { tabs, active = $bindable(''), projectLoaded = false } = $props();
+  import { Lock } from 'lucide-svelte';
+
+  // tabs: [{ id, label }]
+  // enabledThrough: the furthest tab id that is reachable
+  let { tabs, active = $bindable(''), enabledThrough = 'premise' } = $props();
+
+  const tabIndex = (id) => tabs.findIndex(t => t.id === id);
+  const enabledIndex = $derived(tabIndex(enabledThrough));
+
+  function isEnabled(id) {
+    return tabIndex(id) <= enabledIndex;
+  }
+
+  function isLocked(id) {
+    // A tab is "locked" (greyed out content) if it's before the current frontier
+    return tabIndex(id) < enabledIndex;
+  }
 </script>
 
 <nav class="tab-bar">
@@ -7,11 +23,14 @@
     <button
       class="tab"
       class:active={active === tab.id}
-      class:disabled={tab.id !== 'premise' && !projectLoaded}
-      disabled={tab.id !== 'premise' && !projectLoaded}
+      class:locked={isLocked(tab.id) && active !== tab.id}
+      disabled={!isEnabled(tab.id)}
       onclick={() => active = tab.id}
     >
       {tab.label}
+      {#if isLocked(tab.id)}
+        <Lock size={11} />
+      {/if}
     </button>
   {/each}
 </nav>
@@ -33,6 +52,9 @@
     border-radius: var(--radius) var(--radius) 0 0;
     position: relative;
     transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
 
   .tab:hover:not(:disabled) {
@@ -55,7 +77,13 @@
     background: var(--accent);
   }
 
-  .tab.disabled {
-    opacity: 0.35;
+  .tab.locked {
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  .tab:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
   }
 </style>
