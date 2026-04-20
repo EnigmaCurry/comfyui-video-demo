@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     output_dir: str = "output"
     projects_dir: str = ""
+    tts_demo_dir: str = ""
+    tts_voice: str = "despotism-doc.wav"
+    tts_seed: int = 1
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

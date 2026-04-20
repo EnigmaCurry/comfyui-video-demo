@@ -1,38 +1,56 @@
 <script>
-  import { Pencil, Check, X, RotateCcw } from 'lucide-svelte';
-  import { updateNarration, regenerateNarration, setNarrationActiveIndex, setNarrationDirection } from '../lib/api.js';
+  import { Pencil, Check, X, RotateCcw, Play } from 'lucide-svelte';
+  import { updateNarration, regenerateNarration, setNarrationActiveIndex,
+           setNarrationDirection, renderNarration, getNarrationStatus } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
         direction: initialDirection = '', onstatus, onreset } = $props();
 
+  const DEFAULT_DIRECTION = "A contemplative, poetic narrator experiencing the scene firsthand. Stream of consciousness, present tense.";
   let activeIndex = $state(-1);
   let initialized = $state(false);
   let editing = $state({});
   let editTexts = $state({});
-  const DEFAULT_DIRECTION = "A contemplative, poetic narrator experiencing the scene firsthand. Stream of consciousness, present tense.";
   let direction = $state(initialDirection || DEFAULT_DIRECTION);
   let regenerating = $state(false);
   let directionDirty = $state(false);
+  let polling = $state({});
 
   $effect(() => { direction = initialDirection || DEFAULT_DIRECTION; });
 
-  // All narrations are "approved" once you've reviewed them — no rendering needed.
-  // The active index tracks which one you're currently reviewing.
   $effect(() => {
     if (initialized || transitions.length === 0) return;
     initialized = true;
-    activeIndex = 0;
+    // Find the first transition that hasn't been narration-rendered
+    const firstPending = transitions.findIndex(t => t.narration_status !== 'done');
+    if (firstPending === -1) {
+      activeIndex = transitions.length - 1;
+    } else if (firstPending === 0) {
+      activeIndex = 0;
+    } else {
+      activeIndex = firstPending - 1;
+    }
   });
 
-  let allReviewed = $derived(activeIndex >= transitions.length);
+  // Poll any that are rendering on load
+  $effect(() => {
+    for (const tr of transitions) {
+      if (tr.narration_status === 'rendering' && !polling[tr.id]) {
+        pollStatus(tr);
+      }
+    }
+  });
 
-  function getKeyframe(id) {
-    return keyframes.find(kf => kf.id === id);
-  }
+  let allDone = $derived(transitions.length > 0 && transitions.every(t => t.narration_status === 'done'));
 
   function videoUrl(tr) {
     if (!tr?.video_filename || !projectId) return null;
     return `/api/projects/${projectId}/videos/${tr.video_filename}?v=${tr.seed || 0}`;
+  }
+
+  function narratedVideoUrl(tr) {
+    if (!tr?.narrated_video_filename || !projectId) return null;
+    return `/api/projects/${projectId}/videos/${tr.narrated_video_filename}?v=${tr.narration_status}`;
   }
 
   function startEdit(tr) {
@@ -44,6 +62,9 @@
     try {
       await updateNarration(tr.id, editTexts[tr.id]);
       tr.narration = editTexts[tr.id];
+      // Narration text changed — reset render status
+      tr.narration_status = 'pending';
+      tr.narrated_video_filename = null;
       editing[tr.id] = false;
       onstatus({ detail: `Updated narration for transition ${tr.position + 1}` });
     } catch (e) {
@@ -53,12 +74,41 @@
 
   function cancelEdit(tr) { editing[tr.id] = false; }
 
+  async function handleRender(tr) {
+    onstatus({ detail: `Rendering narration ${tr.position + 1}...` });
+    tr.narration_status = 'rendering';
+    try {
+      await renderNarration(tr.id);
+      pollStatus(tr);
+    } catch (e) {
+      onstatus({ detail: `Render failed: ${e.message}` });
+      tr.narration_status = 'error';
+    }
+  }
+
+  async function pollStatus(tr) {
+    if (polling[tr.id]) return;
+    polling[tr.id] = true;
+    while (tr.narration_status === 'rendering') {
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const status = await getNarrationStatus(tr.id);
+        tr.narration_status = status.status;
+        tr.narration_error = status.error;
+        if (status.video_url) {
+          tr.narrated_video_filename = status.video_url.split('/').pop();
+        }
+      } catch { break; }
+    }
+    polling[tr.id] = false;
+  }
+
   function handleApprove() {
     const nextIndex = activeIndex + 1;
     if (nextIndex < transitions.length) {
       activeIndex = nextIndex;
       setNarrationActiveIndex(activeIndex);
-      onstatus({ detail: `Approved narration #${activeIndex}. Reviewing #${nextIndex + 1}...` });
+      onstatus({ detail: `Approved #${activeIndex}. Review narration #${nextIndex + 1}...` });
     } else {
       activeIndex = transitions.length;
       setNarrationActiveIndex(activeIndex);
@@ -76,14 +126,12 @@
     }
   }
 
-  function handleDirectionInput() {
-    directionDirty = true;
-  }
+  function handleDirectionInput() { directionDirty = true; }
 
   async function handleRegenerate() {
-    if (!confirm('Regenerate all narration text? Your edits will be lost.')) return;
+    if (!confirm('Regenerate all narration text? Your edits and renders will be lost.')) return;
     regenerating = true;
-    onstatus({ detail: 'Regenerating narration with direction...' });
+    onstatus({ detail: 'Regenerating narration...' });
     try {
       const data = await regenerateNarration(direction);
       if (onreset) onreset({ detail: data.project });
@@ -135,27 +183,40 @@
     {#each transitions as tr, i (tr.id)}
       {@const isActive = i === activeIndex}
       {@const isEditing = editing[tr.id]}
+      {@const hasNarratedVideo = tr.narration_status === 'done' && narratedVideoUrl(tr)}
 
       <div class="narration-card" class:active={isActive}>
         <div class="card-header">
           <span class="position">{i + 1}</span>
           <span class="label">Transition {tr.position + 1}</span>
-          {#if i < activeIndex}
-            <span class="status-badge done">reviewed</span>
-          {:else if isActive}
-            <span class="status-badge rendering">reviewing</span>
-          {:else}
-            <span class="status-badge pending">pending</span>
-          {/if}
+          <span class="status-badge"
+                class:pending={tr.narration_status === 'pending'}
+                class:rendering={tr.narration_status === 'rendering'}
+                class:done={tr.narration_status === 'done'}
+                class:error={tr.narration_status === 'error'}>
+            {tr.narration_status === 'done' ? 'rendered' : tr.narration_status}
+          </span>
         </div>
 
         <div class="card-content">
-          {#if videoUrl(tr)}
-            <div class="video-thumb">
+          <div class="video-thumb">
+            {#if hasNarratedVideo}
               <!-- svelte-ignore a11y_media_has_caption -->
-              <video src={videoUrl(tr)} loop muted autoplay></video>
-            </div>
-          {/if}
+              <video src={narratedVideoUrl(tr)} controls loop></video>
+            {:else if tr.narration_status === 'rendering'}
+              <div class="render-overlay">
+                <div class="spinner"></div>
+                <span>Rendering...</span>
+              </div>
+              {#if videoUrl(tr)}
+                <!-- svelte-ignore a11y_media_has_caption -->
+                <video src={videoUrl(tr)} loop muted></video>
+              {/if}
+            {:else if videoUrl(tr)}
+              <!-- svelte-ignore a11y_media_has_caption -->
+              <video src={videoUrl(tr)} loop muted></video>
+            {/if}
+          </div>
 
           <div class="narration-body">
             <p class="scene-prompt">{tr.prompt}</p>
@@ -177,6 +238,10 @@
                 {tr.narration || '(no narration)'}
               </blockquote>
             {/if}
+
+            {#if tr.narration_status === 'error'}
+              <p class="error-msg">{tr.narration_error || 'Unknown error'}</p>
+            {/if}
           </div>
         </div>
 
@@ -185,18 +250,24 @@
             <Pencil size={16} />
           </button>
           {#if isActive && !isEditing}
-            <button class="btn-approve" onclick={handleApprove} title="Approve narration">
-              <Check size={16} /> Approve
-            </button>
+            {#if tr.narration_status === 'done'}
+              <button class="btn-approve" onclick={handleApprove} title="Approve narration">
+                <Check size={16} /> Approve
+              </button>
+            {:else if tr.narration_status !== 'rendering'}
+              <button class="btn-render" onclick={() => handleRender(tr)} title="Render narration audio">
+                <Play size={16} /> Render
+              </button>
+            {/if}
           {/if}
         </div>
       </div>
     {/each}
   </div>
 
-  {#if allReviewed}
+  {#if allDone}
     <div class="all-done">
-      <span>All narration approved!</span>
+      <span>All narration rendered and approved!</span>
     </div>
   {/if}
 {:else}
@@ -250,13 +321,6 @@
   }
 
   .btn-save-dir:hover { background: var(--accent-hover); }
-
-  .toolbar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
 
   .toolbar-btn {
     background: transparent;
@@ -323,6 +387,7 @@
   .status-badge.pending { background: var(--accent-bg); color: var(--accent); }
   .status-badge.rendering { background: var(--accent-bg); color: var(--accent-hover); }
   .status-badge.done { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+  .status-badge.error { background: rgba(239, 68, 68, 0.15); color: var(--error); }
 
   .card-content {
     display: flex;
@@ -331,17 +396,43 @@
   }
 
   .video-thumb {
-    width: 200px;
+    width: 240px;
     flex-shrink: 0;
     border-radius: var(--radius);
     overflow: hidden;
     background: #000;
+    position: relative;
   }
 
   .video-thumb video {
     width: 100%;
     display: block;
   }
+
+  .render-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: white;
+    font-size: 13px;
+    z-index: 1;
+  }
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .narration-body {
     flex: 1;
@@ -365,6 +456,12 @@
     border-left: 3px solid var(--accent);
     background: var(--bg);
     border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .error-msg {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--error);
   }
 
   .edit-textarea {
@@ -422,6 +519,20 @@
     background: var(--bg-card-hover);
     color: var(--text);
   }
+
+  .btn-render {
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .btn-render:hover { background: var(--accent-hover); }
 
   .btn-approve {
     background: var(--success);

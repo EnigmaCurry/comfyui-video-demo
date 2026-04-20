@@ -39,6 +39,10 @@ class Transition(BaseModel):
     seed: Optional[int] = None
     video_filename: Optional[str] = None
     narration: str = ""
+    narration_status: KeyframeStatus = KeyframeStatus.pending
+    audio_filename: Optional[str] = None
+    narrated_video_filename: Optional[str] = None
+    narration_error: Optional[str] = None
     error_message: Optional[str] = None
 
 

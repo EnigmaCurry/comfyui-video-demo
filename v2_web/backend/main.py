@@ -600,6 +600,167 @@ async def api_set_narration_direction(body: dict):
     return {"direction": proj.narration_direction}
 
 
+async def _do_render_narration(proj_id: str, tr: Transition):
+    """Render TTS audio from narration text, then mux with transition video."""
+    import subprocess
+    import sys
+    from config import settings
+
+    async with _render_semaphore:
+        try:
+            proj = current_project
+            if not proj:
+                raise RuntimeError("No project loaded")
+
+            img_dir = images_dir(proj_id)
+            if not tr.video_filename:
+                raise RuntimeError("Transition video not rendered yet")
+            if not tr.narration.strip():
+                raise RuntimeError("No narration text")
+
+            video_path = os.path.join(img_dir, tr.video_filename)
+            audio_path = os.path.join(img_dir, f"{tr.id}_narration.wav")
+            narrated_path = os.path.join(img_dir, f"{tr.id}_narrated.mp4")
+
+            # Resolve tts-demo directory
+            tts_dir = settings.tts_demo_dir
+            if not tts_dir:
+                # Default: sibling directory to the repo
+                repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                tts_dir = os.path.join(os.path.dirname(repo_root), "tts-demo")
+            tts_script = os.path.join(tts_dir, "tts.py")
+
+            if not os.path.isfile(tts_script):
+                raise RuntimeError(f"tts-demo not found at {tts_dir}")
+
+            # 1. Render TTS
+            print(f"Rendering TTS for {tr.id}: {tr.narration[:60]!r}", flush=True)
+            cmd = [
+                sys.executable, tts_script,
+                "--url", settings.comfyui_url,
+                "--voice", settings.tts_voice,
+                "--output", os.path.abspath(audio_path),
+                "--seed", str(settings.tts_seed),
+                "--no-play",
+                tr.narration,
+            ]
+            if settings.comfyui_token:
+                cmd.extend(["--token", settings.comfyui_token])
+
+            result = await asyncio.to_thread(
+                subprocess.run, cmd, cwd=tts_dir,
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"TTS failed: {result.stderr[:500]}")
+
+            tr.audio_filename = f"{tr.id}_narration.wav"
+
+            # 2. Get video duration for centering
+            probe = await asyncio.to_thread(
+                subprocess.run,
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", video_path],
+                capture_output=True, text=True,
+            )
+            video_dur = float(probe.stdout.strip()) if probe.returncode == 0 else 10.0
+
+            # 3. Mux: overlay centered narration audio on video
+            # Pad audio to center it within the video duration
+            audio_probe = await asyncio.to_thread(
+                subprocess.run,
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", audio_path],
+                capture_output=True, text=True,
+            )
+            audio_dur = float(audio_probe.stdout.strip()) if audio_probe.returncode == 0 else 0
+
+            pad_before = max(0, (video_dur - audio_dur) / 2)
+
+            mux_cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-i", audio_path,
+                "-filter_complex",
+                f"[1:a]adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo];"
+                f"[0:a][vo]amix=inputs=2:duration=first:dropout_transition=0[aout]",
+                "-map", "0:v", "-map", "[aout]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-shortest",
+                narrated_path,
+            ]
+            # If source video has no audio, simpler command
+            probe_audio = await asyncio.to_thread(
+                subprocess.run,
+                ["ffprobe", "-v", "quiet", "-select_streams", "a",
+                 "-show_entries", "stream=codec_type", "-of", "csv=p=0", video_path],
+                capture_output=True, text=True,
+            )
+            has_audio = bool(probe_audio.stdout.strip())
+
+            if not has_audio:
+                mux_cmd = [
+                    "ffmpeg", "-y",
+                    "-i", video_path,
+                    "-i", audio_path,
+                    "-filter_complex",
+                    f"[1:a]adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo]",
+                    "-map", "0:v", "-map", "[vo]",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                    "-shortest",
+                    narrated_path,
+                ]
+
+            mux_result = await asyncio.to_thread(
+                subprocess.run, mux_cmd,
+                capture_output=True, text=True, timeout=120,
+            )
+            if mux_result.returncode != 0:
+                raise RuntimeError(f"Mux failed: {mux_result.stderr[:500]}")
+
+            tr.narrated_video_filename = f"{tr.id}_narrated.mp4"
+            tr.narration_status = KeyframeStatus.done
+            if current_project and current_project.id == proj_id:
+                _save()
+            print(f"Narration rendered for {tr.id}", flush=True)
+
+        except asyncio.CancelledError:
+            tr.narration_status = KeyframeStatus.pending
+        except Exception as e:
+            tr.narration_status = KeyframeStatus.error
+            tr.narration_error = str(e)
+            print(f"Narration render error: {e}", flush=True)
+
+
+@app.post("/api/narration/{transition_id}/render")
+async def api_render_narration(transition_id: str):
+    proj = _get_project()
+    tr = _get_transition(transition_id)
+    old = render_tasks.pop(f"narr_{transition_id}", None)
+    if old and not old.done():
+        old.cancel()
+    tr.narration_status = KeyframeStatus.rendering
+    tr.narration_error = None
+    task = asyncio.create_task(_do_render_narration(proj.id, tr))
+    render_tasks[f"narr_{transition_id}"] = task
+    return {"id": tr.id, "status": tr.narration_status}
+
+
+@app.get("/api/narration/{transition_id}/status")
+async def api_get_narration_status(transition_id: str):
+    tr = _get_transition(transition_id)
+    proj = _get_project()
+    video_url = None
+    if tr.narrated_video_filename:
+        video_url = f"/api/projects/{proj.id}/videos/{tr.narrated_video_filename}"
+    return {
+        "id": tr.id,
+        "status": tr.narration_status,
+        "video_url": video_url,
+        "error": tr.narration_error,
+    }
+
+
 @app.put("/api/narration/{transition_id}")
 async def api_update_narration(transition_id: str, body: dict):
     tr = _get_transition(transition_id)
