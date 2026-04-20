@@ -12,8 +12,8 @@
     { id: 'premise', label: 'Premise' },
     { id: 'story', label: 'Story' },
     { id: 'keyframes', label: 'Keyframes' },
-    { id: 'narration', label: 'Narration' },
     { id: 'transitions', label: 'Transitions' },
+    { id: 'narration', label: 'Narration' },
     { id: 'final', label: 'Final' },
   ];
 
