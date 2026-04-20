@@ -80,9 +80,9 @@ def list_projects() -> list[dict]:
                 data = json.load(f)
             results.append({
                 "id": data["id"],
-                "name": data["name"],
-                "theme": data["theme"],
-                "scene_count": data["scene_count"],
+                "name": data.get("name", ""),
+                "premise": data.get("premise", data.get("theme", "")),
+                "scene_count": data.get("scene_count", 0),
                 "keyframe_count": len(data.get("keyframes", [])),
                 "created_at": data.get("created_at", ""),
                 "updated_at": data.get("updated_at", ""),
