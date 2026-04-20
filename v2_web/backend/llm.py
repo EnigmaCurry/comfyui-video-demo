@@ -55,9 +55,12 @@ async def call_llm(system_prompt: str, user_msg: str,
     content = ""
 
     async with httpx.AsyncClient(timeout=600.0) as client:
+        # Try streaming first
         async with client.stream("POST", url, json=payload, headers=headers) as resp:
             resp.raise_for_status()
+            raw_lines = []
             async for line in resp.aiter_lines():
+                raw_lines.append(line)
                 if not line or not line.startswith("data: "):
                     continue
                 data_str = line[6:]
@@ -69,6 +72,29 @@ async def call_llm(system_prompt: str, user_msg: str,
                     content += delta.get("content", "")
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue
+
+        # If streaming yielded nothing, try parsing the raw response as
+        # a non-streaming JSON response (some APIs ignore stream=true)
+        if not content and raw_lines:
+            full_body = "\n".join(raw_lines)
+            try:
+                resp_json = json.loads(full_body)
+                content = resp_json["choices"][0]["message"]["content"]
+            except (json.JSONDecodeError, KeyError, IndexError):
+                import logging
+                logging.error("LLM: no content from stream. Raw (%d lines): %s",
+                              len(raw_lines), full_body[:1000])
+
+    if not content:
+        # Fall back to a non-streaming request
+        import logging
+        logging.info("LLM: retrying without streaming")
+        payload["stream"] = False
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            resp_json = resp.json()
+            content = resp_json["choices"][0]["message"]["content"]
 
     # Parse JSON (handle markdown code blocks)
     text = content.strip()
