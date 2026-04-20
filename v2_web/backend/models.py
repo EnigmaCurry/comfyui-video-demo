@@ -38,6 +38,7 @@ class Transition(BaseModel):
     status: KeyframeStatus = KeyframeStatus.pending
     seed: Optional[int] = None
     video_filename: Optional[str] = None
+    narration: str = ""
     error_message: Optional[str] = None
 
 
@@ -49,11 +50,13 @@ class Project(BaseModel):
     premise_locked: bool = False
     story_locked: bool = False
     keyframes_locked: bool = False
+    transitions_locked: bool = False
     scene_count: int = 6
     scene_duration: int = 10
     style: str = "transition-story"
     active_index: int = 0
     transition_active_index: int = 0
+    narration_active_index: int = 0
     original_prompts: list[str] = Field(default_factory=list)
     keyframes: list[Keyframe] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)

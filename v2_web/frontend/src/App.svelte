@@ -4,6 +4,7 @@
   import StoryPage from './components/StoryPage.svelte';
   import KeyframeGrid from './components/KeyframeGrid.svelte';
   import TransitionsPage from './components/TransitionsPage.svelte';
+  import NarrationPage from './components/NarrationPage.svelte';
   import PlaceholderPage from './components/PlaceholderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
   import StatusBar from './components/StatusBar.svelte';
@@ -32,10 +33,12 @@
   let premiseLocked = $derived(project?.premise_locked || false);
   let storyLocked = $derived(project?.story_locked || false);
   let keyframesLocked = $derived(project?.keyframes_locked || false);
+  let transitionsLocked = $derived(project?.transitions_locked || false);
   let keyframes = $derived(project?.keyframes || []);
   let transitions = $derived(project?.transitions || []);
 
   let enabledThrough = $derived(
+    transitionsLocked ? 'narration' :
     keyframesLocked ? 'transitions' :
     storyLocked ? 'keyframes' :
     premiseLocked ? 'story' :
@@ -47,7 +50,9 @@
       const data = await getCurrentProject();
       if (data.project) {
         project = data.project;
-        if (data.project.keyframes_locked && data.project.transitions?.length > 0) {
+        if (data.project.transitions_locked) {
+          activeTab = 'narration';
+        } else if (data.project.keyframes_locked && data.project.transitions?.length > 0) {
           activeTab = 'transitions';
         } else if (data.project.story_locked && data.project.keyframes.length > 0) {
           activeTab = 'keyframes';
@@ -84,9 +89,16 @@
     }
   }
 
+  function handleLockTransitions(event) {
+    project = event.detail;
+    activeTab = 'narration';
+  }
+
   function handleLoadProject(event) {
     project = event.detail;
-    if (project.keyframes_locked && project.transitions?.length > 0) {
+    if (project.transitions_locked) {
+      activeTab = 'narration';
+    } else if (project.keyframes_locked && project.transitions?.length > 0) {
       activeTab = 'transitions';
     } else if (project.story_locked && project.keyframes.length > 0) {
       activeTab = 'keyframes';
@@ -198,12 +210,16 @@
   {:else if activeTab === 'transitions'}
     <TransitionsPage bind:transitions={mutableTransitions}
                      keyframes={keyframes} {projectId}
+                     locked={transitionsLocked}
                      onstatus={handleStatus}
-                     onreset={(e) => { project = e.detail; }} />
+                     onreset={(e) => { project = e.detail; }}
+                     onlocktransitions={handleLockTransitions} />
 
   {:else if activeTab === 'narration'}
-    <PlaceholderPage title="Narration"
-      description="Add voiceover narration to each scene from prompts or by editing generated text." />
+    <NarrationPage bind:transitions={mutableTransitions}
+                   keyframes={keyframes} {projectId}
+                   onstatus={handleStatus}
+                   onreset={(e) => { project = e.detail; }} />
 
   {:else if activeTab === 'final'}
     <PlaceholderPage title="Final"

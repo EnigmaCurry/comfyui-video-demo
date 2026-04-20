@@ -567,6 +567,65 @@ async def api_reset_transitions():
     return {"project": proj.model_dump()}
 
 
+# ── Narration endpoints ────────────────��─────────────────────────────
+
+@app.post("/api/transitions/lock")
+async def api_lock_transitions():
+    """Lock transitions and generate narration text via LLM."""
+    proj = _get_project()
+    if not proj.keyframes_locked:
+        raise HTTPException(400, "Keyframes must be locked first")
+    from llm import generate_narration
+    ordered_kf = sorted(proj.keyframes, key=lambda k: k.position)
+    ordered_tr = sorted(proj.transitions, key=lambda t: t.position)
+    kf_prompts = [kf.prompt for kf in ordered_kf]
+    tr_prompts = [tr.prompt for tr in ordered_tr]
+    narrations = await generate_narration(
+        kf_prompts, tr_prompts, duration=proj.scene_duration, style=proj.style,
+    )
+    for i, tr in enumerate(ordered_tr):
+        tr.narration = narrations[i] if i < len(narrations) else ""
+    proj.transitions_locked = True
+    proj.narration_active_index = 0
+    _save()
+    return {"project": proj.model_dump()}
+
+
+@app.put("/api/narration/{transition_id}")
+async def api_update_narration(transition_id: str, body: dict):
+    tr = _get_transition(transition_id)
+    tr.narration = body.get("narration", tr.narration)
+    _save()
+    return {"narration": tr.narration}
+
+
+@app.put("/api/narration-active-index")
+async def api_set_narration_active_index(body: dict):
+    proj = _get_project()
+    proj.narration_active_index = body.get("active_index", 0)
+    _save()
+    return {"active_index": proj.narration_active_index}
+
+
+@app.post("/api/narration/regenerate")
+async def api_regenerate_narration():
+    """Regenerate all narration text from scratch."""
+    proj = _get_project()
+    from llm import generate_narration
+    ordered_kf = sorted(proj.keyframes, key=lambda k: k.position)
+    ordered_tr = sorted(proj.transitions, key=lambda t: t.position)
+    kf_prompts = [kf.prompt for kf in ordered_kf]
+    tr_prompts = [tr.prompt for tr in ordered_tr]
+    narrations = await generate_narration(
+        kf_prompts, tr_prompts, duration=proj.scene_duration, style=proj.style,
+    )
+    for i, tr in enumerate(ordered_tr):
+        tr.narration = narrations[i] if i < len(narrations) else ""
+    proj.narration_active_index = 0
+    _save()
+    return {"project": proj.model_dump()}
+
+
 # ── File serving ────────────────────────────────────────────────────
 
 @app.get("/api/projects/{project_id}/images/{filename}")

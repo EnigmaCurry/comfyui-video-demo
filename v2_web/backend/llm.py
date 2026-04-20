@@ -222,3 +222,33 @@ async def generate_transition_descriptions(keyframe_prompts: list[str],
     if len(transitions) > n_expected:
         transitions = transitions[:n_expected]
     return transitions
+
+
+def _voiceover_word_range(duration: int) -> tuple[int, int]:
+    lo = max(1, int(duration * 1.0))
+    hi = max(lo, int(duration * 1.7))
+    return lo, hi
+
+
+async def generate_narration(keyframe_prompts: list[str],
+                             transition_prompts: list[str],
+                             duration: int = 10,
+                             style: str = "transition-story") -> list[str]:
+    """Generate voiceover narration for each transition."""
+    style_data = _load_style(style)
+    wlo, whi = _voiceover_word_range(duration)
+    vo_template = style_data.get("voiceover_system_prompt", "")
+    system_prompt = vo_template.format(duration=duration, word_lo=wlo, word_hi=whi)
+
+    kf_list = "\n".join(f"  Keyframe {i+1}: {k}" for i, k in enumerate(keyframe_prompts))
+    tr_list = "\n".join(
+        f"  Transition {i+1} (keyframe {i+1} -> {i+2}): {t}"
+        for i, t in enumerate(transition_prompts))
+    user_msg = (f"Number of transitions: {len(transition_prompts)}\n\n"
+                f"Keyframe descriptions:\n{kf_list}\n\n"
+                f"Transition descriptions:\n{tr_list}")
+
+    narrations = await call_llm(system_prompt, user_msg)
+    if len(narrations) > len(transition_prompts):
+        narrations = narrations[:len(transition_prompts)]
+    return narrations

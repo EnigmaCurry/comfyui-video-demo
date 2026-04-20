@@ -1,16 +1,17 @@
 <script>
   import { flip } from 'svelte/animate';
-  import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, RotateCcw, Zap } from 'lucide-svelte';
+  import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, RotateCcw, Zap, ArrowRight } from 'lucide-svelte';
   import { renderTransition, rerenderTransition, updateTransition,
            getTransitionStatus, setTransitionActiveIndex, resetTransitions,
-           autoCreateTransitions } from '../lib/api.js';
+           autoCreateTransitions, lockTransitions } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
-        onstatus, onreset } = $props();
+        locked = false, onstatus, onreset, onlocktransitions } = $props();
 
   let activeIndex = $state(-1);
   let initialized = $state(false);
   let autoCreating = $state(false);
+  let locking = $state(false);
 
   $effect(() => {
     if (initialized || transitions.length === 0) return;
@@ -179,6 +180,20 @@
     }
   }
 
+  async function handleGoToNarration() {
+    locking = true;
+    onstatus({ detail: 'Locking transitions and generating narration...' });
+    try {
+      const data = await lockTransitions();
+      if (onlocktransitions) onlocktransitions({ detail: data.project });
+      onstatus({ detail: 'Transitions locked. Proceed to Narration.' });
+    } catch (e) {
+      onstatus({ detail: `Failed: ${e.message}` });
+    } finally {
+      locking = false;
+    }
+  }
+
   function autoFocus(node) {
     node.focus();
     node.setSelectionRange(node.value.length, node.value.length);
@@ -191,14 +206,16 @@
 </script>
 
 {#if transitions.length > 0}
-  <div class="toolbar">
-    <button class="toolbar-btn" onclick={handleReset}>
-      <RotateCcw size={14} /> Reset
-    </button>
-    <button class="toolbar-btn" onclick={handleAutoCreate} disabled={autoCreating || allDone}>
-      <Zap size={14} /> {autoCreating ? 'Creating...' : 'Auto Create'}
-    </button>
-  </div>
+  {#if !locked}
+    <div class="toolbar">
+      <button class="toolbar-btn" onclick={handleReset}>
+        <RotateCcw size={14} /> Reset
+      </button>
+      <button class="toolbar-btn" onclick={handleAutoCreate} disabled={autoCreating || allDone}>
+        <Zap size={14} /> {autoCreating ? 'Creating...' : 'Auto Create'}
+      </button>
+    </div>
+  {/if}
 
   <div class="transitions">
     {#each transitions as tr, i (tr.id)}
@@ -307,9 +324,12 @@
     {/each}
   </div>
 
-  {#if allDone}
+  {#if allDone && !locked}
     <div class="all-done">
       <span>All transitions approved!</span>
+      <button class="go-btn" onclick={handleGoToNarration} disabled={locking}>
+        {locking ? 'Generating narration...' : 'Go to Narration'} <ArrowRight size={16} />
+      </button>
     </div>
   {/if}
 {:else}
@@ -576,13 +596,26 @@
   .all-done {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 20px 24px;
     margin-bottom: 24px;
   }
+
+  .go-btn {
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    padding: 10px 24px;
+    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .go-btn:hover:not(:disabled) { background: var(--accent-hover); }
 
   .all-done span {
     font-size: 16px;

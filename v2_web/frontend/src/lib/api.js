@@ -53,4 +53,10 @@ export const rerenderTransition = (id, opts = {}) => request('POST', `/transitio
 export const updateTransition = (id, updates) => request('PUT', `/transitions/${id}`, updates);
 export const resetTransitions = () => request('POST', '/transitions/reset');
 export const autoCreateTransitions = () => request('POST', '/transitions/auto-create');
+export const lockTransitions = () => request('POST', '/transitions/lock');
 export const setTransitionActiveIndex = (activeIndex) => request('PUT', '/transition-active-index', { active_index: activeIndex });
+
+// ── Narration ──
+export const updateNarration = (transitionId, narration) => request('PUT', `/narration/${transitionId}`, { narration });
+export const regenerateNarration = () => request('POST', '/narration/regenerate');
+export const setNarrationActiveIndex = (activeIndex) => request('PUT', '/narration-active-index', { active_index: activeIndex });
