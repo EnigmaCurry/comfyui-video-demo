@@ -1,5 +1,5 @@
 <script>
-  import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, Wand2 } from 'lucide-svelte';
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2 } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
            getKeyframeStatus, rewriteKeyframe } from '../lib/api.js';
 
@@ -223,7 +223,8 @@
         <button class="btn-cancel" onclick={cancelEdit}><X size={14} /> Cancel</button>
       </div>
     {:else}
-      <p class="prompt-text">{keyframe.prompt}</p>
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <p class="prompt-text clickable" onclick={startEdit}>{keyframe.prompt}</p>
     {/if}
 
     {#if editingNeg}
@@ -276,9 +277,6 @@
     <button class="btn-icon" onclick={handleRerender} title="Re-render with new seed"
             disabled={keyframe.status === 'rendering'}>
       <RefreshCw size={16} />
-    </button>
-    <button class="btn-icon" onclick={startEdit} title="Edit prompt">
-      <Pencil size={16} />
     </button>
     <button class="btn-icon" onclick={startRewrite} title="Rewrite with AI">
       <Wand2 size={16} />
@@ -433,6 +431,15 @@
     -webkit-line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .prompt-text.clickable {
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+
+  .prompt-text.clickable:hover {
+    color: var(--text);
   }
 
   .edit-textarea {
