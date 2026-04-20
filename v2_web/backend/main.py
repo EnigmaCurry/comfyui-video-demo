@@ -881,16 +881,26 @@ async def api_list_soundtrack():
 @app.put("/api/soundtrack/{section_id}")
 async def api_update_section(section_id: str, body: dict):
     sec = _get_section(section_id)
-    if "prompt" in body:
+    # Track if soundtrack-affecting fields changed (not volume)
+    soundtrack_changed = False
+    if "seed" in body:
+        sec.seed = int(body["seed"]) if body["seed"] is not None else None
+    if "prompt" in body and body["prompt"] != sec.prompt:
         sec.prompt = body["prompt"]
-    if "bpm" in body:
+        soundtrack_changed = True
+    if "bpm" in body and body["bpm"] != sec.bpm:
         sec.bpm = body["bpm"]
-    if "keyscale" in body:
+        soundtrack_changed = True
+    if "keyscale" in body and body["keyscale"] != sec.keyscale:
         sec.keyscale = body["keyscale"]
+        soundtrack_changed = True
     if "music_volume" in body:
         sec.music_volume = float(body["music_volume"])
     if "narration_volume" in body:
         sec.narration_volume = float(body["narration_volume"])
+    # Randomize seed if soundtrack-affecting fields changed (but not if seed was explicitly set)
+    if soundtrack_changed and "seed" not in body:
+        sec.seed = random.randint(0, 2**32 - 1)
     _save()
     return sec.model_dump()
 
@@ -1055,7 +1065,7 @@ async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
                 raise RuntimeError("No project loaded")
 
             img_dir = images_dir(proj_id)
-            seed = sec.seed or random.randint(0, 2**32 - 1)
+            seed = sec.seed if sec.seed is not None else random.randint(0, 2**32 - 1)
             sec.seed = seed
 
             tr_map = {tr.id: tr for tr in proj.transitions}
@@ -1109,17 +1119,21 @@ async def _do_remux_section(proj_id: str, sec: SoundtrackSection):
 
 
 @app.post("/api/soundtrack/{section_id}/render")
-async def api_render_soundtrack(section_id: str):
+async def api_render_soundtrack(section_id: str, body: dict | None = None):
     proj = _get_project()
     sec = _get_section(section_id)
     if not sec.prompt.strip():
         raise HTTPException(400, "Soundtrack prompt is required")
+    # Use provided seed, or keep existing, or generate new
+    if body and "seed" in body and body["seed"] is not None:
+        sec.seed = int(body["seed"])
+    elif sec.seed is None:
+        sec.seed = random.randint(0, 2**32 - 1)
     old = render_tasks.pop(f"snd_{section_id}", None)
     if old and not old.done():
         old.cancel()
     sec.status = KeyframeStatus.rendering
     sec.error_message = None
-    sec.seed = random.randint(0, 2**32 - 1)
     task = asyncio.create_task(_do_render_soundtrack(proj.id, sec))
     render_tasks[f"snd_{section_id}"] = task
     return {"id": sec.id, "status": sec.status, "seed": sec.seed}

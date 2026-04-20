@@ -51,7 +51,7 @@
     try {
       await updateSection(sec.id, {
       prompt: sec.prompt, bpm: sec.bpm, keyscale: sec.keyscale,
-      music_volume: sec.music_volume, narration_volume: sec.narration_volume,
+      seed: sec.seed, music_volume: sec.music_volume, narration_volume: sec.narration_volume,
     });
       onstatus({ detail: `Section ${sec.position + 1} saved.` });
     } catch (e) {
@@ -67,12 +67,12 @@
     // Save first
     await updateSection(sec.id, {
       prompt: sec.prompt, bpm: sec.bpm, keyscale: sec.keyscale,
-      music_volume: sec.music_volume, narration_volume: sec.narration_volume,
+      seed: sec.seed, music_volume: sec.music_volume, narration_volume: sec.narration_volume,
     });
     onstatus({ detail: `Rendering soundtrack for section ${sec.position + 1}...` });
     sec.status = 'rendering';
     try {
-      await renderSoundtrack(sec.id);
+      await renderSoundtrack(sec.id, sec.seed);
       pollStatus(sec);
     } catch (e) {
       onstatus({ detail: `Render failed: ${e.message}` });
@@ -249,6 +249,10 @@
                   <option value={k}>{k}</option>
                 {/each}
               </select>
+            </label>
+            <label>
+              Seed
+              <input type="number" min="0" bind:value={sec.seed} class="seed-input" />
             </label>
           </div>
           <div class="volume-row">
@@ -470,6 +474,13 @@
     width: 75px;
     text-align: center;
     font-size: 13px;
+  }
+
+  .seed-input {
+    width: 130px;
+    text-align: center;
+    font-size: 12px;
+    font-family: var(--mono, monospace);
   }
 
   .key-select {
