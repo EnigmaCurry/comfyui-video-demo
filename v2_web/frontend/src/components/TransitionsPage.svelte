@@ -77,7 +77,8 @@
       await updateTransition(tr.id, { negative_prompt: editNegPrompts[tr.id] });
       tr.negative_prompt = editNegPrompts[tr.id];
       editingNeg[tr.id] = false;
-      onstatus({ detail: `Updated transition ${tr.position + 1} negative prompt` });
+      onstatus({ detail: `Updated transition ${tr.position + 1} negative prompt. Re-rendering...` });
+      handleRerender(tr);
     } catch (e) {
       onstatus({ detail: `Update failed: ${e.message}` });
     }
