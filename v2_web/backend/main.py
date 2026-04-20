@@ -23,6 +23,9 @@ app = FastAPI(title="v2_web Film Director")
 keyframes: dict[str, Keyframe] = {}
 render_tasks: dict[str, asyncio.Task] = {}
 
+# Serialize renders — ComfyUI processes one job at a time
+_render_semaphore = asyncio.Semaphore(1)
+
 IMAGES_DIR = os.path.join(os.path.dirname(__file__), "output", "keyframes")
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
@@ -120,38 +123,41 @@ async def reorder_keyframes(order: list[str]):
 # ── Render ──────────────────────────────────────────────────────────
 
 async def _do_render(kf: Keyframe, seed: int, width: int, height: int):
-    """Background task: render a keyframe via ComfyUI."""
+    """Background task: render a keyframe via ComfyUI (one at a time)."""
     from comfyui import download_output, run_workflow
     from workflows import T2I_WORKFLOW_PATH, load_workflow, patch_t2i_workflow
 
-    try:
-        base_wf = load_workflow(T2I_WORKFLOW_PATH)
+    async with _render_semaphore:
+        try:
+            base_wf = load_workflow(T2I_WORKFLOW_PATH)
 
-        # Load negative prompt from style
-        from llm import _load_style
-        style = _load_style("transition-story")
-        neg_prompt = style.get("negative_prompt", "")
+            # Load negative prompt from style
+            from llm import _load_style
+            style = _load_style("transition-story")
+            neg_prompt = style.get("negative_prompt", "")
 
-        patched = patch_t2i_workflow(
-            base_wf,
-            prompt_text=kf.prompt,
-            negative_prompt_text=neg_prompt,
-            seed_value=seed,
-            width=width,
-            height=height,
-            output_prefix=f"v2web/{kf.id}",
-        )
+            patched = patch_t2i_workflow(
+                base_wf,
+                prompt_text=kf.prompt,
+                negative_prompt_text=neg_prompt,
+                seed_value=seed,
+                width=width,
+                height=height,
+                output_prefix=f"v2web/{kf.id}",
+            )
 
-        history = await run_workflow(patched, timeout=600)
-        filename = f"{kf.id}.png"
-        dest = os.path.join(IMAGES_DIR, filename)
-        await download_output(history, dest, output_type="images")
-        kf.image_filename = filename
-        kf.seed = seed
-        kf.status = KeyframeStatus.done
-    except Exception as e:
-        kf.status = KeyframeStatus.error
-        kf.error_message = str(e)
+            history = await run_workflow(patched, timeout=600)
+            filename = f"{kf.id}.png"
+            dest = os.path.join(IMAGES_DIR, filename)
+            await download_output(history, dest, output_type="images")
+            kf.image_filename = filename
+            kf.seed = seed
+            kf.status = KeyframeStatus.done
+        except asyncio.CancelledError:
+            kf.status = KeyframeStatus.pending
+        except Exception as e:
+            kf.status = KeyframeStatus.error
+            kf.error_message = str(e)
 
 
 @app.post("/api/keyframes/{keyframe_id}/render")
