@@ -60,8 +60,8 @@ def _save():
         try:
             save_project(current_project)
         except Exception:
-            import logging, traceback
-            logging.error("Failed to save project: %s", traceback.format_exc())
+            import traceback
+            print(f"ERROR saving project: {traceback.format_exc()}", flush=True)
 
 
 # ── Project endpoints ───────────────────────────────────────────────
@@ -115,6 +115,23 @@ async def api_debug_projects_dir():
         "current_project": current_project.id if current_project else None,
         "projects": list_projects(),
     }
+
+
+@app.post("/api/debug/test-save")
+async def api_debug_test_save():
+    """Create and save a test project to verify persistence works."""
+    global current_project
+    from projects import PROJECTS_DIR
+    import os, traceback
+    proj = Project(name="Test Project", premise="test", premise_locked=True)
+    current_project = proj
+    try:
+        save_project(proj)
+        path = os.path.join(PROJECTS_DIR, proj.id, "project.json")
+        exists = os.path.isfile(path)
+        return {"ok": True, "id": proj.id, "path": path, "exists": exists}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
 
 
 # ── Premise flow ────────────────────────────────────────────────────
