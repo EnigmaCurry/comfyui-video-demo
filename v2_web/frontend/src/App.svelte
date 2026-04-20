@@ -101,6 +101,16 @@
     }
   }
 
+  function handleNewProject() {
+    project = null;
+    activeTab = 'premise';
+    editingTitle = false;
+    if (premiseRef) {
+      premiseRef.setPremiseText('');
+      premiseRef.setNotesText('');
+    }
+  }
+
   function handleStatus(event) {
     statusMessage = event.detail;
   }
@@ -162,7 +172,10 @@
         <p class="subtitle">Keyframe-driven video production with ComfyUI</p>
       {/if}
     </div>
-    <ProjectSelector onload={handleLoadProject} onstatus={handleStatus} />
+    <div class="header-actions">
+      <button class="new-btn" onclick={handleNewProject}>New</button>
+      <ProjectSelector onload={handleLoadProject} onstatus={handleStatus} />
+    </div>
   </div>
 </header>
 
@@ -271,6 +284,25 @@
     padding: 2px 6px;
     margin: 0;
     width: 400px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .new-btn {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+
+  .new-btn:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
   }
 
   main {

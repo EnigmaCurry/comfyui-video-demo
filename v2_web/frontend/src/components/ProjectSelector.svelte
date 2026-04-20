@@ -56,7 +56,7 @@
 </script>
 
 <button class="load-btn" onclick={handleOpen}>
-  <FolderOpen size={16} /> Load Project
+  <FolderOpen size={16} /> Load
 </button>
 
 {#if open}
