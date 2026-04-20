@@ -6,7 +6,7 @@
   import PlaceholderPage from './components/PlaceholderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import { getCurrentProject, renderKeyframe } from './lib/api.js';
+  import { getCurrentProject, renderKeyframe, renameProject } from './lib/api.js';
 
   const tabs = [
     { id: 'premise', label: 'Premise' },
@@ -22,6 +22,8 @@
   let statusMessage = $state('');
   let gridRef = $state(null);
   let premiseRef = $state(null);
+  let editingTitle = $state(false);
+  let editTitle = $state('');
 
   // Derived state from project
   let projectId = $derived(project?.id || '');
@@ -105,6 +107,28 @@
 
   function handleUpdated() {}
 
+  function startEditTitle() {
+    editTitle = projectName;
+    editingTitle = true;
+  }
+
+  async function saveTitle() {
+    if (editTitle.trim() && editTitle !== projectName) {
+      try {
+        await renameProject(editTitle.trim());
+        project.name = editTitle.trim();
+      } catch (e) {
+        statusMessage = `Rename failed: ${e.message}`;
+      }
+    }
+    editingTitle = false;
+  }
+
+  function handleTitleKeydown(e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveTitle(); }
+    else if (e.key === 'Escape') { editingTitle = false; }
+  }
+
   // Sync keyframes mutations back into project
   let mutableKeyframes = $state([]);
   $effect(() => {
@@ -119,10 +143,22 @@
 <header>
   <div class="header-row">
     <div>
-      <h1>Film Director</h1>
       {#if projectName}
-        <p class="subtitle">{projectName}</p>
+        <p class="app-label">Film Director</p>
+        {#if editingTitle}
+          <input
+            class="title-edit"
+            bind:value={editTitle}
+            onkeydown={handleTitleKeydown}
+            onblur={saveTitle}
+            autofocus
+          />
+        {:else}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <h1 class="project-title clickable" onclick={startEditTitle} title="Click to rename">{projectName}</h1>
+        {/if}
       {:else}
+        <h1>Film Director</h1>
         <p class="subtitle">Keyframe-driven video production with ComfyUI</p>
       {/if}
     </div>
@@ -199,9 +235,41 @@
     margin-bottom: 4px;
   }
 
+  .app-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+
+  .project-title {
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .project-title.clickable {
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    transition: border-color 0.15s;
+  }
+
+  .project-title.clickable:hover {
+    border-bottom-color: var(--text-muted);
+  }
+
   .subtitle {
     color: var(--text-dim);
     font-size: 15px;
+  }
+
+  .title-edit {
+    font-size: 24px;
+    font-weight: 600;
+    padding: 2px 6px;
+    margin: 0;
+    width: 400px;
   }
 
   main {

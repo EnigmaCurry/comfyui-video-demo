@@ -80,6 +80,14 @@ async def api_delete_project(project_id: str):
     return {"deleted": project_id}
 
 
+@app.put("/api/projects/current/name")
+async def api_rename_project(body: dict):
+    proj = _get_project()
+    proj.name = body.get("name", proj.name)
+    _save()
+    return {"name": proj.name}
+
+
 # ── Premise flow ────────────────────────────────────────────────────
 
 @app.post("/api/premise/suggest")

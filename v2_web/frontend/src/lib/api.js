@@ -22,6 +22,8 @@ export const getCurrentProject = () => request('GET', '/projects/current');
 export const loadProject = (id) => request('POST', `/projects/${id}/load`);
 export const deleteProject = (id) => request('DELETE', `/projects/${id}`);
 
+export const renameProject = (name) => request('PUT', '/projects/current/name', { name });
+
 // ── Premise ──
 export const suggestPremise = (notes) => request('POST', '/premise/suggest', { notes });
 export const setPremise = (premise) => request('POST', '/premise/set', { premise });
