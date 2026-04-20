@@ -265,11 +265,14 @@ async def api_lock_keyframes():
     )
     proj.transitions = []
     for i, desc in enumerate(descriptions):
+        # LLM sometimes returns dicts instead of strings
+        if isinstance(desc, dict):
+            desc = " ".join(str(v) for v in desc.values())
         proj.transitions.append(Transition(
             position=i,
             from_keyframe_id=ordered[i].id,
             to_keyframe_id=ordered[i + 1].id,
-            prompt=desc,
+            prompt=str(desc),
         ))
     proj.keyframes_locked = True
     proj.transition_active_index = 0
@@ -565,11 +568,13 @@ async def api_reset_transitions():
     )
     proj.transitions = []
     for i, desc in enumerate(descriptions):
+        if isinstance(desc, dict):
+            desc = " ".join(str(v) for v in desc.values())
         proj.transitions.append(Transition(
             position=i,
             from_keyframe_id=ordered_kf[i].id,
             to_keyframe_id=ordered_kf[i + 1].id,
-            prompt=desc,
+            prompt=str(desc),
         ))
     proj.transition_active_index = 0
     _save()
