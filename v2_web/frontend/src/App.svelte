@@ -218,6 +218,7 @@
   {:else if activeTab === 'narration'}
     <NarrationPage bind:transitions={mutableTransitions}
                    keyframes={keyframes} {projectId}
+                   direction={project?.narration_direction || ''}
                    onstatus={handleStatus}
                    onreset={(e) => { project = e.detail; }} />
 

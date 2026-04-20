@@ -582,6 +582,7 @@ async def api_lock_transitions():
     tr_prompts = [tr.prompt for tr in ordered_tr]
     narrations = await generate_narration(
         kf_prompts, tr_prompts, duration=proj.scene_duration, style=proj.style,
+        direction=proj.narration_direction,
     )
     for i, tr in enumerate(ordered_tr):
         tr.narration = narrations[i] if i < len(narrations) else ""
@@ -608,9 +609,11 @@ async def api_set_narration_active_index(body: dict):
 
 
 @app.post("/api/narration/regenerate")
-async def api_regenerate_narration():
-    """Regenerate all narration text from scratch."""
+async def api_regenerate_narration(body: dict | None = None):
+    """Regenerate all narration text, optionally updating direction first."""
     proj = _get_project()
+    if body and "direction" in body:
+        proj.narration_direction = body["direction"]
     from llm import generate_narration
     ordered_kf = sorted(proj.keyframes, key=lambda k: k.position)
     ordered_tr = sorted(proj.transitions, key=lambda t: t.position)
@@ -618,12 +621,21 @@ async def api_regenerate_narration():
     tr_prompts = [tr.prompt for tr in ordered_tr]
     narrations = await generate_narration(
         kf_prompts, tr_prompts, duration=proj.scene_duration, style=proj.style,
+        direction=proj.narration_direction,
     )
     for i, tr in enumerate(ordered_tr):
         tr.narration = narrations[i] if i < len(narrations) else ""
     proj.narration_active_index = 0
     _save()
     return {"project": proj.model_dump()}
+
+
+@app.put("/api/narration/direction")
+async def api_set_narration_direction(body: dict):
+    proj = _get_project()
+    proj.narration_direction = body.get("direction", "")
+    _save()
+    return {"direction": proj.narration_direction}
 
 
 # ── File serving ────────────────────────────────────────────────────

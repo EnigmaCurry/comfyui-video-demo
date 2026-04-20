@@ -57,6 +57,7 @@ class Project(BaseModel):
     active_index: int = 0
     transition_active_index: int = 0
     narration_active_index: int = 0
+    narration_direction: str = ""
     original_prompts: list[str] = Field(default_factory=list)
     keyframes: list[Keyframe] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)

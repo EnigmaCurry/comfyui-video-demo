@@ -1,14 +1,19 @@
 <script>
   import { Pencil, Check, X, RotateCcw } from 'lucide-svelte';
-  import { updateNarration, regenerateNarration, setNarrationActiveIndex } from '../lib/api.js';
+  import { updateNarration, regenerateNarration, setNarrationActiveIndex, setNarrationDirection } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
-        onstatus, onreset } = $props();
+        direction: initialDirection = '', onstatus, onreset } = $props();
 
   let activeIndex = $state(-1);
   let initialized = $state(false);
   let editing = $state({});
   let editTexts = $state({});
+  let direction = $state(initialDirection);
+  let regenerating = $state(false);
+  let directionDirty = $state(false);
+
+  $effect(() => { direction = initialDirection; });
 
   // All narrations are "approved" once you've reviewed them — no rendering needed.
   // The active index tracks which one you're currently reviewing.
@@ -60,16 +65,34 @@
     }
   }
 
+  async function handleSaveDirection() {
+    try {
+      await setNarrationDirection(direction);
+      directionDirty = false;
+      onstatus({ detail: 'Narration direction saved.' });
+    } catch (e) {
+      onstatus({ detail: `Save failed: ${e.message}` });
+    }
+  }
+
+  function handleDirectionInput() {
+    directionDirty = true;
+  }
+
   async function handleRegenerate() {
     if (!confirm('Regenerate all narration text? Your edits will be lost.')) return;
-    onstatus({ detail: 'Regenerating narration...' });
+    regenerating = true;
+    onstatus({ detail: 'Regenerating narration with direction...' });
     try {
-      const data = await regenerateNarration();
+      const data = await regenerateNarration(direction);
       if (onreset) onreset({ detail: data.project });
+      directionDirty = false;
       onstatus({ detail: 'Narration regenerated.' });
       initialized = false;
     } catch (e) {
       onstatus({ detail: `Failed: ${e.message}` });
+    } finally {
+      regenerating = false;
     }
   }
 
@@ -85,10 +108,26 @@
 </script>
 
 {#if transitions.length > 0}
-  <div class="toolbar">
-    <button class="toolbar-btn" onclick={handleRegenerate}>
-      <RotateCcw size={14} /> Regenerate All
-    </button>
+  <div class="direction-panel">
+    <h3>Narrator Direction</h3>
+    <p class="direction-hint">
+      Guide the narrator's voice, style, and vocabulary. This is combined with the story when generating narration.
+    </p>
+    <textarea
+      class="direction-input"
+      placeholder="e.g. Speak in the voice of an old sea captain. Use nautical metaphors. Short, weathered sentences. No flowery language."
+      bind:value={direction}
+      oninput={handleDirectionInput}
+      rows="3"
+    ></textarea>
+    <div class="direction-actions">
+      {#if directionDirty}
+        <button class="btn-save-dir" onclick={handleSaveDirection}>Save Direction</button>
+      {/if}
+      <button class="toolbar-btn" onclick={handleRegenerate} disabled={regenerating}>
+        <RotateCcw size={14} /> {regenerating ? 'Regenerating...' : 'Regenerate All'}
+      </button>
+    </div>
   </div>
 
   <div class="narrations">
@@ -166,6 +205,51 @@
 {/if}
 
 <style>
+  .direction-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .direction-panel h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .direction-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .direction-input {
+    width: 100%;
+    resize: vertical;
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+
+  .direction-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .btn-save-dir {
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 16px;
+  }
+
+  .btn-save-dir:hover { background: var(--accent-hover); }
+
   .toolbar {
     display: flex;
     justify-content: flex-end;

@@ -58,5 +58,6 @@ export const setTransitionActiveIndex = (activeIndex) => request('PUT', '/transi
 
 // ── Narration ──
 export const updateNarration = (transitionId, narration) => request('PUT', `/narration/${transitionId}`, { narration });
-export const regenerateNarration = () => request('POST', '/narration/regenerate');
+export const regenerateNarration = (direction) => request('POST', '/narration/regenerate', direction != null ? { direction } : null);
+export const setNarrationDirection = (direction) => request('PUT', '/narration/direction', { direction });
 export const setNarrationActiveIndex = (activeIndex) => request('PUT', '/narration-active-index', { active_index: activeIndex });

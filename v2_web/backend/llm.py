@@ -233,12 +233,17 @@ def _voiceover_word_range(duration: int) -> tuple[int, int]:
 async def generate_narration(keyframe_prompts: list[str],
                              transition_prompts: list[str],
                              duration: int = 10,
-                             style: str = "transition-story") -> list[str]:
+                             style: str = "transition-story",
+                             direction: str = "") -> list[str]:
     """Generate voiceover narration for each transition."""
     style_data = _load_style(style)
     wlo, whi = _voiceover_word_range(duration)
     vo_template = style_data.get("voiceover_system_prompt", "")
     system_prompt = vo_template.format(duration=duration, word_lo=wlo, word_hi=whi)
+    if direction.strip():
+        system_prompt += (
+            f"\n\nADDITIONAL DIRECTION FROM THE DIRECTOR:\n{direction.strip()}"
+        )
 
     kf_list = "\n".join(f"  Keyframe {i+1}: {k}" for i, k in enumerate(keyframe_prompts))
     tr_list = "\n".join(
