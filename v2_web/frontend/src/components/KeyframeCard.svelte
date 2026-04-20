@@ -107,6 +107,11 @@
     if (onapprove) onapprove({ detail: keyframe.id });
   }
 
+  function autoFocus(node) {
+    node.focus();
+    node.setSelectionRange(node.value.length, node.value.length);
+  }
+
   function handleEditKeydown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -157,8 +162,9 @@
       <textarea
         bind:value={editPrompt}
         onkeydown={handleEditKeydown}
-        rows="3"
+        rows="6"
         class="edit-textarea"
+        use:autoFocus
       ></textarea>
       <div class="edit-actions">
         <button class="btn-save" onclick={saveEdit}><Check size={14} /> Save</button>
@@ -188,7 +194,7 @@
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
     </button>
-    {#if active && keyframe.status === 'done'}
+    {#if active && keyframe.status === 'done' && !editing}
       <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
         <Check size={16} /> Approve
       </button>
