@@ -231,7 +231,7 @@
           <div class="arrow">→</div>
           {#if tr.status === 'done' && videoUrl(tr)}
             <!-- svelte-ignore a11y_media_has_caption -->
-            <video class="transition-video" src={videoUrl(tr)} controls loop></video>
+            <video class="transition-video" src={videoUrl(tr)} controls loop autoplay muted></video>
           {:else if tr.status === 'rendering'}
             <div class="render-placeholder">
               <div class="spinner"></div>
