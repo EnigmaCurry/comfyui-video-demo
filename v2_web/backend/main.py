@@ -600,7 +600,7 @@ async def api_set_narration_direction(body: dict):
     return {"direction": proj.narration_direction}
 
 
-async def _do_render_narration(proj_id: str, tr: Transition):
+async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None = None):
     """Render TTS audio from narration text, then mux with transition video."""
     import subprocess
     import sys
@@ -638,7 +638,7 @@ async def _do_render_narration(proj_id: str, tr: Transition):
             cmd = [
                 sys.executable, tts_script,
                 "--url", settings.comfyui_url,
-                "--voice", settings.tts_voice,
+                "--voice", voice or settings.tts_voice,
                 "--output", os.path.abspath(audio_path),
                 "--seed", str(settings.tts_seed),
                 "--no-play",
@@ -736,15 +736,16 @@ async def _do_render_narration(proj_id: str, tr: Transition):
 
 
 @app.post("/api/narration/{transition_id}/render")
-async def api_render_narration(transition_id: str):
+async def api_render_narration(transition_id: str, body: dict | None = None):
     proj = _get_project()
     tr = _get_transition(transition_id)
+    voice = body.get("voice") if body else None
     old = render_tasks.pop(f"narr_{transition_id}", None)
     if old and not old.done():
         old.cancel()
     tr.narration_status = KeyframeStatus.rendering
     tr.narration_error = None
-    task = asyncio.create_task(_do_render_narration(proj.id, tr))
+    task = asyncio.create_task(_do_render_narration(proj.id, tr, voice=voice))
     render_tasks[f"narr_{transition_id}"] = task
     return {"id": tr.id, "status": tr.narration_status}
 

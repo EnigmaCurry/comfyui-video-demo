@@ -11,7 +11,12 @@
   let initialized = $state(false);
   let editing = $state({});
   let editTexts = $state({});
+  const VOICES = [
+    'butler', 'despotism-doc', 'feynman', 'kyle', 'linus',
+    'mcgill', 'mckenna', 'mulgrew', 'nixon', 'paul-atreides', 'steve', 'wexler',
+  ];
   let direction = $state(initialDirection || DEFAULT_DIRECTION);
+  let voice = $state('despotism-doc');
   let regenerating = $state(false);
   let directionDirty = $state(false);
   let polling = $state({});
@@ -78,7 +83,7 @@
     onstatus({ detail: `Rendering narration ${tr.position + 1}...` });
     tr.narration_status = 'rendering';
     try {
-      await renderNarration(tr.id);
+      await renderNarration(tr.id, `${voice}.wav`);
       pollStatus(tr);
     } catch (e) {
       onstatus({ detail: `Render failed: ${e.message}` });
@@ -169,6 +174,15 @@
       oninput={handleDirectionInput}
       rows="3"
     ></textarea>
+    <div class="voice-row">
+      <label for="voice-select">Voice</label>
+      <select id="voice-select" bind:value={voice} class="voice-select">
+        {#each VOICES as v}
+          <option value={v}>{v}</option>
+        {/each}
+      </select>
+    </div>
+
     <div class="direction-actions">
       {#if directionDirty}
         <button class="btn-save-dir" onclick={handleSaveDirection}>Save Direction</button>
@@ -304,6 +318,33 @@
     font-size: 14px;
     line-height: 1.6;
     margin-bottom: 10px;
+  }
+
+  .voice-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .voice-row label {
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .voice-select {
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    outline: none;
+  }
+
+  .voice-select:focus {
+    border-color: var(--border-focus);
   }
 
   .direction-actions {
