@@ -16,12 +16,12 @@
       const data = await generateKeyframes(theme.trim(), count);
       const newKeyframes = data.keyframes;
       ongenerated({ detail: newKeyframes });
-      onstatus({ detail: `Generated ${newKeyframes.length} keyframes. Rendering...` });
 
-      // Auto-render all generated keyframes
-      for (const kf of newKeyframes) {
-        renderKeyframe(kf.id).catch(e =>
-          onstatus({ detail: `Render error for ${kf.id}: ${e.message}` })
+      // Only render the first keyframe
+      if (newKeyframes.length > 0) {
+        onstatus({ detail: `Generated ${newKeyframes.length} keyframes. Rendering #1...` });
+        renderKeyframe(newKeyframes[0].id).catch(e =>
+          onstatus({ detail: `Render error: ${e.message}` })
         );
       }
     } catch (e) {

@@ -2,11 +2,26 @@
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import KeyframeCard from './KeyframeCard.svelte';
-  import { reorderKeyframes } from '../lib/api.js';
+  import { reorderKeyframes, renderKeyframe } from '../lib/api.js';
 
   let { keyframes = $bindable([]), onupdated, onstatus } = $props();
 
+  // Index of the card currently being reviewed (has the approve button)
+  let activeIndex = $state(0);
+
   const flipDurationMs = 200;
+
+  // Reset active index when keyframes are replaced (new generation)
+  let prevLength = $state(0);
+  $effect(() => {
+    if (keyframes.length > 0 && keyframes.length !== prevLength) {
+      // Only reset if this looks like a fresh generation (went from 0 or changed count)
+      if (prevLength === 0) {
+        activeIndex = 0;
+      }
+      prevLength = keyframes.length;
+    }
+  });
 
   function handleDndConsider(e) {
     keyframes = e.detail.items;
@@ -24,7 +39,35 @@
 
   function handleDelete(event) {
     const id = event.detail;
+    const deletedIdx = keyframes.findIndex(kf => kf.id === id);
     keyframes = keyframes.filter(kf => kf.id !== id);
+    // Adjust activeIndex if needed
+    if (deletedIdx <= activeIndex && activeIndex > 0) {
+      activeIndex--;
+    }
+  }
+
+  async function handleApprove(event) {
+    const nextIndex = activeIndex + 1;
+    if (nextIndex < keyframes.length) {
+      activeIndex = nextIndex;
+      const nextKf = keyframes[nextIndex];
+      // Render the next keyframe
+      if (nextKf.status === 'pending') {
+        onstatus({ detail: `Approved #${activeIndex}. Rendering #${nextIndex + 1}...` });
+        try {
+          const result = await renderKeyframe(nextKf.id);
+          nextKf.status = result.status;
+        } catch (e) {
+          onstatus({ detail: `Render error: ${e.message}` });
+        }
+      } else {
+        onstatus({ detail: `Approved #${activeIndex}. Reviewing #${nextIndex + 1}...` });
+      }
+    } else {
+      onstatus({ detail: 'All keyframes approved!' });
+      activeIndex = keyframes.length; // no active card
+    }
   }
 </script>
 
@@ -38,9 +81,11 @@
         <KeyframeCard
           keyframe={kf}
           index={i}
+          active={i === activeIndex}
           {onstatus}
           {onupdated}
           ondelete={handleDelete}
+          onapprove={handleApprove}
         />
       </div>
     {/each}

@@ -1,9 +1,9 @@
 <script>
-  import { RefreshCw, Pencil, Lock, Unlock, Trash2, Check, X } from 'lucide-svelte';
+  import { RefreshCw, Pencil, Lock, Unlock, Trash2, Check, X, ChevronRight } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
            lockKeyframe, unlockKeyframe, getKeyframeStatus } from '../lib/api.js';
 
-  let { keyframe, index, onstatus, onupdated, ondelete } = $props();
+  let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false } = $props();
 
   let editing = $state(false);
   let editPrompt = $state('');
@@ -11,7 +11,6 @@
   let imageUrl = $state(null);
   let fullscreen = $state(false);
 
-  // Derive image URL from keyframe state
   $effect(() => {
     if (keyframe.image_filename) {
       imageUrl = `/api/images/${keyframe.image_filename}`;
@@ -20,7 +19,6 @@
     }
   });
 
-  // Poll while rendering
   $effect(() => {
     if (keyframe.status === 'rendering' && !polling) {
       polling = true;
@@ -101,6 +99,10 @@
     }
   }
 
+  function handleApprove() {
+    if (onapprove) onapprove({ detail: keyframe.id });
+  }
+
   function handleEditKeydown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -111,7 +113,7 @@
   }
 </script>
 
-<div class="card" class:locked={keyframe.locked} class:error={keyframe.status === 'error'}>
+<div class="card" class:locked={keyframe.locked} class:error={keyframe.status === 'error'} class:active>
   <div class="card-header">
     <span class="position">{index + 1}</span>
     <span class="status-badge" class:pending={keyframe.status === 'pending'}
@@ -164,6 +166,11 @@
   </div>
 
   <div class="card-actions">
+    {#if active && keyframe.status === 'done'}
+      <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
+        <Check size={16} /> Approve
+      </button>
+    {/if}
     <button class="btn-icon" onclick={handleRerender} title="Re-render with new seed"
             disabled={keyframe.status === 'rendering'}>
       <RefreshCw size={16} />
@@ -205,6 +212,11 @@
 
   .card:hover {
     border-color: var(--text-muted);
+  }
+
+  .card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
   }
 
   .card.locked {
@@ -356,6 +368,23 @@
     gap: 4px;
     padding: 8px 14px;
     border-top: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .btn-approve {
+    background: var(--success);
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: auto;
+  }
+
+  .btn-approve:hover {
+    filter: brightness(1.1);
   }
 
   .btn-icon {
