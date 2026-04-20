@@ -849,6 +849,10 @@ async def api_update_section(section_id: str, body: dict):
         sec.bpm = body["bpm"]
     if "keyscale" in body:
         sec.keyscale = body["keyscale"]
+    if "music_volume" in body:
+        sec.music_volume = float(body["music_volume"])
+    if "narration_volume" in body:
+        sec.narration_volume = float(body["narration_volume"])
     _save()
     return sec.model_dump()
 
@@ -990,13 +994,16 @@ async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
             )
             has_audio = bool(probe.stdout.strip())
 
+            mv = sec.music_volume
+            nv = sec.narration_volume
             if has_audio:
                 mux_cmd = [
                     "ffmpeg", "-y",
                     "-i", concat_video,
                     "-i", audio_path,
                     "-filter_complex",
-                    "[1:a]volume=0.3[music];[0:a][music]amix=inputs=2:duration=first[aout]",
+                    f"[0:a]volume={nv}[voice];[1:a]volume={mv}[music];"
+                    f"[voice][music]amix=inputs=2:duration=first[aout]",
                     "-map", "0:v", "-map", "[aout]",
                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                     "-shortest", preview_path,
@@ -1006,7 +1013,9 @@ async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
                     "ffmpeg", "-y",
                     "-i", concat_video,
                     "-i", audio_path,
-                    "-map", "0:v", "-map", "1:a",
+                    "-filter_complex",
+                    f"[1:a]volume={mv}[music]",
+                    "-map", "0:v", "-map", "[music]",
                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                     "-shortest", preview_path,
                 ]

@@ -44,7 +44,10 @@
 
   async function handleSave(sec) {
     try {
-      await updateSection(sec.id, { prompt: sec.prompt, bpm: sec.bpm, keyscale: sec.keyscale });
+      await updateSection(sec.id, {
+      prompt: sec.prompt, bpm: sec.bpm, keyscale: sec.keyscale,
+      music_volume: sec.music_volume, narration_volume: sec.narration_volume,
+    });
       onstatus({ detail: `Section ${sec.position + 1} saved.` });
     } catch (e) {
       onstatus({ detail: `Save failed: ${e.message}` });
@@ -57,7 +60,10 @@
       return;
     }
     // Save first
-    await updateSection(sec.id, { prompt: sec.prompt, bpm: sec.bpm, keyscale: sec.keyscale });
+    await updateSection(sec.id, {
+      prompt: sec.prompt, bpm: sec.bpm, keyscale: sec.keyscale,
+      music_volume: sec.music_volume, narration_volume: sec.narration_volume,
+    });
     onstatus({ detail: `Rendering soundtrack for section ${sec.position + 1}...` });
     sec.status = 'rendering';
     try {
@@ -204,6 +210,18 @@
                   <option value={k}>{k}</option>
                 {/each}
               </select>
+            </label>
+          </div>
+          <div class="volume-row">
+            <label>
+              Music
+              <input type="range" min="0" max="2" step="0.1" bind:value={sec.music_volume} class="volume-slider" />
+              <span class="volume-val">{sec.music_volume.toFixed(1)}</span>
+            </label>
+            <label>
+              Narration
+              <input type="range" min="0" max="4" step="0.1" bind:value={sec.narration_volume} class="volume-slider" />
+              <span class="volume-val">{sec.narration_volume.toFixed(1)}</span>
             </label>
           </div>
         </div>
@@ -412,6 +430,33 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 4px 8px;
+  }
+
+  .volume-row {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    margin-top: 10px;
+  }
+
+  .volume-row label {
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .volume-slider {
+    width: 120px;
+    accent-color: var(--accent);
+  }
+
+  .volume-val {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-width: 24px;
+    font-family: var(--mono, monospace);
   }
 
   .card-preview {

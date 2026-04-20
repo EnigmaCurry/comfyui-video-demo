@@ -79,6 +79,8 @@ class SoundtrackSection(BaseModel):
     prompt: str = ""
     bpm: int = 120
     keyscale: str = "C major"
+    music_volume: float = 0.3
+    narration_volume: float = 2.0
     status: KeyframeStatus = KeyframeStatus.pending
     seed: Optional[int] = None
     audio_filename: Optional[str] = None
