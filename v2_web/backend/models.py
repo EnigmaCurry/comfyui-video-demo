@@ -39,6 +39,7 @@ class Project(BaseModel):
     scene_duration: int = 10
     style: str = "transition-story"
     active_index: int = 0
+    original_prompts: list[str] = Field(default_factory=list)
     keyframes: list[Keyframe] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

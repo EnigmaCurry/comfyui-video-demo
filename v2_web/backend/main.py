@@ -175,11 +175,40 @@ async def api_generate_story(req: GenerateStoryRequest):
     proj.scene_count = req.scene_count
     proj.scene_duration = req.scene_duration
     proj.style = req.style
+    proj.original_prompts = list(descriptions)
     proj.keyframes = [Keyframe(position=i, prompt=desc) for i, desc in enumerate(descriptions)]
     proj.story_locked = True
     proj.active_index = 0
     _save()
 
+    return {"project": proj.model_dump()}
+
+
+@app.post("/api/keyframes/reset")
+async def api_reset_keyframes():
+    """Reset all keyframes to the original story prompts, all pending."""
+    proj = _get_project()
+    if not proj.original_prompts:
+        raise HTTPException(400, "No original story to reset to")
+    # Cancel any in-progress renders
+    for task in render_tasks.values():
+        if not task.done():
+            task.cancel()
+    render_tasks.clear()
+    # Delete all rendered images
+    img_dir = images_dir(proj.id)
+    for kf in proj.keyframes:
+        if kf.image_filename:
+            path = os.path.join(img_dir, kf.image_filename)
+            if os.path.exists(path):
+                os.unlink(path)
+    # Rebuild keyframes from original prompts
+    proj.keyframes = [
+        Keyframe(position=i, prompt=desc)
+        for i, desc in enumerate(proj.original_prompts)
+    ]
+    proj.active_index = 0
+    _save()
     return {"project": proj.model_dump()}
 
 

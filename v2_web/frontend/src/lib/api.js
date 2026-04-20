@@ -33,6 +33,7 @@ export const generateStory = (scene_count, scene_duration, style = 'transition-s
   request('POST', '/story/generate', { scene_count, scene_duration, style });
 
 // ── Keyframes ──
+export const resetKeyframes = () => request('POST', '/keyframes/reset');
 export const listKeyframes = () => request('GET', '/keyframes');
 export const getKeyframeStatus = (id) => request('GET', `/keyframes/${id}/status`);
 export const renderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/render`, opts);

@@ -193,6 +193,7 @@
       {projectId}
       onupdated={handleUpdated}
       onstatus={handleStatus}
+      onreset={(e) => { project = e.detail; }}
     />
 
   {:else if activeTab === 'narration'}

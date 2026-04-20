@@ -1,10 +1,11 @@
 <script>
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
+  import { RotateCcw } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
-  import { reorderKeyframes, renderKeyframe, setActiveIndex } from '../lib/api.js';
+  import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes } from '../lib/api.js';
 
-  let { keyframes = $bindable([]), projectId = '', onupdated, onstatus } = $props();
+  let { keyframes = $bindable([]), projectId = '', onupdated, onstatus, onreset } = $props();
 
   let activeIndex = $state(-1);
   let initialized = $state(false);
@@ -54,6 +55,19 @@
     }
   }
 
+  async function handleReset() {
+    if (!confirm('Reset all keyframes to the original story? All renders and edits will be lost.')) return;
+    onstatus({ detail: 'Resetting keyframes...' });
+    try {
+      const data = await resetKeyframes();
+      if (onreset) onreset({ detail: data.project });
+      onstatus({ detail: 'Keyframes reset to original story.' });
+      initialized = false;
+    } catch (e) {
+      onstatus({ detail: `Reset failed: ${e.message}` });
+    }
+  }
+
   async function handleApprove(event) {
     const nextIndex = activeIndex + 1;
     if (nextIndex < keyframes.length) {
@@ -80,6 +94,11 @@
 </script>
 
 {#if keyframes.length > 0}
+  <div class="toolbar">
+    <button class="reset-btn" onclick={handleReset}>
+      <RotateCcw size={14} /> Reset
+    </button>
+  </div>
   <div class="grid"
        use:dndzone={{ items: keyframes, flipDurationMs, type: 'keyframes' }}
        onconsider={handleDndConsider}
@@ -106,6 +125,28 @@
 {/if}
 
 <style>
+  .toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+  }
+
+  .reset-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    padding: 6px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .reset-btn:hover {
+    color: var(--text-dim);
+    border-color: var(--text-muted);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
