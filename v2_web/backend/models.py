@@ -59,6 +59,8 @@ class Project(BaseModel):
     transitions_locked: bool = False
     scene_count: int = 6
     scene_duration: int = 10
+    width: int = 1280
+    height: int = 720
     style: str = "transition-story"
     active_index: int = 0
     transition_active_index: int = 0
@@ -100,8 +102,8 @@ class GenerateRequest(BaseModel):
 class RenderRequest(BaseModel):
     prompt: Optional[str] = None
     seed: Optional[int] = None
-    width: int = 1920
-    height: int = 1088
+    width: int = 1280
+    height: int = 720
 
 
 class UpdateKeyframeRequest(BaseModel):
@@ -117,8 +119,8 @@ class UpdateTransitionRequest(BaseModel):
 
 class TransitionRenderRequest(BaseModel):
     seed: Optional[int] = None
-    width: int = 640
-    height: int = 480
+    width: int = 1280
+    height: int = 720
     frame_rate: int = 25
     duration_seconds: int = 10
 
@@ -134,4 +136,6 @@ class SetPremiseRequest(BaseModel):
 class GenerateStoryRequest(BaseModel):
     scene_count: int = 6
     scene_duration: int = 10
+    width: int = 1280
+    height: int = 720
     style: str = "transition-story"

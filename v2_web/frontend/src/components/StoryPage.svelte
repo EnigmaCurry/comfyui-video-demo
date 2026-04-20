@@ -4,8 +4,15 @@
 
   let { onstatus, onstory, premise = '', locked = false, scenes = [] } = $props();
 
+  const RESOLUTIONS = [
+    { label: '640x480', w: 640, h: 480 },
+    { label: '1280x720 (720p)', w: 1280, h: 720 },
+    { label: '1920x1080 (1080p)', w: 1920, h: 1080 },
+  ];
   let sceneCount = $state(6);
   let sceneDuration = $state(10);
+  let resWidth = $state(1280);
+  let resHeight = $state(720);
   let generating = $state(false);
 
   let arcLabel = $derived(
@@ -24,7 +31,7 @@
     generating = true;
     onstatus({ detail: `Generating ${sceneCount}-scene story...` });
     try {
-      const data = await generateStory(sceneCount, sceneDuration);
+      const data = await generateStory(sceneCount, sceneDuration, resWidth, resHeight);
       onstory({ detail: data.project });
       onstatus({ detail: `Story generated with ${data.project.keyframes.length} scenes. Proceed to Keyframes.` });
     } catch (e) {
@@ -62,6 +69,18 @@
         <input id="scene-dur" type="number" min="3" max="60"
                bind:value={sceneDuration} disabled={generating} class="num-input" />
         <span class="hint">seconds</span>
+      </div>
+      <div class="control-group">
+        <label for="resolution">Resolution</label>
+        <select id="resolution" disabled={generating} class="res-select"
+                onchange={(e) => {
+                  const r = RESOLUTIONS[e.target.selectedIndex];
+                  resWidth = r.w; resHeight = r.h;
+                }}>
+          {#each RESOLUTIONS as r}
+            <option selected={r.w === resWidth && r.h === resHeight}>{r.label}</option>
+          {/each}
+        </select>
       </div>
       <div class="control-group">
         <span class="total">Total: ~{durationLabel}</span>
@@ -168,6 +187,16 @@
     font-size: 14px;
     color: var(--text-dim);
     font-weight: 500;
+  }
+
+  .res-select {
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px;
   }
 
   .generate-btn {

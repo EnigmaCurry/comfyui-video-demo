@@ -48,7 +48,7 @@ def load_workflow(path: str) -> dict:
 def patch_t2i_workflow(workflow: dict, *, prompt_text: str,
                        negative_prompt_text: str = "",
                        seed_value: int, width: int = 1920,
-                       height: int = 1088,
+                       height: int = 720,
                        output_prefix: str = "ComfyUI") -> dict:
     """Patch HiDream T2I workflow for keyframe image generation."""
     wf = copy.deepcopy(workflow)

@@ -28,8 +28,8 @@ export const suggestPremise = (notes) => request('POST', '/premise/suggest', { n
 export const setPremise = (premise) => request('POST', '/premise/set', { premise });
 
 // ── Story ──
-export const generateStory = (scene_count, scene_duration, style = 'transition-story') =>
-  request('POST', '/story/generate', { scene_count, scene_duration, style });
+export const generateStory = (scene_count, scene_duration, width, height, style = 'transition-story') =>
+  request('POST', '/story/generate', { scene_count, scene_duration, width, height, style });
 
 // ── Keyframes ──
 export const listKeyframes = () => request('GET', '/keyframes');

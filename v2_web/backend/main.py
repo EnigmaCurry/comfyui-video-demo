@@ -156,6 +156,8 @@ async def api_generate_story(req: GenerateStoryRequest):
     )
     proj.scene_count = req.scene_count
     proj.scene_duration = req.scene_duration
+    proj.width = req.width
+    proj.height = req.height
     proj.style = req.style
     proj.original_prompts = list(descriptions)
     proj.keyframes = [Keyframe(position=i, prompt=desc) for i, desc in enumerate(descriptions)]
@@ -291,7 +293,7 @@ async def _auto_create_keyframes_task(proj_id: str):
         if kf.status == KeyframeStatus.pending:
             seed = random.randint(0, 2**32 - 1)
             kf.status = KeyframeStatus.rendering
-            await _do_render_keyframe(proj_id, kf, seed, 1920, 1088)
+            await _do_render_keyframe(proj_id, kf, seed, proj.width, proj.height)
     proj.active_index = len(ordered)
     _save()
 
@@ -365,8 +367,8 @@ async def api_render_keyframe(keyframe_id: str, req: RenderRequest | None = None
     if req and req.prompt is not None:
         kf.prompt = req.prompt
     seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
-    width = req.width if req else 1920
-    height = req.height if req else 1088
+    width = proj.width
+    height = proj.height
     old = render_tasks.pop(keyframe_id, None)
     if old and not old.done():
         old.cancel()
@@ -381,9 +383,7 @@ async def api_render_keyframe(keyframe_id: str, req: RenderRequest | None = None
 async def api_rerender_keyframe(keyframe_id: str, req: RenderRequest | None = None):
     _get_keyframe(keyframe_id)
     seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
-    width = req.width if req else 1920
-    height = req.height if req else 1088
-    return await api_render_keyframe(keyframe_id, RenderRequest(seed=seed, width=width, height=height))
+    return await api_render_keyframe(keyframe_id, RenderRequest(seed=seed))
 
 
 @app.post("/api/keyframes/{keyframe_id}/upload")
@@ -530,8 +530,8 @@ async def api_render_transition(transition_id: str, req: TransitionRenderRequest
     proj = _get_project()
     tr = _get_transition(transition_id)
     seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
-    width = req.width if req else 640
-    height = req.height if req else 480
+    width = proj.width
+    height = proj.height
     frame_rate = req.frame_rate if req else 25
     duration = req.duration_seconds if req else proj.scene_duration
     old = render_tasks.pop(transition_id, None)
@@ -564,7 +564,7 @@ async def api_auto_create_transitions():
             seed = random.randint(0, 2**32 - 1)
             tr.status = KeyframeStatus.rendering
             await _do_render_transition(
-                proj.id, tr, seed, 640, 480, 25, proj.scene_duration
+                proj.id, tr, seed, proj.width, proj.height, 25, proj.scene_duration
             )
             rendered += 1
     proj.transition_active_index = len(ordered)
