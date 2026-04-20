@@ -263,9 +263,10 @@ async def api_lock_keyframes():
     descriptions = await generate_transition_descriptions(
         prompts, duration=proj.scene_duration, style=proj.style,
     )
+    n_expected = len(ordered) - 1
     proj.transitions = []
-    for i, desc in enumerate(descriptions):
-        # LLM sometimes returns dicts instead of strings
+    for i in range(n_expected):
+        desc = descriptions[i] if i < len(descriptions) else ""
         if isinstance(desc, dict):
             desc = " ".join(str(v) for v in desc.values())
         proj.transitions.append(Transition(
@@ -566,8 +567,10 @@ async def api_reset_transitions():
     descriptions = await generate_transition_descriptions(
         prompts, duration=proj.scene_duration, style=proj.style,
     )
+    n_expected = len(ordered_kf) - 1
     proj.transitions = []
-    for i, desc in enumerate(descriptions):
+    for i in range(n_expected):
+        desc = descriptions[i] if i < len(descriptions) else ""
         if isinstance(desc, dict):
             desc = " ".join(str(v) for v in desc.values())
         proj.transitions.append(Transition(
