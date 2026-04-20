@@ -721,6 +721,17 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
             if result.returncode != 0:
                 raise RuntimeError(f"TTS failed: {result.stderr[:500]}")
 
+            tr.audio_filename = f"{tr.id}_narration.wav"
+
+            # 2. Get video duration
+            probe = await asyncio.to_thread(
+                subprocess.run,
+                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", video_path],
+                capture_output=True, text=True,
+            )
+            video_dur = float(probe.stdout.strip()) if probe.returncode == 0 else 10.0
+
             # Log TTS output duration
             dur_probe = await asyncio.to_thread(
                 subprocess.run,
@@ -730,17 +741,6 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
             )
             tts_dur = dur_probe.stdout.strip() if dur_probe.returncode == 0 else "?"
             print(f"TTS for {tr.id}: text={tr.narration[:50]!r}, audio={tts_dur}s, video={video_dur}s", flush=True)
-
-            tr.audio_filename = f"{tr.id}_narration.wav"
-
-            # 2. Get video duration for centering
-            probe = await asyncio.to_thread(
-                subprocess.run,
-                ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
-                 "-of", "csv=p=0", video_path],
-                capture_output=True, text=True,
-            )
-            video_dur = float(probe.stdout.strip()) if probe.returncode == 0 else 10.0
 
             # 3. Mux: overlay centered narration audio on video
             # Pad audio to center it within the video duration
