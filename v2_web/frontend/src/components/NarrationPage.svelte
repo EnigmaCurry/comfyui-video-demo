@@ -115,6 +115,16 @@
     document.querySelectorAll('.narration-card video').forEach(v => v.pause());
   }
 
+  function handleVideoPlay(e) {
+    document.querySelectorAll('.narration-card video').forEach(v => {
+      if (v !== e.target) { v.pause(); v.currentTime = 0; }
+    });
+  }
+
+  function handleVideoPause(e) {
+    e.target.currentTime = 0;
+  }
+
   function handleApprove() {
     pauseAllVideos();
     const nextIndex = activeIndex + 1;
@@ -233,7 +243,7 @@
           <div class="video-thumb">
             {#if hasNarratedVideo}
               <!-- svelte-ignore a11y_media_has_caption -->
-              <video src={narratedVideoUrl(tr)} controls loop></video>
+              <video src={narratedVideoUrl(tr)} controls loop onplay={handleVideoPlay} onpause={handleVideoPause}></video>
             {:else if tr.narration_status === 'rendering'}
               <div class="render-overlay">
                 <div class="spinner"></div>
@@ -241,11 +251,11 @@
               </div>
               {#if videoUrl(tr)}
                 <!-- svelte-ignore a11y_media_has_caption -->
-                <video src={videoUrl(tr)} loop muted></video>
+                <video src={videoUrl(tr)} loop muted onplay={handleVideoPlay} onpause={handleVideoPause}></video>
               {/if}
             {:else if videoUrl(tr)}
               <!-- svelte-ignore a11y_media_has_caption -->
-              <video src={videoUrl(tr)} loop muted></video>
+              <video src={videoUrl(tr)} loop muted onplay={handleVideoPlay} onpause={handleVideoPause}></video>
             {/if}
           </div>
 
