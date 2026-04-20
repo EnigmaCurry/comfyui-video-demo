@@ -190,6 +190,56 @@
     node.setSelectionRange(node.value.length, node.value.length);
   }
 
+  function focusOverlay(node) {
+    node.focus();
+  }
+
+  async function handleFullscreenKeydown(e) {
+    if (e.key === 'Escape') {
+      fullscreen = false;
+      return;
+    }
+    // Ctrl+C: copy image to clipboard
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c' && imageUrl) {
+      e.preventDefault();
+      try {
+        const resp = await fetch(imageUrl);
+        const blob = await resp.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob })
+        ]);
+        onstatus({ detail: `Keyframe ${index + 1} copied to clipboard.` });
+      } catch (err) {
+        onstatus({ detail: `Copy failed: ${err.message}` });
+      }
+    }
+    // Ctrl+V: paste image from clipboard
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      e.preventDefault();
+      try {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imageType = item.types.find(t => t.startsWith('image/'));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            const file = new File([blob], 'pasted.png', { type: imageType });
+            onstatus({ detail: `Pasting replacement for keyframe ${index + 1}...` });
+            const result = await uploadKeyframeImage(keyframe.id, file);
+            keyframe.image_filename = result.image_filename;
+            keyframe.seed = result.seed;
+            keyframe.status = result.status;
+            fullscreen = false;
+            onstatus({ detail: `Keyframe ${index + 1} replaced from clipboard.` });
+            return;
+          }
+        }
+        onstatus({ detail: 'No image found in clipboard.' });
+      } catch (err) {
+        onstatus({ detail: `Paste failed: ${err.message}` });
+      }
+    }
+  }
+
   function handleEditKeydown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -324,9 +374,12 @@
 </div>
 
 {#if fullscreen && imageUrl}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="fullscreen-overlay" onclick={() => fullscreen = false}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fullscreen-overlay" onclick={() => fullscreen = false}
+       onkeydown={handleFullscreenKeydown} tabindex="-1"
+       use:focusOverlay>
     <img src={imageUrl} alt="Keyframe {index + 1} full size" />
+    <div class="fullscreen-hint">Ctrl+C copy / Ctrl+V paste / Esc close</div>
   </div>
 {/if}
 
@@ -608,6 +661,21 @@
     justify-content: center;
     z-index: 1000;
     cursor: pointer;
+  }
+
+  .fullscreen-overlay:focus { outline: none; }
+
+  .fullscreen-hint {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    pointer-events: none;
   }
 
   .fullscreen-overlay img {
