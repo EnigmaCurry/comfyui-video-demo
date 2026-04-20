@@ -16,7 +16,7 @@
     { id: 'keyframes', label: 'Keyframes' },
     { id: 'transitions', label: 'Transitions' },
     { id: 'narration', label: 'Narration' },
-    { id: 'final', label: 'Final' },
+    { id: 'final', label: 'Score' },
   ];
 
   let activeTab = $state('premise');
