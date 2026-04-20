@@ -311,7 +311,8 @@
                 <button class="btn-cancel" onclick={() => cancelEdit(tr)}><X size={14} /> Cancel</button>
               </div>
             {:else}
-              <blockquote class="narration-text">
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+              <blockquote class="narration-text clickable" onclick={() => startEdit(tr)}>
                 {tr.narration || '(no narration)'}
               </blockquote>
             {/if}
@@ -589,6 +590,15 @@
     margin-bottom: 10px;
     line-height: 1.4;
     font-style: italic;
+  }
+
+  .narration-text.clickable {
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .narration-text.clickable:hover {
+    border-left-color: var(--accent-hover);
   }
 
   .narration-text {
