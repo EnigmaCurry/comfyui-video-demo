@@ -81,3 +81,32 @@ def patch_transition_workflow(workflow: dict, *, first_image_name: str,
     wf[TRANS_DURATION_NODE]["inputs"]["value"] = duration_seconds
     wf[TRANS_OUTPUT_NODE]["inputs"][TRANS_OUTPUT_FIELD] = output_prefix
     return wf
+
+
+# ── AceStep audio node IDs ──────────────────────────────────────────
+AUDIO_PROMPT_NODE = "94"
+AUDIO_SEED_NODE = "3"
+AUDIO_SEED_FIELD = "seed"
+AUDIO_DURATION_NODE = "98"
+AUDIO_DURATION_FIELD = "seconds"
+AUDIO_OUTPUT_NODE = "107"
+AUDIO_OUTPUT_FIELD = "filename_prefix"
+
+AUDIO_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "acestep_audio.json")
+
+
+def patch_audio_workflow(workflow: dict, *, prompt_text: str, seed_value: int,
+                          duration_seconds: int = 120, bpm: int = 120,
+                          keyscale: str = "C major",
+                          output_prefix: str = "audio/soundtrack") -> dict:
+    """Patch AceStep 1.5 audio workflow for soundtrack generation."""
+    wf = copy.deepcopy(workflow)
+    wf[AUDIO_PROMPT_NODE]["inputs"]["tags"] = prompt_text
+    wf[AUDIO_PROMPT_NODE]["inputs"]["seed"] = seed_value
+    wf[AUDIO_PROMPT_NODE]["inputs"]["duration"] = duration_seconds
+    wf[AUDIO_PROMPT_NODE]["inputs"]["bpm"] = bpm
+    wf[AUDIO_PROMPT_NODE]["inputs"]["keyscale"] = keyscale
+    wf[AUDIO_SEED_NODE]["inputs"][AUDIO_SEED_FIELD] = seed_value
+    wf[AUDIO_DURATION_NODE]["inputs"][AUDIO_DURATION_FIELD] = duration_seconds
+    wf[AUDIO_OUTPUT_NODE]["inputs"][AUDIO_OUTPUT_FIELD] = output_prefix
+    return wf

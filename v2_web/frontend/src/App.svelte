@@ -5,7 +5,7 @@
   import KeyframeGrid from './components/KeyframeGrid.svelte';
   import TransitionsPage from './components/TransitionsPage.svelte';
   import NarrationPage from './components/NarrationPage.svelte';
-  import PlaceholderPage from './components/PlaceholderPage.svelte';
+  import FinalPage from './components/FinalPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import { getCurrentProject, renderKeyframe, renderTransition, renameProject } from './lib/api.js';
@@ -34,10 +34,13 @@
   let storyLocked = $derived(project?.story_locked || false);
   let keyframesLocked = $derived(project?.keyframes_locked || false);
   let transitionsLocked = $derived(project?.transitions_locked || false);
+  let narrationLocked = $derived(project?.narration_locked || false);
   let keyframes = $derived(project?.keyframes || []);
   let transitions = $derived(project?.transitions || []);
+  let soundtrackSections = $derived(project?.soundtrack_sections || []);
 
   let enabledThrough = $derived(
+    narrationLocked ? 'final' :
     transitionsLocked ? 'narration' :
     keyframesLocked ? 'transitions' :
     storyLocked ? 'keyframes' :
@@ -50,7 +53,9 @@
       const data = await getCurrentProject();
       if (data.project) {
         project = data.project;
-        if (data.project.transitions_locked) {
+        if (data.project.narration_locked) {
+          activeTab = 'final';
+        } else if (data.project.transitions_locked) {
           activeTab = 'narration';
         } else if (data.project.keyframes_locked && data.project.transitions?.length > 0) {
           activeTab = 'transitions';
@@ -94,9 +99,16 @@
     activeTab = 'narration';
   }
 
+  function handleLockNarration(event) {
+    project = event.detail;
+    activeTab = 'final';
+  }
+
   function handleLoadProject(event) {
     project = event.detail;
-    if (project.transitions_locked) {
+    if (project.narration_locked) {
+      activeTab = 'final';
+    } else if (project.transitions_locked) {
       activeTab = 'narration';
     } else if (project.keyframes_locked && project.transitions?.length > 0) {
       activeTab = 'transitions';
@@ -167,6 +179,9 @@
   let mutableTransitions = $state([]);
   $effect(() => { if (project?.transitions) mutableTransitions = project.transitions; });
 
+  let mutableSections = $state([]);
+  $effect(() => { if (project?.soundtrack_sections) mutableSections = project.soundtrack_sections; });
+
   init();
 </script>
 
@@ -225,11 +240,20 @@
                    keyframes={keyframes} {projectId}
                    direction={project?.narration_direction || ''}
                    onstatus={handleStatus}
-                   onreset={(e) => { project = e.detail; }} />
+                   onreset={(e) => { project = e.detail; }}
+                   onlocknarration={handleLockNarration} />
 
   {:else if activeTab === 'final'}
-    <PlaceholderPage title="Final"
-      description="Preview the full sequence, add soundtrack, and render the final film." />
+    <FinalPage bind:sections={mutableSections}
+               transitions={transitions} {projectId}
+               onstatus={handleStatus}
+               onreset={(e) => {
+                 if (e.detail.soundtrack_sections) {
+                   project.soundtrack_sections = e.detail.soundtrack_sections;
+                 } else {
+                   project = e.detail;
+                 }
+               }} />
   {/if}
 </main>
 

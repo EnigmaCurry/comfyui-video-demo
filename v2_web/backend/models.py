@@ -63,11 +63,27 @@ class Project(BaseModel):
     transition_active_index: int = 0
     narration_active_index: int = 0
     narration_direction: str = ""
+    narration_locked: bool = False
     original_prompts: list[str] = Field(default_factory=list)
     keyframes: list[Keyframe] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)
+    soundtrack_sections: list["SoundtrackSection"] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class SoundtrackSection(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    position: int = 0
+    transition_ids: list[str] = Field(default_factory=list)
+    prompt: str = ""
+    bpm: int = 120
+    keyscale: str = "C major"
+    status: KeyframeStatus = KeyframeStatus.pending
+    seed: Optional[int] = None
+    audio_filename: Optional[str] = None
+    preview_filename: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 class GenerateRequest(BaseModel):

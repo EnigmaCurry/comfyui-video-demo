@@ -63,4 +63,14 @@ export const rewriteNarration = (transitionId, instruction) => request('POST', `
 export const getNarrationStatus = (transitionId) => request('GET', `/narration/${transitionId}/status`);
 export const regenerateNarration = (direction) => request('POST', '/narration/regenerate', direction != null ? { direction } : null);
 export const setNarrationDirection = (direction) => request('PUT', '/narration/direction', { direction });
+export const lockNarration = () => request('POST', '/narration/lock');
 export const setNarrationActiveIndex = (activeIndex) => request('PUT', '/narration-active-index', { active_index: activeIndex });
+
+// ── Soundtrack ──
+export const listSoundtrack = () => request('GET', '/soundtrack');
+export const updateSection = (id, updates) => request('PUT', `/soundtrack/${id}`, updates);
+export const suggestSoundtrackPrompt = (id) => request('POST', `/soundtrack/suggest/${id}`);
+export const splitSections = (groups) => request('POST', '/soundtrack/split', { groups });
+export const unsplitSections = () => request('POST', '/soundtrack/unsplit');
+export const renderSoundtrack = (id) => request('POST', `/soundtrack/${id}/render`);
+export const getSoundtrackStatus = (id) => request('GET', `/soundtrack/${id}/status`);

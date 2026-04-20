@@ -224,6 +224,22 @@ async def rewrite_narration(current_narration: str, instruction: str,
     return await call_llm_text(system_prompt, user_msg, temperature=0.8)
 
 
+async def suggest_soundtrack_prompt(scene_descriptions: list[str],
+                                    premise: str = "") -> str:
+    """Generate a soundtrack prompt (tags) for AceStep from scene descriptions."""
+    system_prompt = (
+        "You are a music director writing a description for an AI music generator. "
+        "Given scene descriptions from a film, write a short comma-separated list of "
+        "music tags describing the ideal soundtrack.\n\n"
+        "Include: genre, mood, instruments, tempo feel, and energy level.\n"
+        "Example: 'cinematic orchestral, suspenseful, strings, piano, slow build, dark atmosphere'\n\n"
+        "Reply with ONLY the comma-separated tags, no quotes, no explanation."
+    )
+    scenes = "\n".join(f"  - {s}" for s in scene_descriptions)
+    user_msg = f"Film premise: {premise}\n\nScenes:\n{scenes}"
+    return await call_llm_text(system_prompt, user_msg, temperature=0.7)
+
+
 async def generate_transition_descriptions(keyframe_prompts: list[str],
                                            duration: int = 10,
                                            style: str = "transition-story") -> list[str]:

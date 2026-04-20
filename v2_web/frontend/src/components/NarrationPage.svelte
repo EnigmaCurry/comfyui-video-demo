@@ -1,11 +1,11 @@
 <script>
-  import { Check, X, RotateCcw, Play, RefreshCw, Wand2 } from 'lucide-svelte';
+  import { Check, X, RotateCcw, Play, RefreshCw, Wand2, ArrowRight } from 'lucide-svelte';
   import { updateNarration, regenerateNarration, setNarrationActiveIndex,
            setNarrationDirection, renderNarration, getNarrationStatus,
-           rewriteNarration } from '../lib/api.js';
+           rewriteNarration, lockNarration } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
-        direction: initialDirection = '', onstatus, onreset } = $props();
+        direction: initialDirection = '', onstatus, onreset, onlocknarration } = $props();
 
   const DEFAULT_DIRECTION = "A contemplative, poetic narrator experiencing the scene firsthand. Stream of consciousness, present tense.";
   let activeIndex = $state(-1);
@@ -19,6 +19,7 @@
     'butler', 'despotism-doc', 'feynman', 'kyle', 'linus',
     'mcgill', 'mckenna', 'mulgrew', 'nixon', 'paul-atreides', 'steve', 'wexler',
   ];
+  let locking = $state(false);
   let direction = $state(initialDirection || DEFAULT_DIRECTION);
   let voice = $state('despotism-doc');
   let regenerating = $state(false);
@@ -213,6 +214,20 @@
     }
   }
 
+  async function handleGoToFinal() {
+    locking = true;
+    onstatus({ detail: 'Locking narration...' });
+    try {
+      const data = await lockNarration();
+      if (onlocknarration) onlocknarration({ detail: data.project });
+      onstatus({ detail: 'Narration locked. Proceed to Final.' });
+    } catch (e) {
+      onstatus({ detail: `Failed: ${e.message}` });
+    } finally {
+      locking = false;
+    }
+  }
+
   function autoFocus(node) {
     node.focus();
     node.setSelectionRange(node.value.length, node.value.length);
@@ -383,6 +398,9 @@
   {#if allDone}
     <div class="all-done">
       <span>All narration rendered and approved!</span>
+      <button class="go-btn" onclick={handleGoToFinal} disabled={locking}>
+        {locking ? 'Locking...' : 'Go to Final'} <ArrowRight size={16} />
+      </button>
     </div>
   {/if}
 {:else}
@@ -730,13 +748,26 @@
   .all-done {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 20px 24px;
     margin-bottom: 24px;
   }
+
+  .go-btn {
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    padding: 10px 24px;
+    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .go-btn:hover:not(:disabled) { background: var(--accent-hover); }
 
   .all-done span {
     font-size: 16px;
