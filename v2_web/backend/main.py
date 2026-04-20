@@ -742,21 +742,16 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
             )
             audio_dur = float(audio_probe.stdout.strip()) if audio_probe.returncode == 0 else 0
 
-            pad_before = max(0, (video_dur - audio_dur) / 2)
-
             # Discard original audio, only use narration voice
-            # Pad audio to match video duration so video isn't truncated
-            pad_total = max(0, video_dur - audio_dur)
+            # Pad audio with silence to match video duration exactly
             mux_cmd = [
                 "ffmpeg", "-y",
                 "-i", video_path,
                 "-i", audio_path,
                 "-filter_complex",
-                f"[1:a]volume=2.0,adelay={int(pad_before * 1000)}|{int(pad_before * 1000)},"
-                f"apad=whole_dur={int(video_dur * 1000)}ms[vo]",
+                f"[1:a]volume=2.0,apad=whole_dur={video_dur:.3f}[vo]",
                 "-map", "0:v", "-map", "[vo]",
                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                "-t", str(video_dur),
                 narrated_path,
             ]
 
