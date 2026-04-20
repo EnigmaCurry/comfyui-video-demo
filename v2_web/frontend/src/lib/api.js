@@ -73,4 +73,5 @@ export const suggestSoundtrackPrompt = (id) => request('POST', `/soundtrack/sugg
 export const splitSections = (groups) => request('POST', '/soundtrack/split', { groups });
 export const unsplitSections = () => request('POST', '/soundtrack/unsplit');
 export const renderSoundtrack = (id) => request('POST', `/soundtrack/${id}/render`);
+export const remuxSoundtrack = (id, volumes) => request('POST', `/soundtrack/${id}/remux`, volumes);
 export const getSoundtrackStatus = (id) => request('GET', `/soundtrack/${id}/status`);

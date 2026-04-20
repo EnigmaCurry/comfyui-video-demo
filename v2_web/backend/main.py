@@ -917,9 +917,96 @@ async def api_get_section_status(section_id: str):
     }
 
 
-async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
-    """Render soundtrack via AceStep and mux with narrated clips."""
+async def _do_mux_section(proj_id: str, sec: SoundtrackSection):
+    """Concat narrated clips and mix with existing soundtrack audio."""
     import subprocess
+
+    proj = current_project
+    if not proj:
+        raise RuntimeError("No project loaded")
+
+    img_dir = images_dir(proj_id)
+    audio_path = os.path.join(img_dir, sec.audio_filename) if sec.audio_filename else None
+    if not audio_path or not os.path.isfile(audio_path):
+        raise RuntimeError("Soundtrack audio not generated yet")
+
+    tr_map = {tr.id: tr for tr in proj.transitions}
+    section_transitions = [tr_map[tid] for tid in sec.transition_ids if tid in tr_map]
+
+    narrated_clips = []
+    for tr in section_transitions:
+        if tr.narrated_video_filename:
+            narrated_clips.append(os.path.join(img_dir, tr.narrated_video_filename))
+        elif tr.video_filename:
+            narrated_clips.append(os.path.join(img_dir, tr.video_filename))
+
+    if not narrated_clips:
+        raise RuntimeError("No video clips for section")
+
+    concat_list = os.path.join(img_dir, f"{sec.id}_concat.txt")
+    with open(concat_list, "w") as f:
+        for clip in narrated_clips:
+            f.write(f"file '{os.path.abspath(clip)}'\n")
+
+    concat_video = os.path.join(img_dir, f"{sec.id}_concat.mp4")
+    result = await asyncio.to_thread(
+        subprocess.run,
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+         "-i", concat_list, "-c", "copy", concat_video],
+        capture_output=True, text=True, timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Concat failed: {result.stderr[:300]}")
+
+    preview_file = f"{sec.id}_preview.mp4"
+    preview_path = os.path.join(img_dir, preview_file)
+
+    probe = await asyncio.to_thread(
+        subprocess.run,
+        ["ffprobe", "-v", "quiet", "-select_streams", "a",
+         "-show_entries", "stream=codec_type", "-of", "csv=p=0", concat_video],
+        capture_output=True, text=True,
+    )
+    has_audio = bool(probe.stdout.strip())
+
+    mv = sec.music_volume
+    nv = sec.narration_volume
+    if has_audio:
+        mux_cmd = [
+            "ffmpeg", "-y",
+            "-i", concat_video, "-i", audio_path,
+            "-filter_complex",
+            f"[0:a]volume={nv}[voice];[1:a]volume={mv}[music];"
+            f"[voice][music]amix=inputs=2:duration=first[aout]",
+            "-map", "0:v", "-map", "[aout]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-shortest", preview_path,
+        ]
+    else:
+        mux_cmd = [
+            "ffmpeg", "-y",
+            "-i", concat_video, "-i", audio_path,
+            "-filter_complex", f"[1:a]volume={mv}[music]",
+            "-map", "0:v", "-map", "[music]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-shortest", preview_path,
+        ]
+
+    result = await asyncio.to_thread(
+        subprocess.run, mux_cmd, capture_output=True, text=True, timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Mux failed: {result.stderr[:300]}")
+
+    sec.preview_filename = preview_file
+
+    for f in [concat_list, concat_video]:
+        if os.path.exists(f):
+            os.unlink(f)
+
+
+async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
+    """Generate soundtrack via AceStep, then mux with narrated clips."""
     from comfyui import download_output, run_workflow
     from workflows import AUDIO_WORKFLOW_PATH, load_workflow, patch_audio_workflow
 
@@ -933,12 +1020,10 @@ async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
             seed = sec.seed or random.randint(0, 2**32 - 1)
             sec.seed = seed
 
-            # Calculate total duration for this section
             tr_map = {tr.id: tr for tr in proj.transitions}
             section_transitions = [tr_map[tid] for tid in sec.transition_ids if tid in tr_map]
             total_duration = len(section_transitions) * proj.scene_duration
 
-            # 1. Generate soundtrack audio via AceStep
             print(f"Rendering soundtrack {sec.id}: {sec.prompt[:60]!r}, {total_duration}s", flush=True)
             base_wf = load_workflow(AUDIO_WORKFLOW_PATH)
             patched = patch_audio_workflow(
@@ -953,89 +1038,12 @@ async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
             await download_output(history, audio_path, output_type="audio")
             sec.audio_filename = audio_file
 
-            # 2. Concat narrated video clips for this section
-            narrated_clips = []
-            for tr in section_transitions:
-                if tr.narrated_video_filename:
-                    narrated_clips.append(os.path.join(img_dir, tr.narrated_video_filename))
-                elif tr.video_filename:
-                    narrated_clips.append(os.path.join(img_dir, tr.video_filename))
+            await _do_mux_section(proj_id, sec)
 
-            if not narrated_clips:
-                raise RuntimeError("No video clips for section")
-
-            # Create concat list file
-            concat_list = os.path.join(img_dir, f"{sec.id}_concat.txt")
-            with open(concat_list, "w") as f:
-                for clip in narrated_clips:
-                    f.write(f"file '{os.path.abspath(clip)}'\n")
-
-            concat_video = os.path.join(img_dir, f"{sec.id}_concat.mp4")
-            concat_cmd = [
-                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                "-i", concat_list, "-c", "copy", concat_video,
-            ]
-            result = await asyncio.to_thread(
-                subprocess.run, concat_cmd, capture_output=True, text=True, timeout=120,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"Concat failed: {result.stderr[:300]}")
-
-            # 3. Mix soundtrack with concatenated video
-            preview_file = f"{sec.id}_preview.mp4"
-            preview_path = os.path.join(img_dir, preview_file)
-
-            # Check if concat has audio
-            probe = await asyncio.to_thread(
-                subprocess.run,
-                ["ffprobe", "-v", "quiet", "-select_streams", "a",
-                 "-show_entries", "stream=codec_type", "-of", "csv=p=0", concat_video],
-                capture_output=True, text=True,
-            )
-            has_audio = bool(probe.stdout.strip())
-
-            mv = sec.music_volume
-            nv = sec.narration_volume
-            if has_audio:
-                mux_cmd = [
-                    "ffmpeg", "-y",
-                    "-i", concat_video,
-                    "-i", audio_path,
-                    "-filter_complex",
-                    f"[0:a]volume={nv}[voice];[1:a]volume={mv}[music];"
-                    f"[voice][music]amix=inputs=2:duration=first[aout]",
-                    "-map", "0:v", "-map", "[aout]",
-                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                    "-shortest", preview_path,
-                ]
-            else:
-                mux_cmd = [
-                    "ffmpeg", "-y",
-                    "-i", concat_video,
-                    "-i", audio_path,
-                    "-filter_complex",
-                    f"[1:a]volume={mv}[music]",
-                    "-map", "0:v", "-map", "[music]",
-                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                    "-shortest", preview_path,
-                ]
-
-            result = await asyncio.to_thread(
-                subprocess.run, mux_cmd, capture_output=True, text=True, timeout=120,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"Mux failed: {result.stderr[:300]}")
-
-            sec.preview_filename = preview_file
             sec.status = KeyframeStatus.done
             if current_project and current_project.id == proj_id:
                 _save()
             print(f"Soundtrack rendered for section {sec.id}", flush=True)
-
-            # Cleanup temp files
-            for f in [concat_list, concat_video]:
-                if os.path.exists(f):
-                    os.unlink(f)
 
         except asyncio.CancelledError:
             sec.status = KeyframeStatus.pending
@@ -1043,6 +1051,23 @@ async def _do_render_soundtrack(proj_id: str, sec: SoundtrackSection):
             sec.status = KeyframeStatus.error
             sec.error_message = str(e)
             print(f"Soundtrack render error: {e}", flush=True)
+
+
+async def _do_remux_section(proj_id: str, sec: SoundtrackSection):
+    """Re-mux existing soundtrack with adjusted volumes (no AceStep)."""
+    async with _render_semaphore:
+        try:
+            print(f"Remuxing section {sec.id}: music={sec.music_volume}, narration={sec.narration_volume}", flush=True)
+            await _do_mux_section(proj_id, sec)
+            sec.status = KeyframeStatus.done
+            if current_project and current_project.id == proj_id:
+                _save()
+        except asyncio.CancelledError:
+            sec.status = KeyframeStatus.pending
+        except Exception as e:
+            sec.status = KeyframeStatus.error
+            sec.error_message = str(e)
+            print(f"Remux error: {e}", flush=True)
 
 
 @app.post("/api/soundtrack/{section_id}/render")
@@ -1060,6 +1085,29 @@ async def api_render_soundtrack(section_id: str):
     task = asyncio.create_task(_do_render_soundtrack(proj.id, sec))
     render_tasks[f"snd_{section_id}"] = task
     return {"id": sec.id, "status": sec.status, "seed": sec.seed}
+
+
+@app.post("/api/soundtrack/{section_id}/remux")
+async def api_remux_soundtrack(section_id: str, body: dict | None = None):
+    """Re-mux with existing soundtrack audio at new volume levels."""
+    proj = _get_project()
+    sec = _get_section(section_id)
+    if not sec.audio_filename:
+        raise HTTPException(400, "No soundtrack audio — render first")
+    if body:
+        if "music_volume" in body:
+            sec.music_volume = float(body["music_volume"])
+        if "narration_volume" in body:
+            sec.narration_volume = float(body["narration_volume"])
+        _save()
+    old = render_tasks.pop(f"snd_{section_id}", None)
+    if old and not old.done():
+        old.cancel()
+    sec.status = KeyframeStatus.rendering
+    sec.error_message = None
+    task = asyncio.create_task(_do_remux_section(proj.id, sec))
+    render_tasks[f"snd_{section_id}"] = task
+    return {"id": sec.id, "status": sec.status}
 
 
 # ── File serving ────────────────────────────────────────────────────

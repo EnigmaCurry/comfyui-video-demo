@@ -1,7 +1,7 @@
 <script>
   import { Sparkles, RefreshCw, Play, RotateCcw, Scissors, Merge } from 'lucide-svelte';
   import { updateSection, suggestSoundtrackPrompt, renderSoundtrack,
-           getSoundtrackStatus, splitSections, unsplitSections } from '../lib/api.js';
+           remuxSoundtrack, getSoundtrackStatus, splitSections, unsplitSections } from '../lib/api.js';
 
   let { sections = $bindable([]), transitions = [], projectId = '',
         onstatus, onreset } = $props();
@@ -9,6 +9,7 @@
   let polling = $state({});
   let renderVersion = $state({});
   let suggesting = $state({});
+  let volumeTimers = $state({});
 
   // Poll any rendering sections on load
   $effect(() => {
@@ -101,6 +102,26 @@
   }
 
   function handleVideoPause(e) { e.target.currentTime = 0; }
+
+  function handleVolumeChange(sec) {
+    // Debounce: wait 800ms after last change, then remux if soundtrack exists
+    clearTimeout(volumeTimers[sec.id]);
+    if (!sec.audio_filename) return;
+    volumeTimers[sec.id] = setTimeout(async () => {
+      onstatus({ detail: `Remixing section ${sec.position + 1}...` });
+      sec.status = 'rendering';
+      try {
+        await remuxSoundtrack(sec.id, {
+          music_volume: sec.music_volume,
+          narration_volume: sec.narration_volume,
+        });
+        pollStatus(sec);
+      } catch (e) {
+        onstatus({ detail: `Remux failed: ${e.message}` });
+        sec.status = 'error';
+      }
+    }, 800);
+  }
 
   async function handleSplitAt(sectionIndex, splitAfterTrIndex) {
     // Split a section into two at the given transition boundary
@@ -215,12 +236,14 @@
           <div class="volume-row">
             <label>
               Music
-              <input type="range" min="0" max="2" step="0.1" bind:value={sec.music_volume} class="volume-slider" />
+              <input type="range" min="0" max="2" step="0.1" bind:value={sec.music_volume}
+                     oninput={() => handleVolumeChange(sec)} class="volume-slider" />
               <span class="volume-val">{sec.music_volume.toFixed(1)}</span>
             </label>
             <label>
               Narration
-              <input type="range" min="0" max="4" step="0.1" bind:value={sec.narration_volume} class="volume-slider" />
+              <input type="range" min="0" max="4" step="0.1" bind:value={sec.narration_volume}
+                     oninput={() => handleVolumeChange(sec)} class="volume-slider" />
               <span class="volume-val">{sec.narration_volume.toFixed(1)}</span>
             </label>
           </div>
