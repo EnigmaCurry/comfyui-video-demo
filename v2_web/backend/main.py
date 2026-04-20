@@ -680,39 +680,18 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
 
             pad_before = max(0, (video_dur - audio_dur) / 2)
 
+            # Discard original audio, only use narration voice
             mux_cmd = [
                 "ffmpeg", "-y",
                 "-i", video_path,
                 "-i", audio_path,
                 "-filter_complex",
-                f"[1:a]volume=2.0,adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo];"
-                f"[0:a][vo]amix=inputs=2:duration=first:dropout_transition=0[aout]",
-                "-map", "0:v", "-map", "[aout]",
+                f"[1:a]volume=2.0,adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo]",
+                "-map", "0:v", "-map", "[vo]",
                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                 "-shortest",
                 narrated_path,
             ]
-            # If source video has no audio, simpler command
-            probe_audio = await asyncio.to_thread(
-                subprocess.run,
-                ["ffprobe", "-v", "quiet", "-select_streams", "a",
-                 "-show_entries", "stream=codec_type", "-of", "csv=p=0", video_path],
-                capture_output=True, text=True,
-            )
-            has_audio = bool(probe_audio.stdout.strip())
-
-            if not has_audio:
-                mux_cmd = [
-                    "ffmpeg", "-y",
-                    "-i", video_path,
-                    "-i", audio_path,
-                    "-filter_complex",
-                    f"[1:a]volume=2.0,adelay={int(pad_before * 1000)}|{int(pad_before * 1000)}[vo]",
-                    "-map", "0:v", "-map", "[vo]",
-                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                    "-shortest",
-                    narrated_path,
-                ]
 
             mux_result = await asyncio.to_thread(
                 subprocess.run, mux_cmd,
@@ -739,7 +718,8 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
 async def api_render_narration(transition_id: str, body: dict | None = None):
     proj = _get_project()
     tr = _get_transition(transition_id)
-    voice = body.get("voice") if body else None
+    # Per-transition voice overrides the request voice
+    voice = tr.narration_voice or (body.get("voice") if body else None)
     old = render_tasks.pop(f"narr_{transition_id}", None)
     if old and not old.done():
         old.cancel()
@@ -768,9 +748,12 @@ async def api_get_narration_status(transition_id: str):
 @app.put("/api/narration/{transition_id}")
 async def api_update_narration(transition_id: str, body: dict):
     tr = _get_transition(transition_id)
-    tr.narration = body.get("narration", tr.narration)
+    if "narration" in body:
+        tr.narration = body["narration"]
+    if "voice" in body:
+        tr.narration_voice = body["voice"]
     _save()
-    return {"narration": tr.narration}
+    return tr.model_dump()
 
 
 @app.put("/api/narration-active-index")

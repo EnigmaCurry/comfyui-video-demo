@@ -57,7 +57,7 @@ export const lockTransitions = () => request('POST', '/transitions/lock');
 export const setTransitionActiveIndex = (activeIndex) => request('PUT', '/transition-active-index', { active_index: activeIndex });
 
 // ── Narration ──
-export const updateNarration = (transitionId, narration) => request('PUT', `/narration/${transitionId}`, { narration });
+export const updateNarration = (transitionId, updates) => request('PUT', `/narration/${transitionId}`, updates);
 export const renderNarration = (transitionId, voice) => request('POST', `/narration/${transitionId}/render`, voice ? { voice } : null);
 export const getNarrationStatus = (transitionId) => request('GET', `/narration/${transitionId}/status`);
 export const regenerateNarration = (direction) => request('POST', '/narration/regenerate', direction != null ? { direction } : null);

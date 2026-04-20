@@ -65,7 +65,7 @@
 
   async function saveEdit(tr) {
     try {
-      await updateNarration(tr.id, editTexts[tr.id]);
+      await updateNarration(tr.id, { narration: editTexts[tr.id] });
       tr.narration = editTexts[tr.id];
       // Narration text changed — reset render status
       tr.narration_status = 'pending';
@@ -83,7 +83,8 @@
     onstatus({ detail: `Rendering narration ${tr.position + 1}...` });
     tr.narration_status = 'rendering';
     try {
-      await renderNarration(tr.id, `${voice}.wav`);
+      const v = tr.narration_voice || voice;
+      await renderNarration(tr.id, `${v}.wav`);
       pollStatus(tr);
     } catch (e) {
       onstatus({ detail: `Render failed: ${e.message}` });
@@ -132,6 +133,15 @@
   }
 
   function handleDirectionInput() { directionDirty = true; }
+
+  async function handleVoiceOverride(tr, newVoice) {
+    tr.narration_voice = newVoice;
+    try {
+      await updateNarration(tr.id, { voice: newVoice });
+    } catch (e) {
+      onstatus({ detail: `Failed to save voice: ${e.message}` });
+    }
+  }
 
   async function handleRegenerate() {
     if (!confirm('Regenerate all narration text? Your edits and renders will be lost.')) return;
@@ -263,6 +273,15 @@
           <button class="btn-icon" onclick={() => startEdit(tr)} title="Edit narration">
             <Pencil size={16} />
           </button>
+          <select class="voice-override"
+                  value={tr.narration_voice || ''}
+                  onchange={(e) => handleVoiceOverride(tr, e.target.value)}
+                  title="Voice override for this transition">
+            <option value="">default ({voice})</option>
+            {#each VOICES as v}
+              <option value={v}>{v}</option>
+            {/each}
+          </select>
           {#if isActive && !isEditing}
             {#if tr.narration_status === 'done'}
               <button class="btn-approve" onclick={handleApprove} title="Approve narration">
@@ -560,6 +579,19 @@
     background: var(--bg-card-hover);
     color: var(--text);
   }
+
+  .voice-override {
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text-dim);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px 8px;
+    outline: none;
+  }
+
+  .voice-override:focus { border-color: var(--border-focus); }
 
   .btn-render {
     background: var(--accent);
