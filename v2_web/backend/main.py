@@ -543,6 +543,33 @@ async def api_auto_create_transitions():
     return {"rendered": rendered, "project": proj.model_dump()}
 
 
+@app.post("/api/transitions/repair")
+async def api_repair_transitions():
+    """Add missing transitions without removing existing ones."""
+    proj = _get_project()
+    ordered_kf = sorted(proj.keyframes, key=lambda k: k.position)
+    n_expected = len(ordered_kf) - 1
+    # Build a map of existing transitions by (from, to) pair
+    existing = {(tr.from_keyframe_id, tr.to_keyframe_id): tr for tr in proj.transitions}
+    new_transitions = []
+    for i in range(n_expected):
+        pair = (ordered_kf[i].id, ordered_kf[i + 1].id)
+        if pair in existing:
+            tr = existing[pair]
+            tr.position = i
+            new_transitions.append(tr)
+        else:
+            new_transitions.append(Transition(
+                position=i,
+                from_keyframe_id=ordered_kf[i].id,
+                to_keyframe_id=ordered_kf[i + 1].id,
+                prompt="",
+            ))
+    proj.transitions = new_transitions
+    _save()
+    return {"project": proj.model_dump()}
+
+
 @app.post("/api/transitions/reset")
 async def api_reset_transitions():
     """Re-generate transition descriptions and reset all to pending."""
