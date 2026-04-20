@@ -18,7 +18,6 @@
       onproject({ detail: project });
       onstatus({ detail: `Created "${project.name}" with ${project.keyframes.length} scenes. Rendering #1...` });
 
-      // Render the first keyframe
       if (project.keyframes.length > 0) {
         renderKeyframe(project.keyframes[0].id).catch(e =>
           onstatus({ detail: `Render error: ${e.message}` })
@@ -39,22 +38,21 @@
   }
 </script>
 
-<div class="prompt-panel">
-  {#if projectName}
-    <div class="current-project">
-      <span class="project-label">Project:</span>
-      <span class="project-name">{projectName}</span>
-    </div>
-  {/if}
-  <div class="input-row">
+<div class="premise-page">
+  <div class="section">
+    <h2>Initial Conditions</h2>
+    <p class="hint">Describe the setting, characters, and situation. The story will evolve from here.</p>
     <textarea
-      placeholder="Describe the setting, characters, and situation to begin your story..."
+      placeholder="A lighthouse keeper on a remote island discovers a locked door in the basement that wasn't there yesterday..."
       bind:value={theme}
       onkeydown={handleKeydown}
       disabled={generating}
       class="theme-input"
-      rows="2"
+      rows="4"
     ></textarea>
+  </div>
+
+  <div class="controls">
     <div class="count-control">
       <label for="count">Scenes</label>
       <input
@@ -66,85 +64,106 @@
         disabled={generating}
         class="count-input"
       />
+      <span class="count-hint">
+        {#if count <= 5}compressed arc{:else if count <= 10}standard arc{:else if count <= 16}extended arc{:else}epic arc{/if}
+      </span>
     </div>
+
     <button
       onclick={handleGenerate}
       disabled={generating || !theme.trim()}
       class="generate-btn"
     >
-      {generating ? 'Generating...' : 'Generate'}
+      {generating ? 'Generating...' : 'Generate Story'}
     </button>
   </div>
+
+  {#if projectName}
+    <div class="existing-project">
+      Note: generating will create a new project, replacing the current one ({projectName}).
+    </div>
+  {/if}
 </div>
 
 <style>
-  .prompt-panel {
+  .premise-page {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 20px;
+    padding: 28px;
+  }
+
+  .section {
     margin-bottom: 24px;
   }
 
-  .current-project {
-    margin-bottom: 12px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .project-label {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    margin-right: 8px;
-  }
-
-  .project-name {
+  h2 {
+    font-size: 18px;
     font-weight: 600;
     color: var(--text);
+    margin-bottom: 6px;
   }
 
-  .input-row {
-    display: flex;
-    gap: 12px;
-    align-items: end;
+  .hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
   }
 
   .theme-input {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
     resize: vertical;
-    line-height: 1.5;
+    line-height: 1.6;
+    font-size: 15px;
+  }
+
+  .controls {
+    display: flex;
+    align-items: end;
+    gap: 16px;
   }
 
   .count-control {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
   }
 
   .count-control label {
-    font-size: 12px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: 14px;
+    color: var(--text-dim);
   }
 
   .count-input {
-    width: 70px;
+    width: 65px;
     text-align: center;
+  }
+
+  .count-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
   }
 
   .generate-btn {
     background: var(--accent);
     color: white;
     font-weight: 500;
-    padding: 10px 24px;
+    padding: 10px 28px;
     white-space: nowrap;
+    font-size: 15px;
+    margin-left: auto;
   }
 
   .generate-btn:hover:not(:disabled) {
     background: var(--accent-hover);
+  }
+
+  .existing-project {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
   }
 </style>
