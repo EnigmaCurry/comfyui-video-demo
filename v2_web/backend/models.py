@@ -24,6 +24,7 @@ class Keyframe(BaseModel):
     status: KeyframeStatus = KeyframeStatus.pending
     seed: Optional[int] = None
     image_filename: Optional[str] = None
+    negative_prompt: str = ""
     locked: bool = False
     error_message: Optional[str] = None
 
@@ -60,6 +61,7 @@ class RenderRequest(BaseModel):
 
 class UpdateKeyframeRequest(BaseModel):
     prompt: Optional[str] = None
+    negative_prompt: Optional[str] = None
     position: Optional[int] = None
 
 

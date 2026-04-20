@@ -245,6 +245,8 @@ async def api_update_keyframe(keyframe_id: str, req: UpdateKeyframeRequest):
     kf = _get_keyframe(keyframe_id)
     if req.prompt is not None:
         kf.prompt = req.prompt
+    if req.negative_prompt is not None:
+        kf.negative_prompt = req.negative_prompt
     if req.position is not None:
         kf.position = req.position
     _save()
@@ -298,7 +300,10 @@ async def _do_render(proj_id: str, kf: Keyframe, seed: int, width: int, height: 
             base_wf = load_workflow(T2I_WORKFLOW_PATH)
             from llm import _load_style
             style = _load_style("transition-story")
-            neg_prompt = style.get("negative_prompt", "")
+            neg_parts = [style.get("negative_prompt", "")]
+            if kf.negative_prompt:
+                neg_parts.append(kf.negative_prompt)
+            neg_prompt = ", ".join(p for p in neg_parts if p)
 
             patched = patch_t2i_workflow(
                 base_wf, prompt_text=kf.prompt, negative_prompt_text=neg_prompt,

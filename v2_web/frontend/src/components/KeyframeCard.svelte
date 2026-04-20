@@ -1,5 +1,5 @@
 <script>
-  import { RefreshCw, Pencil, Lock, Unlock, Trash2, Check, X, ChevronRight } from 'lucide-svelte';
+  import { RefreshCw, Pencil, Lock, Unlock, Trash2, Check, X, ChevronRight, ThumbsDown } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
            lockKeyframe, unlockKeyframe, getKeyframeStatus } from '../lib/api.js';
 
@@ -7,6 +7,8 @@
 
   let editing = $state(false);
   let editPrompt = $state('');
+  let editingNeg = $state(false);
+  let editNegPrompt = $state('');
   let polling = $state(false);
   let imageUrl = $state(null);
   let fullscreen = $state(false);
@@ -77,6 +79,35 @@
 
   function cancelEdit() {
     editing = false;
+  }
+
+  function startEditNeg() {
+    editNegPrompt = keyframe.negative_prompt || '';
+    editingNeg = true;
+  }
+
+  async function saveNegEdit() {
+    try {
+      await updateKeyframe(keyframe.id, { negative_prompt: editNegPrompt });
+      keyframe.negative_prompt = editNegPrompt;
+      editingNeg = false;
+      onstatus({ detail: `Updated keyframe ${index + 1} negative prompt` });
+    } catch (e) {
+      onstatus({ detail: `Update failed: ${e.message}` });
+    }
+  }
+
+  function cancelNegEdit() {
+    editingNeg = false;
+  }
+
+  function handleNegKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveNegEdit();
+    } else if (e.key === 'Escape') {
+      cancelNegEdit();
+    }
   }
 
   async function handleDelete() {
@@ -173,6 +204,28 @@
     {:else}
       <p class="prompt-text">{keyframe.prompt}</p>
     {/if}
+
+    {#if editingNeg}
+      <div class="neg-edit">
+        <label class="neg-label">Negative prompt</label>
+        <textarea
+          bind:value={editNegPrompt}
+          onkeydown={handleNegKeydown}
+          rows="2"
+          class="edit-textarea neg-textarea"
+          placeholder="Things to avoid: text, watermark, extra limbs..."
+          use:autoFocus
+        ></textarea>
+        <div class="edit-actions">
+          <button class="btn-save" onclick={saveNegEdit}><Check size={14} /> Save</button>
+          <button class="btn-cancel" onclick={cancelNegEdit}><X size={14} /> Cancel</button>
+        </div>
+      </div>
+    {:else if keyframe.negative_prompt}
+      <p class="neg-display">
+        <span class="neg-label">Negative:</span> {keyframe.negative_prompt}
+      </p>
+    {/if}
   </div>
 
   <div class="card-actions">
@@ -182,6 +235,10 @@
     </button>
     <button class="btn-icon" onclick={startEdit} title="Edit prompt">
       <Pencil size={16} />
+    </button>
+    <button class="btn-icon" class:btn-active={!!keyframe.negative_prompt}
+            onclick={startEditNeg} title="Negative prompt">
+      <ThumbsDown size={16} />
     </button>
     <button class="btn-icon" onclick={toggleLock}
             title={keyframe.locked ? 'Unlock' : 'Lock'}>
@@ -194,7 +251,7 @@
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
     </button>
-    {#if active && keyframe.status === 'done' && !editing}
+    {#if active && keyframe.status === 'done' && !editing && !editingNeg}
       <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
         <Check size={16} /> Approve
       </button>
@@ -346,6 +403,38 @@
     min-height: 60px;
   }
 
+  .neg-edit {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .neg-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--error);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .neg-textarea {
+    min-height: 40px;
+  }
+
+  .neg-display {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .neg-display .neg-label {
+    display: inline;
+    font-size: 12px;
+    margin: 0;
+  }
+
   .edit-actions {
     display: flex;
     gap: 6px;
@@ -412,6 +501,10 @@
 
   .btn-danger:hover:not(:disabled) {
     color: var(--error);
+  }
+
+  .btn-active {
+    color: var(--warning);
   }
 
   .fullscreen-overlay {
