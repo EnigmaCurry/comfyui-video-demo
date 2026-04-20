@@ -1,5 +1,5 @@
 <script>
-  import { Pencil, Check, X, RotateCcw, Play } from 'lucide-svelte';
+  import { Pencil, Check, X, RotateCcw, Play, RefreshCw } from 'lucide-svelte';
   import { updateNarration, regenerateNarration, setNarrationActiveIndex,
            setNarrationDirection, renderNarration, getNarrationStatus } from '../lib/api.js';
 
@@ -272,6 +272,10 @@
         <div class="card-actions">
           <button class="btn-icon" onclick={() => startEdit(tr)} title="Edit narration">
             <Pencil size={16} />
+          </button>
+          <button class="btn-icon" onclick={() => handleRender(tr)} title="Re-render narration"
+                  disabled={tr.narration_status === 'rendering'}>
+            <RefreshCw size={16} />
           </button>
           <select class="voice-override"
                   value={tr.narration_voice || ''}
