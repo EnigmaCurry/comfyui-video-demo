@@ -125,7 +125,9 @@ async def generate_keyframe_descriptions(theme: str, count: int,
     """Generate keyframe descriptions via LLM."""
     style_data = _load_style(style)
     system_prompt = style_data["keyframe_system_prompt"]
-    user_msg = f"Theme: {theme}\nNumber of keyframes: {count}"
+    user_msg = (f"Initial conditions: {theme}\n"
+                f"Number of keyframes: {count}\n"
+                f"Total film duration: approximately {count * style_data.get('default_duration', 10)} seconds")
 
     keyframes = await call_llm(system_prompt, user_msg)
     if len(keyframes) > count:

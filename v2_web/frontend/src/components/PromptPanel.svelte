@@ -41,16 +41,16 @@
 
 <div class="prompt-panel">
   <div class="input-row">
-    <input
-      type="text"
-      placeholder="Enter a theme for your film..."
+    <textarea
+      placeholder="Describe the setting, characters, and situation to begin your story..."
       bind:value={theme}
       onkeydown={handleKeydown}
       disabled={generating}
       class="theme-input"
-    />
+      rows="2"
+    ></textarea>
     <div class="count-control">
-      <label for="count">Frames</label>
+      <label for="count">Scenes</label>
       <input
         id="count"
         type="number"
@@ -89,6 +89,8 @@
   .theme-input {
     flex: 1;
     min-width: 0;
+    resize: vertical;
+    line-height: 1.5;
   }
 
   .count-control {
