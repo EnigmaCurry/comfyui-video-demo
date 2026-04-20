@@ -37,6 +37,13 @@ export const getKeyframeStatus = (id) => request('GET', `/keyframes/${id}/status
 export const renderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/render`, opts);
 export const rerenderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/rerender`, opts);
 export const rewriteKeyframe = (id, instruction) => request('POST', `/keyframes/${id}/rewrite`, { instruction });
+export async function uploadKeyframeImage(id, file) {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(`/api/keyframes/${id}/upload`, { method: 'POST', body: form });
+  if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
+  return resp.json();
+}
 export const updateKeyframe = (id, updates) => request('PUT', `/keyframes/${id}`, updates);
 export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
 export const reorderKeyframes = (ids) => request('POST', '/keyframes/reorder', ids);

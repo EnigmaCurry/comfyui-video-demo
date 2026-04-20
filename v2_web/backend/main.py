@@ -4,7 +4,7 @@ import asyncio
 import os
 import random
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File as fastapi_File, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -384,6 +384,22 @@ async def api_rerender_keyframe(keyframe_id: str, req: RenderRequest | None = No
     width = req.width if req else 1920
     height = req.height if req else 1088
     return await api_render_keyframe(keyframe_id, RenderRequest(seed=seed, width=width, height=height))
+
+
+@app.post("/api/keyframes/{keyframe_id}/upload")
+async def api_upload_keyframe_image(keyframe_id: str, file: bytes = fastapi_File(...)):
+    """Upload a replacement image for a keyframe."""
+    proj = _get_project()
+    kf = _get_keyframe(keyframe_id)
+    filename = f"{kf.id}.png"
+    dest = os.path.join(images_dir(proj.id), filename)
+    with open(dest, "wb") as f:
+        f.write(file)
+    kf.image_filename = filename
+    kf.seed = random.randint(0, 2**32 - 1)  # Change seed for cache bust
+    kf.status = KeyframeStatus.done
+    _save()
+    return kf.model_dump()
 
 
 @app.post("/api/keyframes/{keyframe_id}/rewrite")

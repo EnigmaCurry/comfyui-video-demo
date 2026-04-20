@@ -1,7 +1,7 @@
 <script>
-  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2 } from 'lucide-svelte';
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
-           getKeyframeStatus, rewriteKeyframe } from '../lib/api.js';
+           getKeyframeStatus, rewriteKeyframe, uploadKeyframeImage } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false, projectId = '' } = $props();
 
@@ -148,6 +148,29 @@
     }
   }
 
+  let fileInput;
+
+  function triggerUpload() {
+    fileInput.click();
+  }
+
+  async function handleUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    onstatus({ detail: `Uploading replacement for keyframe ${index + 1}...` });
+    try {
+      const result = await uploadKeyframeImage(keyframe.id, file);
+      keyframe.image_filename = result.image_filename;
+      keyframe.seed = result.seed;
+      keyframe.status = result.status;
+      onstatus({ detail: `Keyframe ${index + 1} replaced.` });
+    } catch (err) {
+      onstatus({ detail: `Upload failed: ${err.message}` });
+    }
+    // Reset input so same file can be re-uploaded
+    e.target.value = '';
+  }
+
   async function handleDelete() {
     try {
       await deleteKeyframe(keyframe.id);
@@ -278,6 +301,10 @@
             disabled={keyframe.status === 'rendering'}>
       <RefreshCw size={16} />
     </button>
+    <button class="btn-icon" onclick={triggerUpload} title="Upload replacement image">
+      <Upload size={16} />
+    </button>
+    <input type="file" accept="image/*" bind:this={fileInput} onchange={handleUpload} class="hidden-input" />
     <button class="btn-icon" onclick={startRewrite} title="Rewrite with AI">
       <Wand2 size={16} />
     </button>
@@ -529,6 +556,10 @@
     padding: 8px 14px;
     border-top: 1px solid var(--border);
     align-items: center;
+  }
+
+  .hidden-input {
+    display: none;
   }
 
   .btn-approve {
