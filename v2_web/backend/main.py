@@ -360,6 +360,22 @@ async def api_rerender_keyframe(keyframe_id: str, req: RenderRequest | None = No
     return await api_render_keyframe(keyframe_id, RenderRequest(seed=seed, width=width, height=height))
 
 
+@app.post("/api/keyframes/{keyframe_id}/rewrite")
+async def api_rewrite_keyframe(keyframe_id: str, body: dict):
+    """Rewrite keyframe prompt via LLM and auto-render."""
+    from llm import rewrite_keyframe_prompt
+    kf = _get_keyframe(keyframe_id)
+    instruction = body.get("instruction", "")
+    if not instruction.strip():
+        raise HTTPException(400, "Instruction is required")
+    new_prompt = await rewrite_keyframe_prompt(kf.prompt, instruction)
+    kf.prompt = new_prompt
+    _save()
+    # Auto-render with new prompt
+    result = await api_render_keyframe(keyframe_id)
+    return {"prompt": new_prompt, **result}
+
+
 # ── Transition endpoints ────────────────────────────────────────────
 
 @app.get("/api/transitions")

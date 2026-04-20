@@ -36,6 +36,7 @@ export const listKeyframes = () => request('GET', '/keyframes');
 export const getKeyframeStatus = (id) => request('GET', `/keyframes/${id}/status`);
 export const renderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/render`, opts);
 export const rerenderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/rerender`, opts);
+export const rewriteKeyframe = (id, instruction) => request('POST', `/keyframes/${id}/rewrite`, { instruction });
 export const updateKeyframe = (id, updates) => request('PUT', `/keyframes/${id}`, updates);
 export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
 export const reorderKeyframes = (ids) => request('POST', '/keyframes/reorder', ids);

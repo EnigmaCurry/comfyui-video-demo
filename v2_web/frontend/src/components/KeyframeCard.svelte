@@ -1,7 +1,7 @@
 <script>
-  import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown } from 'lucide-svelte';
+  import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, Wand2 } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
-           getKeyframeStatus } from '../lib/api.js';
+           getKeyframeStatus, rewriteKeyframe } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false, projectId = '' } = $props();
 
@@ -9,6 +9,9 @@
   let editPrompt = $state('');
   let editingNeg = $state(false);
   let editNegPrompt = $state('');
+  let rewriting = $state(false);
+  let rewriteInstruction = $state('');
+  let rewriteLoading = $state(false);
   let polling = $state(false);
   let imageUrl = $state(null);
   let fullscreen = $state(false);
@@ -107,6 +110,41 @@
       saveNegEdit();
     } else if (e.key === 'Escape') {
       cancelNegEdit();
+    }
+  }
+
+  function startRewrite() {
+    rewriteInstruction = '';
+    rewriting = true;
+  }
+
+  async function submitRewrite() {
+    if (!rewriteInstruction.trim()) return;
+    rewriteLoading = true;
+    onstatus({ detail: `Rewriting keyframe ${index + 1}...` });
+    try {
+      const result = await rewriteKeyframe(keyframe.id, rewriteInstruction.trim());
+      keyframe.prompt = result.prompt;
+      keyframe.status = 'rendering';
+      rewriting = false;
+      onstatus({ detail: `Keyframe ${index + 1} rewritten and rendering...` });
+    } catch (e) {
+      onstatus({ detail: `Rewrite failed: ${e.message}` });
+    } finally {
+      rewriteLoading = false;
+    }
+  }
+
+  function cancelRewrite() {
+    rewriting = false;
+  }
+
+  function handleRewriteKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitRewrite();
+    } else if (e.key === 'Escape') {
+      cancelRewrite();
     }
   }
 
@@ -209,6 +247,29 @@
         <span class="neg-label">Negative:</span> {keyframe.negative_prompt}
       </p>
     {/if}
+
+    {#if rewriting}
+      <div class="rewrite-edit">
+        <label class="rewrite-label">Rewrite instruction</label>
+        <textarea
+          bind:value={rewriteInstruction}
+          onkeydown={handleRewriteKeydown}
+          rows="2"
+          class="edit-textarea"
+          placeholder="e.g. Make it nighttime, add rain, remove the person..."
+          disabled={rewriteLoading}
+          use:autoFocus
+        ></textarea>
+        <div class="edit-actions">
+          <button class="btn-save" onclick={submitRewrite} disabled={rewriteLoading || !rewriteInstruction.trim()}>
+            <Wand2 size={14} /> {rewriteLoading ? 'Rewriting...' : 'Rewrite & Render'}
+          </button>
+          <button class="btn-cancel" onclick={cancelRewrite} disabled={rewriteLoading}>
+            <X size={14} /> Cancel
+          </button>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <div class="card-actions">
@@ -219,6 +280,9 @@
     <button class="btn-icon" onclick={startEdit} title="Edit prompt">
       <Pencil size={16} />
     </button>
+    <button class="btn-icon" onclick={startRewrite} title="Rewrite with AI">
+      <Wand2 size={16} />
+    </button>
     <button class="btn-icon" class:btn-active={!!keyframe.negative_prompt}
             onclick={startEditNeg} title="Negative prompt">
       <ThumbsDown size={16} />
@@ -226,7 +290,7 @@
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
     </button>
-    {#if active && keyframe.status === 'done' && !editing && !editingNeg}
+    {#if active && keyframe.status === 'done' && !editing && !editingNeg && !rewriting}
       <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
         <Check size={16} /> Approve
       </button>
@@ -408,6 +472,21 @@
     display: inline;
     font-size: 12px;
     margin: 0;
+  }
+
+  .rewrite-edit {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .rewrite-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 4px;
   }
 
   .edit-actions {

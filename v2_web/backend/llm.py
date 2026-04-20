@@ -193,6 +193,19 @@ async def generate_keyframe_descriptions(theme: str, count: int,
     return keyframes
 
 
+async def rewrite_keyframe_prompt(current_prompt: str, instruction: str) -> str:
+    """Rewrite a keyframe prompt based on user instruction."""
+    system_prompt = (
+        "You are a visual director rewriting a keyframe image description. "
+        "You will be given the current description and an instruction for how to change it. "
+        "Rewrite the description following the instruction while keeping the same style "
+        "(1-3 sentences of concrete visual language describing a still image). "
+        "Reply with ONLY the new description, no quotes, no explanation."
+    )
+    user_msg = f"Current description:\n{current_prompt}\n\nInstruction:\n{instruction}"
+    return await call_llm_text(system_prompt, user_msg, temperature=0.8)
+
+
 async def generate_transition_descriptions(keyframe_prompts: list[str],
                                            duration: int = 10,
                                            style: str = "transition-story") -> list[str]:
