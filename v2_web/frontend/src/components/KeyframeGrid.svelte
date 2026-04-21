@@ -1,10 +1,11 @@
 <script>
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
-  import { RotateCcw, Zap, ArrowRight } from 'lucide-svelte';
+  import { RotateCcw, Zap, ArrowRight, Plus } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
   import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes,
-           lockKeyframes, autoCreateKeyframes, getKeyframeStatus, updateKeyframe } from '../lib/api.js';
+           lockKeyframes, autoCreateKeyframes, getKeyframeStatus, updateKeyframe,
+           addKeyframe } from '../lib/api.js';
 
   let { keyframes = $bindable([]), projectId = '', locked = false,
         onupdated, onstatus, onreset, onlockkeyframes } = $props();
@@ -92,6 +93,16 @@
     }
   }
 
+  async function handleAdd() {
+    try {
+      const kf = await addKeyframe();
+      keyframes = [...keyframes, kf];
+      onstatus({ detail: `Added keyframe ${keyframes.length}. Drag to reorder.` });
+    } catch (e) {
+      onstatus({ detail: `Failed: ${e.message}` });
+    }
+  }
+
   async function handleReset() {
     if (!confirm('Reset all keyframes to the original story? All renders and edits will be lost.')) return;
     onstatus({ detail: 'Resetting keyframes...' });
@@ -161,6 +172,9 @@
 {#if keyframes.length > 0}
   <div class="toolbar">
     {#if !locked}
+      <button class="toolbar-btn" onclick={handleAdd}>
+        <Plus size={14} /> Add
+      </button>
       <button class="toolbar-btn" onclick={handleReset}>
         <RotateCcw size={14} /> Reset
       </button>

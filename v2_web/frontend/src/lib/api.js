@@ -32,6 +32,7 @@ export const generateStory = (scene_count, scene_duration, width, height, style 
   request('POST', '/story/generate', { scene_count, scene_duration, width, height, style });
 
 // ── Keyframes ──
+export const addKeyframe = (prompt = '') => request('POST', '/keyframes/add', { prompt });
 export const listKeyframes = () => request('GET', '/keyframes');
 export const getKeyframeStatus = (id) => request('GET', `/keyframes/${id}/status`);
 export const renderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/render`, opts);

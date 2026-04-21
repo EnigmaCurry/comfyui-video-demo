@@ -176,6 +176,22 @@ async def api_list_keyframes():
     return {"keyframes": [k.model_dump() for k in ordered]}
 
 
+@app.post("/api/keyframes/add")
+async def api_add_keyframe(body: dict | None = None):
+    """Add a new blank keyframe at the end."""
+    proj = _get_project()
+    ordered = sorted(proj.keyframes, key=lambda k: k.position)
+    next_pos = (ordered[-1].position + 1) if ordered else 0
+    model = "hidream"
+    # Inherit model from last keyframe
+    if ordered:
+        model = ordered[-1].model
+    kf = Keyframe(position=next_pos, prompt=body.get("prompt", "") if body else "", model=model)
+    proj.keyframes.append(kf)
+    _save()
+    return kf.model_dump()
+
+
 @app.get("/api/keyframes/{keyframe_id}/status")
 async def api_get_keyframe_status(keyframe_id: str):
     kf = _get_keyframe(keyframe_id)
