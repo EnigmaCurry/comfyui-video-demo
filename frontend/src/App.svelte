@@ -38,6 +38,7 @@
   let project = $state(null);
   let statusMessage = $state('');
   let premiseRef = $state(null);
+  let recreateImage = $state(null);
   let editingTitle = $state(false);
   let editTitle = $state('');
 
@@ -308,11 +309,13 @@
 
   {:else if activeTab === 'create'}
     <ImageCreatePage bind:project onstatus={handleStatus}
-                     ongallery={() => activeTab = 'gallery'} />
+                     ongallery={() => activeTab = 'gallery'}
+                     bind:recreateImage />
 
   {:else if activeTab === 'gallery'}
     <ImageGalleryPage {projectId} onstatus={handleStatus}
-                      oncreate={() => activeTab = 'create'} />
+                      oncreate={() => activeTab = 'create'}
+                      onrecreate={(e) => { recreateImage = e.detail; activeTab = 'create'; }} />
   {/if}
 </main>
 

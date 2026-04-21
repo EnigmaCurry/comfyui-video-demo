@@ -2,7 +2,7 @@
   import { Sparkles, RefreshCw, Save, X, RotateCcw, PanelRight, PanelBottom } from 'lucide-svelte';
   import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
-  let { project = $bindable(null), onstatus, ongallery } = $props();
+  let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null) } = $props();
 
   // Form state
   let prompt = $state('');
@@ -199,6 +199,19 @@
     previewStatus = null;
     previewSeed = null;
   }
+
+  // Handle recreate from gallery
+  $effect(() => {
+    if (recreateImage) {
+      clearAll();
+      prompt = recreateImage.prompt || '';
+      negPrompt = recreateImage.negative_prompt || '';
+      model = recreateImage.model || 'hidream';
+      resWidth = recreateImage.width || 1024;
+      resHeight = recreateImage.height || 576;
+      recreateImage = null;
+    }
+  });
 
   let sidePreview = $state(false);
   let fullscreen = $state(false);

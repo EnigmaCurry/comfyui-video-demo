@@ -1,8 +1,8 @@
 <script>
-  import { Copy, Trash2, Plus } from 'lucide-svelte';
+  import { Copy, Trash2, Plus, RefreshCw } from 'lucide-svelte';
   import { galleryList, galleryDelete } from '../lib/api.js';
 
-  let { projectId = '', onstatus, oncreate } = $props();
+  let { projectId = '', onstatus, oncreate, onrecreate } = $props();
 
   let images = $state([]);
   let loading = $state(true);
@@ -103,6 +103,9 @@
               <span>{img.model}</span>
             </div>
             <div class="item-actions">
+              <button class="icon-btn" onclick={() => onrecreate?.({ detail: img })} title="Recreate in generator">
+                <RefreshCw size={14} />
+              </button>
               <button class="icon-btn" onclick={() => handleCopy(img)} title="Copy to clipboard">
                 <Copy size={14} />
               </button>
