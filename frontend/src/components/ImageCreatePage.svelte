@@ -17,9 +17,8 @@
         project = data.project;
       }
       // Add a keyframe with this prompt and render it
-      const kfData = await addKeyframe(prompt.trim());
-      project.keyframes = kfData.keyframes;
-      const kf = kfData.keyframes[kfData.keyframes.length - 1];
+      const kf = await addKeyframe(prompt.trim());
+      project.keyframes = [...(project.keyframes || []), kf];
       kf.status = 'rendering';
       onstatus?.({ detail: 'Generating image...' });
       renderKeyframe(kf.id).then(() => {
