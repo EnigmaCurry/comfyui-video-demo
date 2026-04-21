@@ -189,6 +189,17 @@
     }
   }
 
+  function editSummary() {
+    prompt = summaryPrompt;
+    summaryPrompt = '';
+    summaryModel = '';
+    summaryRes = '';
+    refinePrompt = '';
+    previewUrl = null;
+    previewStatus = null;
+    previewSeed = null;
+  }
+
   let fullscreen = $state(false);
 </script>
 
@@ -264,7 +275,8 @@
     </div>
   {:else}
     <!-- Summary + refinement mode -->
-    <div class="summary">
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="summary clickable" onclick={editSummary} title="Click to edit prompt">
       <div class="summary-meta">
         <span class="summary-badge">{summaryModel}</span>
         <span class="summary-badge">{summaryRes}</span>
@@ -441,6 +453,15 @@
     border-radius: var(--radius);
     padding: 14px 16px;
     margin-bottom: 16px;
+  }
+
+  .summary.clickable {
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .summary.clickable:hover {
+    border-color: var(--text-muted);
   }
 
   .summary-meta {
