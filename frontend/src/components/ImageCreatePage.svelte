@@ -1,5 +1,5 @@
 <script>
-  import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, PanelRight, PanelBottom } from 'lucide-svelte';
+  import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, PanelRight, PanelBottom, Columns2 } from 'lucide-svelte';
   import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null) } = $props();
@@ -42,6 +42,7 @@
     generating = false;
     saving = false;
     seedInput = '';
+    comparing = false;
   }
 
   async function handleGenerate() {
@@ -277,7 +278,31 @@
 
   let sidePreview = $state(false);
   let fullscreen = $state(false);
+
+  // Comparison slider state
+  let comparing = $state(false);
+  let sliderPos = $state(50);
+  let sliderDragging = $state(false);
+  let sliderContainer = $state(null);
+
+  let beforeUrl = $derived(history.length > 1 ? history[history.length - 2].previewUrl : null);
+  let canCompare = $derived(hasPreview && beforeUrl != null);
+
+  function handleSliderMove(e) {
+    if (!sliderDragging || !sliderContainer) return;
+    const rect = sliderContainer.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    sliderPos = Math.max(0, Math.min(100, (x / rect.width) * 100));
+  }
+
+  function stopSliderDrag() {
+    sliderDragging = false;
+  }
 </script>
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<svelte:window onmousemove={handleSliderMove} onmouseup={stopSliderDrag}
+               ontouchmove={handleSliderMove} ontouchend={stopSliderDrag} />
 
 {#if fullscreen && previewUrl}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -394,6 +419,12 @@
             <button class="action-btn" onclick={handleNewSeed} disabled={generating}>
               <RefreshCw size={14} /> New Seed
             </button>
+            {#if canCompare}
+              <button class="action-btn" class:active={comparing}
+                      onclick={() => { comparing = !comparing; sliderPos = 50; }}>
+                <Columns2 size={14} /> Compare
+              </button>
+            {/if}
             <button class="save-btn" onclick={handleSave} disabled={saving}>
               <Save size={14} /> {saving ? 'Saving...' : 'Save'}
             </button>
@@ -434,10 +465,33 @@
             <span>Error: {previewError}</span>
           </div>
         {:else if previewUrl}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="preview-image" onclick={() => fullscreen = true}>
-            <img src={previewUrl} alt="Preview" />
-          </div>
+          {#if comparing && beforeUrl}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="compare-container" bind:this={sliderContainer}
+                 onmousedown={() => sliderDragging = true}
+                 ontouchstart={() => sliderDragging = true}>
+              <div class="compare-layer compare-before">
+                <img src={beforeUrl} alt="Before" />
+              </div>
+              <div class="compare-layer compare-after" style="clip-path: inset(0 0 0 {sliderPos}%)">
+                <img src={previewUrl} alt="After" />
+              </div>
+              <div class="compare-handle" style="left: {sliderPos}%">
+                <div class="compare-line"></div>
+                <div class="compare-knob">
+                  <span class="compare-arrow">&lsaquo;</span>
+                  <span class="compare-arrow">&rsaquo;</span>
+                </div>
+              </div>
+              <div class="compare-label compare-label-left">Before</div>
+              <div class="compare-label compare-label-right">After</div>
+            </div>
+          {:else}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="preview-image" onclick={() => fullscreen = true}>
+              <img src={previewUrl} alt="Preview" />
+            </div>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -789,6 +843,109 @@
     line-height: 1.6;
     font-size: 15px;
     margin-bottom: 4px;
+  }
+
+  /* Comparison slider */
+  .compare-container {
+    position: relative;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg-input);
+    cursor: col-resize;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .compare-layer {
+    display: flex;
+    justify-content: center;
+  }
+
+  .compare-layer img {
+    max-width: 100%;
+    max-height: 600px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .compare-after {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .compare-after img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .compare-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    transform: translateX(-50%);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .compare-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    background: white;
+    transform: translateX(-50%);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .compare-knob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .compare-arrow {
+    font-size: 16px;
+    line-height: 1;
+    color: #333;
+    font-weight: 700;
+  }
+
+  .compare-label {
+    position: absolute;
+    top: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: white;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .compare-label-left { left: 10px; }
+  .compare-label-right { right: 10px; }
+
+  .action-btn.active {
+    color: var(--accent);
+    border-color: var(--accent);
   }
 
   .fullscreen-overlay {
