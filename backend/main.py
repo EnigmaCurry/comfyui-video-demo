@@ -1634,6 +1634,17 @@ async def api_gallery_delete(image_id: str):
     return {"deleted": image_id}
 
 
+# ── Favicon ─────────────────────────────────────────────────────────
+FAVICON_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "favicon.svg")
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    if os.path.isfile(FAVICON_PATH):
+        return FileResponse(FAVICON_PATH, media_type="image/svg+xml")
+    raise HTTPException(404)
+
+
 # ── Static frontend (production) ────────────────────────────────────
 FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.isdir(FRONTEND_DIST):
