@@ -868,7 +868,7 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
                 "-i", video_path,
                 "-i", audio_path,
                 "-filter_complex",
-                f"[1:a]volume=2.0,apad=whole_dur={video_dur:.3f}[vo]",
+                f"[1:a]volume=1.0,apad=whole_dur={video_dur:.3f}[vo]",
                 "-map", "0:v", "-map", "[vo]",
                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                 narrated_path,
