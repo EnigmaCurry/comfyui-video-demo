@@ -40,6 +40,7 @@
     previewSeed = null;
     generating = false;
     saving = false;
+    initialSeed = null;
   }
 
   async function handleGenerate() {
@@ -58,6 +59,10 @@
         width: resWidth,
         height: resHeight,
       };
+      if (initialSeed != null) {
+        opts.seed = initialSeed;
+        initialSeed = null;
+      }
       const data = await galleryGenerate(opts);
       project = data.project;
       prompt = '';
@@ -247,6 +252,8 @@
   }
 
   // Handle recreate from gallery
+  let initialSeed = $state(null);
+
   $effect(() => {
     if (recreateImage) {
       clearAll();
@@ -255,6 +262,7 @@
       model = recreateImage.model || 'hidream';
       resWidth = recreateImage.width || 1024;
       resHeight = recreateImage.height || 576;
+      initialSeed = recreateImage.seed || null;
       recreateImage = null;
     }
   });
