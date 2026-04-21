@@ -1,5 +1,5 @@
 <script>
-  import { RefreshCw, Trash2, Plus } from 'lucide-svelte';
+  import { Copy, Trash2, Plus } from 'lucide-svelte';
   import { galleryList, galleryDelete } from '../lib/api.js';
 
   let { projectId = '', onstatus, oncreate } = $props();
@@ -28,6 +28,33 @@
     } catch (e) {
       onstatus?.({ detail: `Delete failed: ${e.message}` });
     }
+  }
+
+  async function handleCopy(img) {
+    try {
+      const resp = await fetch(img.image_url);
+      const blob = await resp.blob();
+      const pngBlob = blob.type === 'image/png' ? blob : await convertToPng(blob);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+      onstatus?.({ detail: 'Image copied to clipboard.' });
+    } catch (e) {
+      onstatus?.({ detail: `Copy failed: ${e.message}` });
+    }
+  }
+
+  function convertToPng(blob) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Conversion failed')), 'image/png');
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(blob);
+    });
   }
 
   let fullscreenUrl = $state(null);
@@ -76,6 +103,9 @@
               <span>{img.model}</span>
             </div>
             <div class="item-actions">
+              <button class="icon-btn" onclick={() => handleCopy(img)} title="Copy to clipboard">
+                <Copy size={14} />
+              </button>
               <button class="icon-btn danger" onclick={() => handleDelete(img)} title="Delete">
                 <Trash2 size={14} />
               </button>
