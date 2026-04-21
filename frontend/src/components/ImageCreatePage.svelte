@@ -289,6 +289,28 @@
     previewUrl = null;
     previewStatus = null;
     previewSeed = null;
+    comparing = false;
+  }
+
+  async function editRefinement(index) {
+    if (index <= 0 || index >= history.length || generating) return;
+    const editPrompt = history[index].prompt;
+    const undoCount = history.length - index;
+    try {
+      for (let u = 0; u < undoCount; u++) {
+        const data = await galleryUndo();
+        if (u === undoCount - 1) {
+          previewUrl = data.image_url + '?t=' + Date.now();
+          previewSeed = data.seed;
+          previewStatus = 'done';
+        }
+      }
+      history = history.slice(0, index);
+      refinePrompt = editPrompt;
+      comparing = false;
+    } catch (e) {
+      onstatus?.({ detail: `Revert failed: ${e.message}` });
+    }
   }
 
   // Handle recreate from gallery — load image into refinement mode
@@ -444,9 +466,9 @@
                 <span class="history-model">{entry.model}</span>
               </div>
               <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <p class="history-prompt" class:clickable={i === 0}
-                 onclick={() => i === 0 && editSummary()}
-                 title={i === 0 ? 'Click to edit' : ''}>{entry.prompt}</p>
+              <p class="history-prompt clickable"
+                 onclick={() => i === 0 ? editSummary() : editRefinement(i)}
+                 title="Click to edit">{entry.prompt}</p>
             </div>
           {/each}
         </div>
