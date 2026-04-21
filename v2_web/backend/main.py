@@ -335,25 +335,26 @@ async def api_sync_transitions():
             new_transitions.append(tr)
             needs_description.append((i, from_kf, to_kf))
 
-    # Generate descriptions for new transitions
+    # Generate descriptions for new transitions (per pair)
     if needs_description:
-        # Get prompts for the keyframes involved in new transitions
-        all_kf_prompts = [kf.prompt for kf in ordered if kf.locked]
-        try:
-            descriptions = await generate_transition_descriptions(
-                all_kf_prompts, duration=proj.scene_duration, style=proj.style,
-            )
-            # Map descriptions to new transitions by position
-            for idx, (pos, from_kf, to_kf) in enumerate(needs_description):
-                if pos < len(descriptions):
-                    desc = descriptions[pos]
-                    if isinstance(desc, dict):
-                        desc = " ".join(str(v) for v in desc.values())
-                    new_transitions[pos].prompt = str(desc)
-        except Exception as e:
-            print(f"Warning: failed to generate transition descriptions: {e}", flush=True)
+        from llm import call_llm_text
+        for pos, from_kf, to_kf in needs_description:
+            try:
+                system_prompt = (
+                    "You are a visual director writing a MOTION DESCRIPTION for a smooth "
+                    "video transition between two keyframe images. Write 1-3 sentences "
+                    "describing camera movement, subject motion, and visual transformation. "
+                    "Reply with ONLY the description, no quotes."
+                )
+                user_msg = (f"From: {from_kf.prompt}\n\nTo: {to_kf.prompt}\n\n"
+                            f"Duration: {proj.scene_duration} seconds")
+                desc = await call_llm_text(system_prompt, user_msg, temperature=0.9)
+                new_transitions[pos].prompt = desc
+            except Exception as e:
+                print(f"Warning: failed to generate description for transition {pos}: {e}", flush=True)
 
     proj.transitions = new_transitions
+    print(f"Sync: {len(locked_pairs)} locked pairs, {len(new_transitions)} transitions", flush=True)
     if all(kf.locked for kf in ordered if kf.status == KeyframeStatus.done):
         proj.keyframes_locked = True
     _save()
