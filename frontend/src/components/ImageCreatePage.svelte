@@ -10,6 +10,7 @@
   let model = $state('hidream');
   let resWidth = $state(1024);
   let resHeight = $state(576);
+  let seedInput = $state('');
   let generating = $state(false);
   let saving = $state(false);
   let cancelled = $state(false);
@@ -40,7 +41,7 @@
     previewSeed = null;
     generating = false;
     saving = false;
-    initialSeed = null;
+    seedInput = '';
   }
 
   async function handleGenerate() {
@@ -59,9 +60,8 @@
         width: resWidth,
         height: resHeight,
       };
-      if (initialSeed != null) {
-        opts.seed = initialSeed;
-        initialSeed = null;
+      if (seedInput.trim()) {
+        opts.seed = parseInt(seedInput.trim(), 10);
       }
       const data = await galleryGenerate(opts);
       project = data.project;
@@ -252,8 +252,6 @@
   }
 
   // Handle recreate from gallery
-  let initialSeed = $state(null);
-
   $effect(() => {
     if (recreateImage) {
       clearAll();
@@ -262,7 +260,7 @@
       model = recreateImage.model || 'hidream';
       resWidth = recreateImage.width || 1024;
       resHeight = recreateImage.height || 576;
-      initialSeed = recreateImage.seed || null;
+      seedInput = recreateImage.seed != null ? String(recreateImage.seed) : '';
       recreateImage = null;
     }
   });
@@ -321,6 +319,14 @@
                   <option selected={r.w === resWidth && r.h === resHeight}>{r.label}</option>
                 {/each}
               </select>
+            </div>
+            <div class="control-group">
+              <label for="ig-seed">Seed <span class="optional">(blank = random)</span></label>
+              <input id="ig-seed" type="text" inputmode="numeric"
+                     placeholder="random"
+                     bind:value={seedInput}
+                     disabled={generating}
+                     class="seed-input" />
             </div>
           </div>
 
@@ -536,6 +542,13 @@
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius);
+    padding: 8px 12px;
+  }
+
+  .seed-input {
+    width: 140px;
+    font-size: 14px;
+    font-family: monospace;
     padding: 8px 12px;
   }
 
