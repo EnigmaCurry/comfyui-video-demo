@@ -63,17 +63,15 @@
       if (seedInput.trim()) {
         opts.seed = parseInt(seedInput.trim(), 10);
       }
+      const modelLabel = T2I_MODELS.find(m => m.id === model)?.label || model;
+      // Show the prompt immediately in history while generating
+      history = [{ prompt: opts.prompt, model: modelLabel, seed: null, previewUrl: null }];
+      prompt = '';
       const data = await galleryGenerate(opts);
       project = data.project;
-      prompt = '';
       await pollPreview();
       if (previewStatus === 'done') {
-        history = [{
-          prompt: opts.prompt,
-          model: T2I_MODELS.find(m => m.id === model)?.label || model,
-          seed: previewSeed,
-          previewUrl,
-        }];
+        history = [{ prompt: opts.prompt, model: modelLabel, seed: previewSeed, previewUrl }];
       }
     } catch (e) {
       if (!cancelled) {
@@ -94,7 +92,8 @@
     previewUrl = null;
     previewStatus = 'rendering';
     previewError = '';
-    history = [];
+    // Keep original prompt visible, clear seed
+    history = [{ prompt: first.prompt, model: first.model, seed: null, previewUrl: null }];
     try {
       const modelId = T2I_MODELS.find(m => m.label === first.model)?.id || 'hidream';
       const opts = {
