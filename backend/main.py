@@ -1511,6 +1511,76 @@ async def api_gallery_cancel():
     return {"cancelled": True}
 
 
+async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
+                                    source_path: str, seed: int):
+    """Refine a gallery image using Capybara I2I in the background."""
+    from comfyui import download_output, run_workflow, upload_image
+    from workflows import CAPY_I2I_WORKFLOW_PATH, load_workflow, patch_capybara_i2i_workflow
+
+    async with _render_semaphore:
+        try:
+            # Upload source image to ComfyUI
+            server_name = await upload_image(source_path)
+            base_wf = load_workflow(CAPY_I2I_WORKFLOW_PATH)
+            neg_prompt = img.negative_prompt or "blurry, low quality, distorted, ugly, watermark, text"
+
+            print(f"Refining gallery image {img.id}: seed={seed}", flush=True)
+            patched = patch_capybara_i2i_workflow(
+                base_wf, input_image_name=server_name,
+                prompt_text=img.prompt, negative_prompt_text=neg_prompt,
+                seed_value=seed, width=img.width, height=img.height,
+                output_prefix=f"v2web/{img.id}",
+            )
+            history = await run_workflow(patched, timeout=600)
+            filename = f"{img.id}.png"
+            dest = os.path.join(images_dir(proj_id), filename)
+            await download_output(history, dest, output_type="images")
+            img.image_filename = filename
+            img.seed = seed
+            img.status = KeyframeStatus.done
+            if current_project and current_project.id == proj_id:
+                _save()
+        except asyncio.CancelledError:
+            img.status = KeyframeStatus.pending
+        except Exception as e:
+            img.status = KeyframeStatus.error
+            img.error_message = str(e)
+
+
+@app.post("/api/gallery/refine")
+async def api_gallery_refine(body: dict):
+    """Refine the current preview image with a new prompt using Capybara I2I."""
+    proj = _get_project()
+    prompt = body.get("prompt", "")
+    if not prompt.strip():
+        raise HTTPException(400, "Refinement prompt is required")
+
+    # Find existing preview image
+    preview = next((i for i in proj.images if i.id == "preview"), None)
+    if preview is None or not preview.image_filename:
+        raise HTTPException(400, "No preview image to refine")
+
+    source_path = os.path.join(images_dir(proj.id), preview.image_filename)
+    if not os.path.isfile(source_path):
+        raise HTTPException(400, "Preview image file not found")
+
+    # Cancel any previous preview render
+    old = render_tasks.pop("gallery_preview", None)
+    if old and not old.done():
+        old.cancel()
+
+    seed = body.get("seed") or random.randint(0, 2**32 - 1)
+    preview.prompt = prompt.strip()
+    preview.negative_prompt = body.get("negative_prompt", preview.negative_prompt)
+    preview.seed = seed
+    preview.status = KeyframeStatus.rendering
+    preview.error_message = None
+
+    task = asyncio.create_task(_do_refine_gallery_image(proj.id, preview, source_path, seed))
+    render_tasks["gallery_preview"] = task
+    return {"status": "rendering", "seed": seed}
+
+
 @app.post("/api/gallery/save")
 async def api_gallery_save():
     """Save the current preview to the gallery with a permanent ID."""

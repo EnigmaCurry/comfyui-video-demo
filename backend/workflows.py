@@ -53,6 +53,20 @@ QWEN_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "qwen_i
 
 TRANSITION_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "ltx_transition.json")
 
+# ── Capybara I2I (image refinement) node IDs ───────────────────────
+CAPY_INPUT_IMAGE_NODE = "80"
+CAPY_PROMPT_NODE = "103:44"
+CAPY_PROMPT_FIELD = "text"
+CAPY_NEG_PROMPT_NODE = "103:93"
+CAPY_NEG_PROMPT_FIELD = "text"
+CAPY_SEED_NODE = "103:25"
+CAPY_SEED_FIELD = "noise_seed"
+CAPY_RESIZE_NODE = "103:105"
+CAPY_OUTPUT_NODE = "102"
+CAPY_OUTPUT_FIELD = "filename_prefix"
+
+CAPY_I2I_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "capybara_i2i.json")
+
 
 # ── Available T2I models ─────────────────────────────────────────────
 T2I_MODELS = {
@@ -137,6 +151,23 @@ AUDIO_OUTPUT_NODE = "107"
 AUDIO_OUTPUT_FIELD = "filename_prefix"
 
 AUDIO_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "acestep_audio.json")
+
+
+def patch_capybara_i2i_workflow(workflow: dict, *, input_image_name: str,
+                                prompt_text: str, negative_prompt_text: str = "",
+                                seed_value: int, width: int = 1024,
+                                height: int = 1024,
+                                output_prefix: str = "ComfyUI") -> dict:
+    """Patch Capybara I2I workflow for image refinement."""
+    wf = copy.deepcopy(workflow)
+    wf[CAPY_INPUT_IMAGE_NODE]["inputs"]["image"] = input_image_name
+    wf[CAPY_PROMPT_NODE]["inputs"][CAPY_PROMPT_FIELD] = prompt_text
+    wf[CAPY_NEG_PROMPT_NODE]["inputs"][CAPY_NEG_PROMPT_FIELD] = negative_prompt_text
+    wf[CAPY_SEED_NODE]["inputs"][CAPY_SEED_FIELD] = seed_value
+    wf[CAPY_RESIZE_NODE]["inputs"]["resize_type.width"] = width
+    wf[CAPY_RESIZE_NODE]["inputs"]["resize_type.height"] = height
+    wf[CAPY_OUTPUT_NODE]["inputs"][CAPY_OUTPUT_FIELD] = output_prefix
+    return wf
 
 
 def patch_audio_workflow(workflow: dict, *, prompt_text: str, seed_value: int,

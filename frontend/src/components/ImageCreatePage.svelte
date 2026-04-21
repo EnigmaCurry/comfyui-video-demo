@@ -1,9 +1,10 @@
 <script>
-  import { Sparkles, RefreshCw, Save, X } from 'lucide-svelte';
-  import { galleryGenerate, galleryPreviewStatus, galleryCancel, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
+  import { Sparkles, RefreshCw, Save, X, RotateCcw } from 'lucide-svelte';
+  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery } = $props();
 
+  // Form state
   let prompt = $state('');
   let negPrompt = $state('');
   let model = $state('hidream');
@@ -11,15 +12,40 @@
   let resHeight = $state(576);
   let generating = $state(false);
   let saving = $state(false);
+  let cancelled = $state(false);
 
   // Preview state
   let previewUrl = $state(null);
   let previewStatus = $state(null); // null | 'rendering' | 'done' | 'error'
   let previewError = $state('');
   let previewSeed = $state(null);
-  let cancelled = $state(false);
 
-  async function handleGenerate(newSeed = true) {
+  // Summary state — once an image is generated, show prompt as summary
+  let summaryPrompt = $state('');
+  let summaryModel = $state('');
+  let summaryRes = $state('');
+
+  // Refinement
+  let refinePrompt = $state('');
+
+  let hasPreview = $derived(previewStatus === 'done' && previewUrl);
+
+  function clearAll() {
+    prompt = '';
+    negPrompt = '';
+    refinePrompt = '';
+    summaryPrompt = '';
+    summaryModel = '';
+    summaryRes = '';
+    previewUrl = null;
+    previewStatus = null;
+    previewError = '';
+    previewSeed = null;
+    generating = false;
+    saving = false;
+  }
+
+  async function handleGenerate() {
     if (!prompt.trim()) return;
     generating = true;
     cancelled = false;
@@ -34,11 +60,13 @@
         width: resWidth,
         height: resHeight,
       };
-      if (!newSeed && previewSeed != null) {
-        opts.seed = previewSeed;
-      }
       const data = await galleryGenerate(opts);
       project = data.project;
+      // Move prompt to summary
+      summaryPrompt = prompt.trim();
+      summaryModel = T2I_MODELS.find(m => m.id === model)?.label || model;
+      summaryRes = `${resWidth}x${resHeight}`;
+      prompt = '';
       await pollPreview();
     } catch (e) {
       if (!cancelled) {
@@ -51,14 +79,71 @@
     }
   }
 
+  async function handleNewSeed() {
+    generating = true;
+    cancelled = false;
+    previewStatus = 'rendering';
+    previewError = '';
+    try {
+      const opts = {
+        prompt: summaryPrompt,
+        negative_prompt: negPrompt.trim(),
+        model: T2I_MODELS.find(m => m.label === summaryModel)?.id || 'hidream',
+        width: resWidth,
+        height: resHeight,
+      };
+      const data = await galleryGenerate(opts);
+      project = data.project;
+      await pollPreview();
+    } catch (e) {
+      if (!cancelled) {
+        previewStatus = 'error';
+        previewError = e.message;
+      }
+    } finally {
+      generating = false;
+    }
+  }
+
+  async function handleRefine() {
+    if (!refinePrompt.trim()) return;
+    generating = true;
+    cancelled = false;
+    previewStatus = 'rendering';
+    previewError = '';
+    try {
+      await galleryRefine({
+        prompt: refinePrompt.trim(),
+        negative_prompt: negPrompt.trim(),
+      });
+      summaryPrompt = refinePrompt.trim();
+      summaryModel = 'Capybara I2I';
+      refinePrompt = '';
+      await pollPreview();
+    } catch (e) {
+      if (!cancelled) {
+        previewStatus = 'error';
+        previewError = e.message;
+        onstatus?.({ detail: `Refine failed: ${e.message}` });
+      }
+    } finally {
+      generating = false;
+    }
+  }
+
   async function handleCancel() {
     cancelled = true;
     try {
       await galleryCancel();
     } catch {}
     generating = false;
-    previewStatus = null;
-    previewUrl = null;
+    // If we had a previous preview, restore done state
+    if (summaryPrompt && previewUrl) {
+      previewStatus = 'done';
+    } else {
+      previewStatus = null;
+      previewUrl = null;
+    }
     previewError = '';
     onstatus?.({ detail: 'Generation cancelled.' });
   }
@@ -85,10 +170,7 @@
       const data = await gallerySave();
       project = data.project;
       onstatus?.({ detail: 'Image saved to gallery.' });
-      // Reset for next image
-      previewUrl = null;
-      previewStatus = null;
-      previewSeed = null;
+      clearAll();
     } catch (e) {
       onstatus?.({ detail: `Save failed: ${e.message}` });
     } finally {
@@ -99,7 +181,11 @@
   function handleKeydown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleGenerate();
+      if (hasPreview) {
+        handleRefine();
+      } else {
+        handleGenerate();
+      }
     }
   }
 
@@ -114,63 +200,82 @@
 {/if}
 
 <div class="create-page">
-  <div class="controls">
-    <div class="control-row">
-      <div class="control-group">
-        <label for="ig-model">Model</label>
-        <select id="ig-model" bind:value={model} disabled={generating}>
-          {#each T2I_MODELS as m}
-            <option value={m.id}>{m.label}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="control-group">
-        <label for="ig-resolution">Resolution</label>
-        <select id="ig-resolution" disabled={generating}
-                onchange={(e) => {
-                  const r = RESOLUTIONS[e.target.selectedIndex];
-                  resWidth = r.w; resHeight = r.h;
-                }}>
-          {#each RESOLUTIONS as r}
-            <option selected={r.w === resWidth && r.h === resHeight}>{r.label}</option>
-          {/each}
-        </select>
-      </div>
-    </div>
-
-    <div class="prompt-section">
-      <label for="ig-prompt">Prompt</label>
-      <textarea id="ig-prompt"
-        placeholder="A vast desert landscape at golden hour, ancient ruins half-buried in sand, dramatic clouds..."
-        bind:value={prompt}
-        disabled={generating}
-        onkeydown={handleKeydown}
-        rows="3"
-      ></textarea>
-    </div>
-
-    <div class="prompt-section">
-      <label for="ig-neg">Negative prompt <span class="optional">(optional)</span></label>
-      <textarea id="ig-neg"
-        placeholder="blurry, low quality, text, watermark..."
-        bind:value={negPrompt}
-        disabled={generating}
-        rows="2"
-      ></textarea>
-    </div>
-
-    <div class="actions">
-      <button class="generate-btn" onclick={() => handleGenerate()}
-              disabled={generating || !prompt.trim()}>
-        <Sparkles size={16} />
-        {generating ? 'Generating...' : 'Generate'}
-      </button>
-    </div>
+  <div class="top-bar">
+    <h2>Generate an Image</h2>
+    <button class="clear-btn" onclick={clearAll} disabled={generating}>
+      <RotateCcw size={14} /> Clear
+    </button>
   </div>
+
+  {#if !summaryPrompt}
+    <!-- Initial generation form -->
+    <div class="controls">
+      <div class="control-row">
+        <div class="control-group">
+          <label for="ig-model">Model</label>
+          <select id="ig-model" bind:value={model} disabled={generating}>
+            {#each T2I_MODELS as m}
+              <option value={m.id}>{m.label}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="ig-resolution">Resolution</label>
+          <select id="ig-resolution" disabled={generating}
+                  onchange={(e) => {
+                    const r = RESOLUTIONS[e.target.selectedIndex];
+                    resWidth = r.w; resHeight = r.h;
+                  }}>
+            {#each RESOLUTIONS as r}
+              <option selected={r.w === resWidth && r.h === resHeight}>{r.label}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
+      <div class="prompt-section">
+        <label for="ig-prompt">Prompt</label>
+        <textarea id="ig-prompt"
+          placeholder="A vast desert landscape at golden hour, ancient ruins half-buried in sand, dramatic clouds..."
+          bind:value={prompt}
+          disabled={generating}
+          onkeydown={handleKeydown}
+          rows="3"
+        ></textarea>
+      </div>
+
+      <div class="prompt-section">
+        <label for="ig-neg">Negative prompt <span class="optional">(optional)</span></label>
+        <textarea id="ig-neg"
+          placeholder="blurry, low quality, text, watermark..."
+          bind:value={negPrompt}
+          disabled={generating}
+          rows="2"
+        ></textarea>
+      </div>
+
+      <div class="actions">
+        <button class="generate-btn" onclick={handleGenerate}
+                disabled={generating || !prompt.trim()}>
+          <Sparkles size={16} />
+          {generating ? 'Generating...' : 'Generate'}
+        </button>
+      </div>
+    </div>
+  {:else}
+    <!-- Summary + refinement mode -->
+    <div class="summary">
+      <div class="summary-meta">
+        <span class="summary-badge">{summaryModel}</span>
+        <span class="summary-badge">{summaryRes}</span>
+        {#if previewSeed}<span class="summary-seed">seed: {previewSeed}</span>{/if}
+      </div>
+      <p class="summary-prompt">{summaryPrompt}</p>
+    </div>
+  {/if}
 
   {#if previewStatus}
     <div class="preview-section">
-      <h3>Preview</h3>
       {#if previewStatus === 'rendering'}
         <div class="preview-placeholder">
           <div class="spinner"></div>
@@ -188,18 +293,31 @@
         <div class="preview-image" onclick={() => fullscreen = true}>
           <img src={previewUrl} alt="Preview" />
         </div>
-        <div class="preview-info">
-          <span class="seed-label">seed: {previewSeed}</span>
-        </div>
+
         <div class="preview-actions">
-          <button class="action-btn" onclick={() => handleGenerate(true)}
-                  disabled={generating}>
+          <button class="action-btn" onclick={handleNewSeed} disabled={generating}>
             <RefreshCw size={14} /> New Seed
           </button>
-          <button class="save-btn" onclick={handleSave}
-                  disabled={saving}>
+          <button class="save-btn" onclick={handleSave} disabled={saving}>
             <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
           </button>
+        </div>
+
+        <div class="refine-section">
+          <label for="ig-refine">Refine</label>
+          <textarea id="ig-refine"
+            placeholder="Change the background to a snowy mountain, make the sky more dramatic..."
+            bind:value={refinePrompt}
+            disabled={generating}
+            onkeydown={handleKeydown}
+            rows="2"
+          ></textarea>
+          <div class="actions">
+            <button class="generate-btn" onclick={handleRefine}
+                    disabled={generating || !refinePrompt.trim()}>
+              <Sparkles size={16} /> Refine
+            </button>
+          </div>
         </div>
       {/if}
     </div>
@@ -212,6 +330,35 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 28px;
+  }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .top-bar h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .clear-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+
+  .clear-btn:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--text-muted);
   }
 
   .control-row {
@@ -287,16 +434,46 @@
     background: var(--accent-hover);
   }
 
-  .preview-section {
-    margin-top: 24px;
-    border-top: 1px solid var(--border);
-    padding-top: 20px;
+  /* Summary */
+  .summary {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 16px;
   }
 
-  .preview-section h3 {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 12px;
+  .summary-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .summary-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    background: var(--accent-bg);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .summary-seed {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: monospace;
+  }
+
+  .summary-prompt {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  /* Preview */
+  .preview-section {
+    margin-top: 8px;
   }
 
   .preview-placeholder {
@@ -313,6 +490,17 @@
   }
 
   .preview-placeholder.error { color: var(--error); }
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .cancel-btn {
     margin-top: 8px;
@@ -331,17 +519,6 @@
     border-color: var(--error);
   }
 
-  .spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
   .preview-image {
     cursor: pointer;
     border-radius: var(--radius);
@@ -356,16 +533,6 @@
     max-height: 600px;
     object-fit: contain;
     display: block;
-  }
-
-  .preview-info {
-    margin-top: 8px;
-  }
-
-  .seed-label {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-family: monospace;
   }
 
   .preview-actions {
@@ -403,6 +570,29 @@
 
   .save-btn:hover:not(:disabled) {
     filter: brightness(1.1);
+  }
+
+  /* Refinement */
+  .refine-section {
+    margin-top: 20px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+
+  .refine-section label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .refine-section textarea {
+    width: 100%;
+    resize: vertical;
+    line-height: 1.6;
+    font-size: 15px;
+    margin-bottom: 4px;
   }
 
   .fullscreen-overlay {
