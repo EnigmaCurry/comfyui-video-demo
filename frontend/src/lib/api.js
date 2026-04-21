@@ -123,6 +123,7 @@ export const galleryCancel = () => request('POST', '/gallery/cancel');
 export const galleryRefine = (opts) => request('POST', '/gallery/refine', opts);
 export const galleryUndo = () => request('POST', '/gallery/undo');
 export const gallerySave = () => request('POST', '/gallery/save');
+export const galleryEdit = (imageId) => request('POST', `/gallery/edit/${imageId}`);
 export const galleryList = () => request('GET', '/gallery');
 export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);
 export async function galleryUpload(file) {

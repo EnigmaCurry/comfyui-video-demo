@@ -1,6 +1,6 @@
 <script>
   import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, PanelRight, PanelBottom } from 'lucide-svelte';
-  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
+  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null) } = $props();
 
@@ -250,17 +250,28 @@
     previewSeed = null;
   }
 
-  // Handle recreate from gallery
+  // Handle recreate from gallery — load image into refinement mode
   $effect(() => {
     if (recreateImage) {
-      clearAll();
-      prompt = recreateImage.prompt || '';
-      negPrompt = recreateImage.negative_prompt || '';
-      model = recreateImage.model || 'hidream';
-      resWidth = recreateImage.width || 1024;
-      resHeight = recreateImage.height || 576;
-      seedInput = recreateImage.seed != null ? String(recreateImage.seed) : '';
+      const img = recreateImage;
       recreateImage = null;
+      clearAll();
+      (async () => {
+        try {
+          const data = await galleryEdit(img.id);
+          project = data.project;
+          negPrompt = data.negative_prompt || '';
+          resWidth = data.width || 1024;
+          resHeight = data.height || 576;
+          previewUrl = data.image_url + '?t=' + Date.now();
+          previewSeed = data.seed;
+          previewStatus = 'done';
+          const modelLabel = T2I_MODELS.find(m => m.id === data.model)?.label || data.model;
+          history = [{ prompt: data.prompt, model: modelLabel, seed: data.seed, previewUrl }];
+        } catch (e) {
+          onstatus?.({ detail: `Failed to load image for editing: ${e.message}` });
+        }
+      })();
     }
   });
 

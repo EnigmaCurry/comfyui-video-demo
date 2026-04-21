@@ -1657,6 +1657,59 @@ async def api_gallery_undo():
     }
 
 
+@app.post("/api/gallery/edit/{image_id}")
+async def api_gallery_edit(image_id: str):
+    """Copy a saved gallery image into the preview stack for refinement."""
+    import shutil
+    proj = _get_project()
+    img = _get_gallery_image(image_id)
+    if not img.image_filename:
+        raise HTTPException(400, "Image has no file")
+
+    source_path = os.path.join(images_dir(proj.id), img.image_filename)
+    if not os.path.isfile(source_path):
+        raise HTTPException(400, "Image file not found")
+
+    # Cancel any previous preview render
+    old = render_tasks.pop("gallery_preview", None)
+    if old and not old.done():
+        old.cancel()
+
+    # Clear previous preview stack
+    _clear_preview_stack(proj)
+
+    preview_id = "preview_0"
+    preview_filename = f"{preview_id}.png"
+    dest_path = os.path.join(images_dir(proj.id), preview_filename)
+    shutil.copy2(source_path, dest_path)
+
+    preview = GalleryImage(
+        id=preview_id,
+        prompt=img.prompt,
+        negative_prompt=img.negative_prompt,
+        model=img.model,
+        width=img.width,
+        height=img.height,
+        seed=img.seed,
+        image_filename=preview_filename,
+        status=KeyframeStatus.done,
+    )
+    proj.images.insert(0, preview)
+    _save()
+
+    image_url = f"/api/projects/{proj.id}/images/{preview_filename}"
+    return {
+        "project": proj.model_dump(),
+        "image_url": image_url,
+        "seed": img.seed,
+        "prompt": img.prompt,
+        "negative_prompt": img.negative_prompt or "",
+        "model": img.model,
+        "width": img.width,
+        "height": img.height,
+    }
+
+
 @app.post("/api/gallery/save")
 async def api_gallery_save():
     """Save the latest preview to the gallery with a permanent ID. Clears the preview stack."""
