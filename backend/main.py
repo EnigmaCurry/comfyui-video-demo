@@ -1409,7 +1409,9 @@ async def _do_render_gallery_image(proj_id: str, img: GalleryImage, seed: int):
     from comfyui import download_output, run_workflow
     from workflows import get_t2i_workflow_and_patcher, load_workflow
 
+    print(f"Gallery render task started for {img.id}, waiting for semaphore...", flush=True)
     async with _render_semaphore:
+        print(f"Gallery render task acquired semaphore for {img.id}", flush=True)
         try:
             wf_path, patch_fn = get_t2i_workflow_and_patcher(img.model)
             base_wf = load_workflow(wf_path)
@@ -1438,6 +1440,8 @@ async def _do_render_gallery_image(proj_id: str, img: GalleryImage, seed: int):
         except asyncio.CancelledError:
             img.status = KeyframeStatus.pending
         except Exception as e:
+            import traceback
+            print(f"ERROR rendering gallery image {img.id}: {traceback.format_exc()}", flush=True)
             img.status = KeyframeStatus.error
             img.error_message = str(e)
 
