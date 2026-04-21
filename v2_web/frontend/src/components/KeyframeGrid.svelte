@@ -3,37 +3,17 @@
   import { dndzone } from 'svelte-dnd-action';
   import { RotateCcw, Zap, ArrowRight, Plus } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
-  import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes,
-           lockAllKeyframes, autoCreateKeyframes, getKeyframeStatus, updateKeyframe,
+  import { reorderKeyframes, resetKeyframes,
+           lockAllKeyframes, autoCreateKeyframes, getKeyframeStatus,
            addKeyframe, syncTransitions } from '../lib/api.js';
 
   let { keyframes = $bindable([]), projectId = '', locked = false,
         onupdated, onstatus, onreset, onlockkeyframes, onsync } = $props();
 
-  let activeIndex = $state(-1);
-  let initialized = $state(false);
   let autoCreating = $state(false);
   let locking = $state(false);
 
   const flipDurationMs = 200;
-
-  export function setActive(idx) {
-    activeIndex = idx;
-    initialized = true;
-  }
-
-  $effect(() => {
-    if (initialized || keyframes.length === 0) return;
-    initialized = true;
-    const firstPending = keyframes.findIndex(kf => kf.status === 'pending');
-    if (firstPending === -1) {
-      activeIndex = keyframes.length - 1;
-    } else if (firstPending === 0) {
-      activeIndex = 0;
-    } else {
-      activeIndex = firstPending - 1;
-    }
-  });
 
   let allDone = $derived(keyframes.length > 0 && keyframes.every(kf => kf.status === 'done'));
 
@@ -55,42 +35,7 @@
 
   function handleDelete(event) {
     const id = event.detail;
-    const deletedIdx = keyframes.findIndex(kf => kf.id === id);
     keyframes = keyframes.filter(kf => kf.id !== id);
-    if (deletedIdx <= activeIndex && activeIndex > 0) {
-      activeIndex--;
-      setActiveIndex(activeIndex);
-    }
-  }
-
-  async function handleApprove(event) {
-    const nextIndex = activeIndex + 1;
-    if (nextIndex < keyframes.length) {
-      activeIndex = nextIndex;
-      setActiveIndex(activeIndex);
-      const currentKf = keyframes[activeIndex - 1];
-      const nextKf = keyframes[nextIndex];
-      // Propagate model from current to next pending keyframe
-      if (nextKf.status === 'pending' && currentKf?.model && nextKf.model !== currentKf.model) {
-        nextKf.model = currentKf.model;
-        updateKeyframe(nextKf.id, { model: currentKf.model }).catch(() => {});
-      }
-      if (nextKf.status === 'pending') {
-        onstatus({ detail: `Approved #${activeIndex}. Rendering #${nextIndex + 1}...` });
-        nextKf.status = 'rendering';
-        try {
-          await renderKeyframe(nextKf.id);
-        } catch (e) {
-          onstatus({ detail: `Render error: ${e.message}` });
-        }
-      } else {
-        onstatus({ detail: `Approved #${activeIndex}. Reviewing #${nextIndex + 1}...` });
-      }
-    } else {
-      onstatus({ detail: 'All keyframes approved!' });
-      activeIndex = keyframes.length;
-      setActiveIndex(activeIndex);
-    }
   }
 
   async function handleKeyframeLock() {
@@ -210,12 +155,10 @@
         <KeyframeCard
           keyframe={kf}
           index={i}
-          active={!locked && i === activeIndex}
           {projectId}
           {onstatus}
           {onupdated}
           ondelete={handleDelete}
-          onapprove={handleApprove}
           onlock={handleKeyframeLock}
         />
       </div>

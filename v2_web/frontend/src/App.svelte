@@ -24,7 +24,6 @@
   let activeTab = $state('premise');
   let project = $state(null);
   let statusMessage = $state('');
-  let gridRef = $state(null);
   let premiseRef = $state(null);
   let editingTitle = $state(false);
   let editTitle = $state('');
@@ -238,7 +237,7 @@
                projectSceneDuration={project?.scene_duration || 10} />
 
   {:else if activeTab === 'keyframes'}
-    <KeyframeGrid bind:this={gridRef} bind:keyframes={mutableKeyframes}
+    <KeyframeGrid bind:keyframes={mutableKeyframes}
                   {projectId} locked={keyframesLocked}
                   onupdated={handleUpdated} onstatus={handleStatus}
                   onreset={(e) => { project = e.detail; }}

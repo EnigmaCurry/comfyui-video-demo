@@ -2,29 +2,14 @@
   import { flip } from 'svelte/animate';
   import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, RotateCcw, Zap, ArrowRight } from 'lucide-svelte';
   import { renderTransition, rerenderTransition, updateTransition,
-           getTransitionStatus, setTransitionActiveIndex, resetTransitions,
+           getTransitionStatus, resetTransitions,
            autoCreateTransitions, lockTransitions } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
         locked = false, onstatus, onreset, onlocktransitions } = $props();
 
-  let activeIndex = $state(-1);
-  let initialized = $state(false);
   let autoCreating = $state(false);
   let locking = $state(false);
-
-  $effect(() => {
-    if (initialized || transitions.length === 0) return;
-    initialized = true;
-    const firstPending = transitions.findIndex(t => t.status === 'pending');
-    if (firstPending === -1) {
-      activeIndex = transitions.length - 1;
-    } else if (firstPending === 0) {
-      activeIndex = 0;
-    } else {
-      activeIndex = firstPending - 1;
-    }
-  });
 
   let allDone = $derived(transitions.length > 0 && transitions.every(t => t.status === 'done'));
 
@@ -133,25 +118,6 @@
     }
   });
 
-  async function handleApprove() {
-    const nextIndex = activeIndex + 1;
-    if (nextIndex < transitions.length) {
-      activeIndex = nextIndex;
-      setTransitionActiveIndex(activeIndex);
-      const next = transitions[nextIndex];
-      if (next.status === 'pending') {
-        onstatus({ detail: `Approved #${activeIndex}. Rendering transition #${nextIndex + 1}...` });
-        handleRender(next);
-      } else {
-        onstatus({ detail: `Approved #${activeIndex}. Reviewing transition #${nextIndex + 1}...` });
-      }
-    } else {
-      onstatus({ detail: 'All transitions approved!' });
-      activeIndex = transitions.length;
-      setTransitionActiveIndex(activeIndex);
-    }
-  }
-
   async function handleReset() {
     if (!confirm('Reset all transitions? All rendered videos will be deleted and descriptions regenerated.')) return;
     onstatus({ detail: 'Resetting transitions...' });
@@ -159,7 +125,6 @@
       const data = await resetTransitions();
       if (onreset) onreset({ detail: data.project });
       onstatus({ detail: 'Transitions reset.' });
-      initialized = false;
     } catch (e) {
       onstatus({ detail: `Reset failed: ${e.message}` });
     }
@@ -173,7 +138,6 @@
       const data = await autoCreateTransitions();
       if (onreset) onreset({ detail: data.project });
       onstatus({ detail: `Auto-created ${data.rendered} transitions.` });
-      initialized = false;
     } catch (e) {
       onstatus({ detail: `Auto-create failed: ${e.message}` });
     } finally {
@@ -222,11 +186,10 @@
     {#each transitions as tr, i (tr.id)}
       {@const fromKf = getKeyframe(tr.from_keyframe_id)}
       {@const toKf = getKeyframe(tr.to_keyframe_id)}
-      {@const isActive = i === activeIndex}
       {@const isEditing = editing[tr.id]}
       {@const isEditingNeg = editingNeg[tr.id]}
 
-      <div class="transition-card" class:active={isActive}>
+      <div class="transition-card">
         <div class="card-header">
           <span class="position">{i + 1}</span>
           <span class="label">Keyframe {tr.position + 1} → {tr.position + 2}</span>
@@ -315,11 +278,6 @@
                   onclick={() => startEditNeg(tr)} title="Negative prompt">
             <ThumbsDown size={16} />
           </button>
-          {#if isActive && tr.status === 'done' && !isEditing && !isEditingNeg}
-            <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
-              <Check size={16} /> Approve
-            </button>
-          {/if}
         </div>
       </div>
     {/each}

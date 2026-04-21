@@ -4,7 +4,7 @@
            getKeyframeStatus, rewriteKeyframe, uploadKeyframeImage, T2I_MODELS,
            lockKeyframe, unlockKeyframe } from '../lib/api.js';
 
-  let { keyframe, index, onstatus, onupdated, ondelete, onapprove, onlock, active = false, projectId = '' } = $props();
+  let { keyframe, index, onstatus, onupdated, ondelete, onlock, projectId = '' } = $props();
 
   let editing = $state(false);
   let editPrompt = $state('');
@@ -208,10 +208,6 @@
     }
   }
 
-  function handleApprove() {
-    if (onapprove) onapprove({ detail: keyframe.id });
-  }
-
   function autoFocus(node) {
     node.focus();
     node.setSelectionRange(node.value.length, node.value.length);
@@ -261,7 +257,7 @@
   }
 </script>
 
-<div class="card" class:error={keyframe.status === 'error'} class:active class:locked={keyframe.locked}>
+<div class="card" class:error={keyframe.status === 'error'} class:locked={keyframe.locked}>
   <div class="card-header">
     <span class="position">{index + 1}</span>
     <span class="status-badge" class:pending={keyframe.status === 'pending'}
@@ -391,11 +387,6 @@
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
     </button>
-    {#if active && keyframe.status === 'done' && !editing && !editingNeg && !rewriting}
-      <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
-        <Check size={16} />
-      </button>
-    {/if}
   </div>
 </div>
 
