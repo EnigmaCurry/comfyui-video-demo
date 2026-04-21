@@ -51,6 +51,20 @@ QWEN_OUTPUT_FIELD = "filename_prefix"
 
 QWEN_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "qwen_illustration.json")
 
+# ── Z-Image T2I node IDs ─────────────────────────────────────────────
+ZIMG_PROMPT_NODE = "76:67"
+ZIMG_PROMPT_FIELD = "text"
+ZIMG_NEG_PROMPT_NODE = "76:71"
+ZIMG_NEG_PROMPT_FIELD = "text"
+ZIMG_SEED_NODE = "76:69"
+ZIMG_SEED_FIELD = "seed"
+ZIMG_WIDTH_NODE = "76:68"
+ZIMG_HEIGHT_NODE = "76:68"
+ZIMG_OUTPUT_NODE = "9"
+ZIMG_OUTPUT_FIELD = "filename_prefix"
+
+ZIMG_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "z_image_t2i.json")
+
 TRANSITION_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "ltx_transition.json")
 
 # ── Capybara I2I (image refinement) node IDs ───────────────────────
@@ -112,10 +126,28 @@ def patch_qwen_workflow(workflow: dict, *, prompt_text: str,
     return wf
 
 
+def patch_zimg_workflow(workflow: dict, *, prompt_text: str,
+                       negative_prompt_text: str = "",
+                       seed_value: int, width: int = 1024,
+                       height: int = 1024,
+                       output_prefix: str = "ComfyUI") -> dict:
+    """Patch Z-Image T2I workflow."""
+    wf = copy.deepcopy(workflow)
+    wf[ZIMG_PROMPT_NODE]["inputs"][ZIMG_PROMPT_FIELD] = prompt_text
+    wf[ZIMG_NEG_PROMPT_NODE]["inputs"][ZIMG_NEG_PROMPT_FIELD] = negative_prompt_text
+    wf[ZIMG_SEED_NODE]["inputs"][ZIMG_SEED_FIELD] = seed_value
+    wf[ZIMG_WIDTH_NODE]["inputs"]["width"] = width
+    wf[ZIMG_HEIGHT_NODE]["inputs"]["height"] = height
+    wf[ZIMG_OUTPUT_NODE]["inputs"][ZIMG_OUTPUT_FIELD] = output_prefix
+    return wf
+
+
 def get_t2i_workflow_and_patcher(model: str = "hidream"):
     """Return (workflow_path, patch_function) for a T2I model name."""
     if model == "qwen_illustration":
         return QWEN_WORKFLOW_PATH, patch_qwen_workflow
+    if model == "z_image":
+        return ZIMG_WORKFLOW_PATH, patch_zimg_workflow
     return T2I_WORKFLOW_PATH, patch_t2i_workflow
 
 
