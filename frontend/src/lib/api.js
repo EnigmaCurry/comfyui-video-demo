@@ -104,3 +104,20 @@ export const lockScore = () => request('POST', '/score/lock');
 // ── Final ──
 export const renderFinal = () => request('POST', '/final/render');
 export const getFinalStatus = () => request('GET', '/final/status');
+
+// ── Image Generator / Gallery ──
+export const RESOLUTIONS = [
+  { label: '512x512 (1:1)', w: 512, h: 512 },
+  { label: '768x512 (3:2)', w: 768, h: 512 },
+  { label: '1024x576 (16:9)', w: 1024, h: 576 },
+  { label: '1024x768 (4:3)', w: 1024, h: 768 },
+  { label: '1024x1024 (1:1)', w: 1024, h: 1024 },
+  { label: '1280x768 (5:3)', w: 1280, h: 768 },
+  { label: '1920x1088 (16:9 HD)', w: 1920, h: 1088 },
+  { label: '3000x3000 (1:1 XL)', w: 3000, h: 3000 },
+];
+export const galleryGenerate = (opts) => request('POST', '/gallery/generate', opts);
+export const galleryPreviewStatus = () => request('GET', '/gallery/preview/status');
+export const gallerySave = () => request('POST', '/gallery/save');
+export const galleryList = () => request('GET', '/gallery');
+export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);

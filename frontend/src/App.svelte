@@ -311,8 +311,7 @@
                      ongallery={() => activeTab = 'gallery'} />
 
   {:else if activeTab === 'gallery'}
-    <ImageGalleryPage bind:keyframes={mutableKeyframes}
-                      {projectId} onstatus={handleStatus}
+    <ImageGalleryPage {projectId} onstatus={handleStatus}
                       oncreate={() => activeTab = 'create'} />
   {/if}
 </main>

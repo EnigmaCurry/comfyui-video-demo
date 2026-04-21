@@ -51,6 +51,10 @@ def save_project(project: Project) -> None:
         if kf["status"] == "rendering":
             kf["status"] = "done" if kf["image_filename"] else "pending"
         kf.pop("error_message", None)
+    for img in data.get("images", []):
+        if img["status"] == "rendering":
+            img["status"] = "done" if img["image_filename"] else "pending"
+        img.pop("error_message", None)
     path = _project_file(project.id)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)

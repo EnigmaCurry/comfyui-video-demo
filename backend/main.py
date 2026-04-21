@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from models import (
+    GalleryImage,
     GenerateStoryRequest,
     Keyframe,
     KeyframeStatus,
@@ -1390,6 +1391,161 @@ async def api_get_video(project_id: str, filename: str):
     if not os.path.isfile(path):
         raise HTTPException(404, "Video not found")
     return FileResponse(path, media_type="video/mp4")
+
+
+# ── Image Generator endpoints ───────────────────────────────────────
+
+
+def _get_gallery_image(image_id: str) -> GalleryImage:
+    proj = _get_project()
+    for img in proj.images:
+        if img.id == image_id:
+            return img
+    raise HTTPException(404, "Gallery image not found")
+
+
+async def _do_render_gallery_image(proj_id: str, img: GalleryImage, seed: int):
+    """Render a gallery image in the background."""
+    from comfyui import download_output, run_workflow
+    from workflows import get_t2i_workflow_and_patcher, load_workflow
+
+    async with _render_semaphore:
+        try:
+            wf_path, patch_fn = get_t2i_workflow_and_patcher(img.model)
+            base_wf = load_workflow(wf_path)
+            from llm import _load_style
+            style = _load_style("transition-story")
+            neg_parts = [style.get("negative_prompt", "")]
+            if img.negative_prompt:
+                neg_parts.append(img.negative_prompt)
+            neg_prompt = ", ".join(p for p in neg_parts if p)
+
+            print(f"Rendering gallery image {img.id} ({img.model}): seed={seed}", flush=True)
+            patched = patch_fn(
+                base_wf, prompt_text=img.prompt, negative_prompt_text=neg_prompt,
+                seed_value=seed, width=img.width, height=img.height,
+                output_prefix=f"v2web/{img.id}",
+            )
+            history = await run_workflow(patched, timeout=600)
+            filename = f"{img.id}.png"
+            dest = os.path.join(images_dir(proj_id), filename)
+            await download_output(history, dest, output_type="images")
+            img.image_filename = filename
+            img.seed = seed
+            img.status = KeyframeStatus.done
+            if current_project and current_project.id == proj_id:
+                _save()
+        except asyncio.CancelledError:
+            img.status = KeyframeStatus.pending
+        except Exception as e:
+            img.status = KeyframeStatus.error
+            img.error_message = str(e)
+
+
+@app.post("/api/gallery/generate")
+async def api_gallery_generate(body: dict):
+    """Generate a preview image. Creates the project if needed."""
+    global current_project
+    proj = current_project
+    if proj is None or proj.activity != "image-generator":
+        proj = Project(activity="image-generator", name=body.get("name", "Untitled Gallery"))
+        current_project = proj
+
+    prompt = body.get("prompt", "")
+    if not prompt.strip():
+        raise HTTPException(400, "Prompt is required")
+
+    # Cancel any previous preview render
+    old = render_tasks.pop("gallery_preview", None)
+    if old and not old.done():
+        old.cancel()
+
+    seed = body.get("seed") or random.randint(0, 2**32 - 1)
+    img = GalleryImage(
+        prompt=prompt.strip(),
+        negative_prompt=body.get("negative_prompt", ""),
+        model=body.get("model", "hidream"),
+        width=body.get("width", 1024),
+        height=body.get("height", 576),
+        seed=seed,
+        status=KeyframeStatus.rendering,
+    )
+
+    # Store as transient preview (not in gallery yet)
+    proj.images = [i for i in proj.images if i.id != "preview"] + []
+    _save()
+
+    # Stash on project temporarily so status endpoint can find it
+    img.id = "preview"
+    # Remove old preview from images list
+    proj.images = [i for i in proj.images if i.id != "preview"]
+    proj.images.insert(0, img)
+
+    task = asyncio.create_task(_do_render_gallery_image(proj.id, img, seed))
+    render_tasks["gallery_preview"] = task
+    return {"project": proj.model_dump(), "preview_id": img.id}
+
+
+@app.get("/api/gallery/preview/status")
+async def api_gallery_preview_status():
+    proj = _get_project()
+    img = next((i for i in proj.images if i.id == "preview"), None)
+    if img is None:
+        raise HTTPException(404, "No preview")
+    image_url = f"/api/projects/{proj.id}/images/{img.image_filename}" if img.image_filename else None
+    return {
+        "id": img.id, "status": img.status, "image_url": image_url,
+        "seed": img.seed, "error_message": img.error_message,
+    }
+
+
+@app.post("/api/gallery/save")
+async def api_gallery_save():
+    """Save the current preview to the gallery with a permanent ID."""
+    proj = _get_project()
+    preview = next((i for i in proj.images if i.id == "preview"), None)
+    if preview is None or preview.status != KeyframeStatus.done:
+        raise HTTPException(400, "No completed preview to save")
+
+    import uuid as _uuid
+    new_id = _uuid.uuid4().hex[:12]
+
+    # Rename the image file
+    old_path = os.path.join(images_dir(proj.id), f"preview.png")
+    new_filename = f"{new_id}.png"
+    new_path = os.path.join(images_dir(proj.id), new_filename)
+    if os.path.exists(old_path):
+        os.rename(old_path, new_path)
+
+    preview.id = new_id
+    preview.image_filename = new_filename
+    _save()
+    return {"image": preview.model_dump(), "project": proj.model_dump()}
+
+
+@app.get("/api/gallery")
+async def api_gallery_list():
+    proj = _get_project()
+    results = []
+    for img in proj.images:
+        if img.id == "preview":
+            continue
+        image_url = f"/api/projects/{proj.id}/images/{img.image_filename}" if img.image_filename else None
+        results.append({**img.model_dump(), "image_url": image_url})
+    return {"images": results}
+
+
+@app.delete("/api/gallery/{image_id}")
+async def api_gallery_delete(image_id: str):
+    proj = _get_project()
+    img = _get_gallery_image(image_id)
+    if img.image_filename:
+        path = os.path.join(images_dir(proj.id), img.image_filename)
+        if os.path.exists(path):
+            os.unlink(path)
+    proj.images = [i for i in proj.images if i.id != image_id]
+    _save()
+    return {"deleted": image_id}
 
 
 # ── Static frontend (production) ────────────────────────────────────

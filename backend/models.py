@@ -77,8 +77,23 @@ class Project(BaseModel):
     keyframes: list[Keyframe] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)
     soundtrack_sections: list["SoundtrackSection"] = Field(default_factory=list)
+    images: list[GalleryImage] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class GalleryImage(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    prompt: str = ""
+    negative_prompt: str = ""
+    model: str = "hidream"
+    width: int = 1024
+    height: int = 576
+    seed: Optional[int] = None
+    image_filename: Optional[str] = None
+    status: KeyframeStatus = KeyframeStatus.pending
+    error_message: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class SoundtrackSection(BaseModel):

@@ -1,63 +1,29 @@
 <script>
   import { RefreshCw, Trash2, Plus } from 'lucide-svelte';
-  import { getKeyframeStatus, rerenderKeyframe, deleteKeyframe } from '../lib/api.js';
+  import { galleryList, galleryDelete } from '../lib/api.js';
 
-  let { keyframes = $bindable([]), projectId = '', onstatus, oncreate } = $props();
+  let { projectId = '', onstatus, oncreate } = $props();
 
-  let pollingIds = $state(new Set());
+  let images = $state([]);
+  let loading = $state(true);
 
-  function imageUrl(kf) {
-    if (!kf.image_filename) return null;
-    return `/api/projects/${projectId}/images/${kf.image_filename}`;
-  }
-
-  async function pollStatus(kfId) {
-    if (pollingIds.has(kfId)) return;
-    pollingIds.add(kfId);
-    pollingIds = new Set(pollingIds);
+  async function fetchImages() {
+    loading = true;
     try {
-      while (true) {
-        const data = await getKeyframeStatus(kfId);
-        const kf = keyframes.find(k => k.id === kfId);
-        if (!kf) break;
-        kf.status = data.status;
-        if (data.image_filename) kf.image_filename = data.image_filename;
-        if (data.error_message) kf.error_message = data.error_message;
-        keyframes = [...keyframes];
-        if (data.status === 'done' || data.status === 'error') break;
-        await new Promise(r => setTimeout(r, 2000));
-      }
-    } finally {
-      pollingIds.delete(kfId);
-      pollingIds = new Set(pollingIds);
-    }
-  }
-
-  // Start polling for any rendering keyframes
-  $effect(() => {
-    for (const kf of keyframes) {
-      if (kf.status === 'rendering' && !pollingIds.has(kf.id)) {
-        pollStatus(kf.id);
-      }
-    }
-  });
-
-  async function handleRerender(kf) {
-    kf.status = 'rendering';
-    keyframes = [...keyframes];
-    onstatus?.({ detail: 'Re-generating image...' });
-    try {
-      await rerenderKeyframe(kf.id);
+      const data = await galleryList();
+      images = data.images;
     } catch (e) {
-      onstatus?.({ detail: `Render error: ${e.message}` });
+      onstatus?.({ detail: `Failed to load gallery: ${e.message}` });
+    } finally {
+      loading = false;
     }
   }
 
-  async function handleDelete(kf) {
+  async function handleDelete(img) {
     if (!confirm('Delete this image?')) return;
     try {
-      await deleteKeyframe(kf.id);
-      keyframes = keyframes.filter(k => k.id !== kf.id);
+      await galleryDelete(img.id);
+      images = images.filter(i => i.id !== img.id);
       onstatus?.({ detail: 'Image deleted.' });
     } catch (e) {
       onstatus?.({ detail: `Delete failed: ${e.message}` });
@@ -65,6 +31,11 @@
   }
 
   let fullscreenUrl = $state(null);
+
+  // Fetch on mount and when projectId changes
+  $effect(() => {
+    if (projectId) fetchImages();
+  });
 </script>
 
 {#if fullscreenUrl}
@@ -75,30 +46,23 @@
 {/if}
 
 <div class="gallery-page">
-  {#if keyframes.length === 0}
+  {#if loading}
+    <p class="status-text">Loading...</p>
+  {:else if images.length === 0}
     <div class="empty">
-      <p>No images yet.</p>
+      <p>No saved images yet.</p>
       <button class="create-btn" onclick={() => oncreate?.()}>
         <Plus size={16} /> Create your first image
       </button>
     </div>
   {:else}
     <div class="gallery-grid">
-      {#each [...keyframes].reverse() as kf (kf.id)}
+      {#each images as img (img.id)}
         <div class="gallery-item">
-          {#if kf.status === 'rendering'}
-            <div class="image-placeholder">
-              <div class="spinner"></div>
-              <span>Generating...</span>
-            </div>
-          {:else if kf.status === 'error'}
-            <div class="image-placeholder error">
-              <span>Error: {kf.error_message || 'Unknown'}</span>
-            </div>
-          {:else if imageUrl(kf)}
+          {#if img.image_url}
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="image-wrap" onclick={() => fullscreenUrl = imageUrl(kf)}>
-              <img src={imageUrl(kf)} alt={kf.prompt} />
+            <div class="image-wrap" onclick={() => fullscreenUrl = img.image_url}>
+              <img src={img.image_url} alt={img.prompt} />
             </div>
           {:else}
             <div class="image-placeholder">
@@ -106,12 +70,13 @@
             </div>
           {/if}
           <div class="item-footer">
-            <p class="item-prompt">{kf.prompt}</p>
+            <p class="item-prompt">{img.prompt}</p>
+            <div class="item-meta">
+              <span>{img.width}x{img.height}</span>
+              <span>{img.model}</span>
+            </div>
             <div class="item-actions">
-              <button class="icon-btn" onclick={() => handleRerender(kf)} title="Re-generate">
-                <RefreshCw size={14} />
-              </button>
-              <button class="icon-btn danger" onclick={() => handleDelete(kf)} title="Delete">
+              <button class="icon-btn danger" onclick={() => handleDelete(img)} title="Delete">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -128,6 +93,12 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 28px;
+  }
+
+  .status-text {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-muted);
   }
 
   .empty {
@@ -164,14 +135,11 @@
 
   .image-wrap {
     cursor: pointer;
-    aspect-ratio: 16 / 9;
     overflow: hidden;
   }
 
   .image-wrap img {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
     display: block;
     transition: transform 0.15s ease;
   }
@@ -181,27 +149,12 @@
   .image-placeholder {
     aspect-ratio: 16 / 9;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
     color: var(--text-muted);
     font-size: 13px;
     background: var(--bg-input);
   }
-
-  .image-placeholder.error { color: var(--error); }
-
-  .spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
 
   .item-footer {
     padding: 10px 12px;
@@ -211,11 +164,19 @@
     font-size: 13px;
     color: var(--text-dim);
     line-height: 1.4;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .item-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
   }
 
   .item-actions {
