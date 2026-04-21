@@ -1,5 +1,5 @@
 <script>
-  import { Sparkles, RefreshCw, Save, X, RotateCcw } from 'lucide-svelte';
+  import { Sparkles, RefreshCw, Save, X, RotateCcw, PanelRight, PanelBottom } from 'lucide-svelte';
   import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery } = $props();
@@ -200,6 +200,7 @@
     previewSeed = null;
   }
 
+  let sidePreview = $state(false);
   let fullscreen = $state(false);
 </script>
 
@@ -213,127 +214,143 @@
 <div class="create-page">
   <div class="top-bar">
     <h2>Generate an Image</h2>
-    <button class="clear-btn" onclick={clearAll} disabled={generating}>
-      <RotateCcw size={14} /> Clear
-    </button>
+    <div class="top-actions">
+      <button class="clear-btn" onclick={clearAll} disabled={generating}>
+        <RotateCcw size={14} /> Clear
+      </button>
+      <button class="layout-btn" onclick={() => sidePreview = !sidePreview}
+              title={sidePreview ? 'Preview below' : 'Preview to the right'}>
+        {#if sidePreview}
+          <PanelBottom size={16} />
+        {:else}
+          <PanelRight size={16} />
+        {/if}
+      </button>
+    </div>
   </div>
 
-  {#if !summaryPrompt}
-    <!-- Initial generation form -->
-    <div class="controls">
-      <div class="control-row">
-        <div class="control-group">
-          <label for="ig-model">Model</label>
-          <select id="ig-model" bind:value={model} disabled={generating}>
-            {#each T2I_MODELS as m}
-              <option value={m.id}>{m.label}</option>
-            {/each}
-          </select>
-        </div>
-        <div class="control-group">
-          <label for="ig-resolution">Resolution</label>
-          <select id="ig-resolution" disabled={generating}
-                  onchange={(e) => {
-                    const r = RESOLUTIONS[e.target.selectedIndex];
-                    resWidth = r.w; resHeight = r.h;
-                  }}>
-            {#each RESOLUTIONS as r}
-              <option selected={r.w === resWidth && r.h === resHeight}>{r.label}</option>
-            {/each}
-          </select>
-        </div>
-      </div>
+  <div class="layout" class:side={sidePreview}>
+    <div class="form-panel">
+      {#if !summaryPrompt}
+        <!-- Initial generation form -->
+        <div class="controls">
+          <div class="control-row">
+            <div class="control-group">
+              <label for="ig-model">Model</label>
+              <select id="ig-model" bind:value={model} disabled={generating}>
+                {#each T2I_MODELS as m}
+                  <option value={m.id}>{m.label}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="control-group">
+              <label for="ig-resolution">Resolution</label>
+              <select id="ig-resolution" disabled={generating}
+                      onchange={(e) => {
+                        const r = RESOLUTIONS[e.target.selectedIndex];
+                        resWidth = r.w; resHeight = r.h;
+                      }}>
+                {#each RESOLUTIONS as r}
+                  <option selected={r.w === resWidth && r.h === resHeight}>{r.label}</option>
+                {/each}
+              </select>
+            </div>
+          </div>
 
-      <div class="prompt-section">
-        <label for="ig-prompt">Prompt</label>
-        <textarea id="ig-prompt"
-          placeholder="A vast desert landscape at golden hour, ancient ruins half-buried in sand, dramatic clouds..."
-          bind:value={prompt}
-          disabled={generating}
-          onkeydown={handleKeydown}
-          rows="3"
-        ></textarea>
-      </div>
+          <div class="prompt-section">
+            <label for="ig-prompt">Prompt</label>
+            <textarea id="ig-prompt"
+              placeholder="A vast desert landscape at golden hour, ancient ruins half-buried in sand, dramatic clouds..."
+              bind:value={prompt}
+              disabled={generating}
+              onkeydown={handleKeydown}
+              rows="3"
+            ></textarea>
+          </div>
 
-      <div class="prompt-section">
-        <label for="ig-neg">Negative prompt <span class="optional">(optional)</span></label>
-        <textarea id="ig-neg"
-          placeholder="blurry, low quality, text, watermark..."
-          bind:value={negPrompt}
-          disabled={generating}
-          rows="2"
-        ></textarea>
-      </div>
+          <div class="prompt-section">
+            <label for="ig-neg">Negative prompt <span class="optional">(optional)</span></label>
+            <textarea id="ig-neg"
+              placeholder="blurry, low quality, text, watermark..."
+              bind:value={negPrompt}
+              disabled={generating}
+              rows="2"
+            ></textarea>
+          </div>
 
-      <div class="actions">
-        <button class="generate-btn" onclick={handleGenerate}
-                disabled={generating || !prompt.trim()}>
-          <Sparkles size={16} />
-          {generating ? 'Generating...' : 'Generate'}
-        </button>
-      </div>
-    </div>
-  {:else}
-    <!-- Summary + refinement mode -->
-    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="summary clickable" onclick={editSummary} title="Click to edit prompt">
-      <div class="summary-meta">
-        <span class="summary-badge">{summaryModel}</span>
-        <span class="summary-badge">{summaryRes}</span>
-        {#if previewSeed}<span class="summary-seed">seed: {previewSeed}</span>{/if}
-      </div>
-      <p class="summary-prompt">{summaryPrompt}</p>
-    </div>
-  {/if}
-
-  {#if previewStatus}
-    <div class="preview-section">
-      {#if previewStatus === 'rendering'}
-        <div class="preview-placeholder">
-          <div class="spinner"></div>
-          <span>Generating...</span>
-          <button class="cancel-btn" onclick={handleCancel}>
-            <X size={14} /> Cancel
-          </button>
-        </div>
-      {:else if previewStatus === 'error'}
-        <div class="preview-placeholder error">
-          <span>Error: {previewError}</span>
-        </div>
-      {:else if previewUrl}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="preview-image" onclick={() => fullscreen = true}>
-          <img src={previewUrl} alt="Preview" />
-        </div>
-
-        <div class="preview-actions">
-          <button class="action-btn" onclick={handleNewSeed} disabled={generating}>
-            <RefreshCw size={14} /> New Seed
-          </button>
-          <button class="save-btn" onclick={handleSave} disabled={saving}>
-            <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
-          </button>
-        </div>
-
-        <div class="refine-section">
-          <label for="ig-refine">Refine</label>
-          <textarea id="ig-refine"
-            placeholder="Change the background to a snowy mountain, make the sky more dramatic..."
-            bind:value={refinePrompt}
-            disabled={generating}
-            onkeydown={handleKeydown}
-            rows="2"
-          ></textarea>
           <div class="actions">
-            <button class="generate-btn" onclick={handleRefine}
-                    disabled={generating || !refinePrompt.trim()}>
-              <Sparkles size={16} /> Refine
+            <button class="generate-btn" onclick={handleGenerate}
+                    disabled={generating || !prompt.trim()}>
+              <Sparkles size={16} />
+              {generating ? 'Generating...' : 'Generate'}
             </button>
           </div>
         </div>
+      {:else}
+        <!-- Summary + refinement mode -->
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="summary clickable" onclick={editSummary} title="Click to edit prompt">
+          <div class="summary-meta">
+            <span class="summary-badge">{summaryModel}</span>
+            <span class="summary-badge">{summaryRes}</span>
+            {#if previewSeed}<span class="summary-seed">seed: {previewSeed}</span>{/if}
+          </div>
+          <p class="summary-prompt">{summaryPrompt}</p>
+        </div>
+
+        {#if previewUrl && previewStatus === 'done'}
+          <div class="preview-actions">
+            <button class="action-btn" onclick={handleNewSeed} disabled={generating}>
+              <RefreshCw size={14} /> New Seed
+            </button>
+            <button class="save-btn" onclick={handleSave} disabled={saving}>
+              <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
+            </button>
+          </div>
+
+          <div class="refine-section">
+            <label for="ig-refine">Refine</label>
+            <textarea id="ig-refine"
+              placeholder="Change the background to a snowy mountain, make the sky more dramatic..."
+              bind:value={refinePrompt}
+              disabled={generating}
+              onkeydown={handleKeydown}
+              rows="2"
+            ></textarea>
+            <div class="actions">
+              <button class="generate-btn" onclick={handleRefine}
+                      disabled={generating || !refinePrompt.trim()}>
+                <Sparkles size={16} /> Refine
+              </button>
+            </div>
+          </div>
+        {/if}
       {/if}
     </div>
-  {/if}
+
+    {#if previewStatus}
+      <div class="preview-panel">
+        {#if previewStatus === 'rendering'}
+          <div class="preview-placeholder">
+            <div class="spinner"></div>
+            <span>Generating...</span>
+            <button class="cancel-btn" onclick={handleCancel}>
+              <X size={14} /> Cancel
+            </button>
+          </div>
+        {:else if previewStatus === 'error'}
+          <div class="preview-placeholder error">
+            <span>Error: {previewError}</span>
+          </div>
+        {:else if previewUrl}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <div class="preview-image" onclick={() => fullscreen = true}>
+            <img src={previewUrl} alt="Preview" />
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -357,6 +374,12 @@
     margin: 0;
   }
 
+  .top-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
   .clear-btn {
     background: transparent;
     color: var(--text-muted);
@@ -371,6 +394,46 @@
   .clear-btn:hover:not(:disabled) {
     color: var(--text);
     border-color: var(--text-muted);
+  }
+
+  .layout-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+  }
+
+  .layout-btn:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+
+  /* Layout */
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .layout.side {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .layout.side .form-panel {
+    width: 340px;
+    flex-shrink: 0;
+  }
+
+  .layout.side .preview-panel {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .layout.side .control-row {
+    flex-direction: column;
   }
 
   .control-row {
@@ -493,10 +556,6 @@
   }
 
   /* Preview */
-  .preview-section {
-    margin-top: 8px;
-  }
-
   .preview-placeholder {
     display: flex;
     flex-direction: column;
