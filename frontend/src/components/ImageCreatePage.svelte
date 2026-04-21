@@ -69,7 +69,7 @@
         const data = await galleryPreviewStatus();
         previewStatus = data.status;
         previewSeed = data.seed;
-        if (data.image_url) previewUrl = data.image_url;
+        if (data.image_url) previewUrl = data.image_url + '?t=' + Date.now();
         if (data.error_message) previewError = data.error_message;
         if (data.status === 'done' || data.status === 'error') break;
       } catch {
