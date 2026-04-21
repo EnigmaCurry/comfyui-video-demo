@@ -1,7 +1,6 @@
 """Async LLM client for generating keyframe descriptions.
 
-Adapted from v1_tui/write_script.py — uses httpx for async streaming,
-returns parsed data instead of writing files.
+Uses httpx for async streaming, returns parsed data instead of writing files.
 """
 
 import json

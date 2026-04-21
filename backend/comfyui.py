@@ -1,7 +1,6 @@
 """Async ComfyUI HTTP API client.
 
-Adapted from v1_tui/comfyui_video.py — uses httpx for async I/O and returns
-values instead of writing to stdout.
+Uses httpx for async I/O and returns values instead of writing to stdout.
 """
 
 import asyncio

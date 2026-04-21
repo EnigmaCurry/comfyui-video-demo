@@ -1,4 +1,4 @@
-"""FastAPI application for the v2_web film director."""
+"""FastAPI application for the film director."""
 
 import asyncio
 import os
@@ -24,7 +24,7 @@ from models import (
 )
 from projects import delete_project, images_dir, list_projects, load_project, save_project
 
-app = FastAPI(title="v2_web Film Director")
+app = FastAPI(title="Film Director")
 
 # ── In-memory state ─────────────────────────────────────────────────
 current_project: Project | None = None

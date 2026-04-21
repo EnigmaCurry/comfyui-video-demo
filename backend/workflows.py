@@ -1,6 +1,6 @@
 """Workflow patching for T2I keyframe and LTX transition generation.
 
-Adapted from v1_tui/transition.py.
+Workflow loading and ComfyUI prompt building.
 """
 
 import copy

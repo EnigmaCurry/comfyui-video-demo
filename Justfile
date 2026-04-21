@@ -1,4 +1,4 @@
-# v2_web Film Director
+# Film Director
 
 set dotenv-load
 
