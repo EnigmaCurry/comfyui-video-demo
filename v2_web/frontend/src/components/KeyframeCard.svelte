@@ -393,7 +393,7 @@
     </button>
     {#if active && keyframe.status === 'done' && !editing && !editingNeg && !rewriting}
       <button class="btn-approve" onclick={handleApprove} title="Approve and render next">
-        <Check size={16} /> Approve
+        <Check size={16} />
       </button>
     {/if}
   </div>
