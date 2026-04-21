@@ -120,6 +120,7 @@ export const galleryGenerate = (opts) => request('POST', '/gallery/generate', op
 export const galleryPreviewStatus = () => request('GET', '/gallery/preview/status');
 export const galleryCancel = () => request('POST', '/gallery/cancel');
 export const galleryRefine = (opts) => request('POST', '/gallery/refine', opts);
+export const galleryUndo = () => request('POST', '/gallery/undo');
 export const gallerySave = () => request('POST', '/gallery/save');
 export const galleryList = () => request('GET', '/gallery');
 export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);

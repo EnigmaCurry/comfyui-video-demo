@@ -1446,9 +1446,33 @@ async def _do_render_gallery_image(proj_id: str, img: GalleryImage, seed: int):
             img.error_message = str(e)
 
 
+def _preview_images(proj: Project) -> list[GalleryImage]:
+    """Return preview stack entries sorted by index."""
+    previews = [i for i in proj.images if i.id.startswith("preview_")]
+    previews.sort(key=lambda i: int(i.id.split("_")[1]))
+    return previews
+
+
+def _next_preview_id(proj: Project) -> str:
+    previews = _preview_images(proj)
+    idx = int(previews[-1].id.split("_")[1]) + 1 if previews else 0
+    return f"preview_{idx}"
+
+
+def _clear_preview_stack(proj: Project):
+    """Remove all preview entries and their files."""
+    for img in list(proj.images):
+        if img.id.startswith("preview_"):
+            if img.image_filename:
+                path = os.path.join(images_dir(proj.id), img.image_filename)
+                if os.path.exists(path):
+                    os.unlink(path)
+    proj.images = [i for i in proj.images if not i.id.startswith("preview_")]
+
+
 @app.post("/api/gallery/generate")
 async def api_gallery_generate(body: dict):
-    """Generate a preview image. Creates the project if needed."""
+    """Generate a preview image. Creates the project if needed. Clears any existing preview stack."""
     global current_project
     proj = current_project
     if proj is None or proj.activity != "image-generator":
@@ -1464,8 +1488,13 @@ async def api_gallery_generate(body: dict):
     if old and not old.done():
         old.cancel()
 
+    # Clear previous preview stack
+    _clear_preview_stack(proj)
+
     seed = body.get("seed") or random.randint(0, 2**32 - 1)
+    preview_id = "preview_0"
     img = GalleryImage(
+        id=preview_id,
         prompt=prompt.strip(),
         negative_prompt=body.get("negative_prompt", ""),
         model=body.get("model", "hidream"),
@@ -1474,28 +1503,21 @@ async def api_gallery_generate(body: dict):
         seed=seed,
         status=KeyframeStatus.rendering,
     )
-
-    # Store as transient preview (not in gallery yet)
-    proj.images = [i for i in proj.images if i.id != "preview"] + []
-    _save()
-
-    # Stash on project temporarily so status endpoint can find it
-    img.id = "preview"
-    # Remove old preview from images list
-    proj.images = [i for i in proj.images if i.id != "preview"]
     proj.images.insert(0, img)
+    _save()
 
     task = asyncio.create_task(_do_render_gallery_image(proj.id, img, seed))
     render_tasks["gallery_preview"] = task
-    return {"project": proj.model_dump(), "preview_id": img.id}
+    return {"project": proj.model_dump(), "preview_id": preview_id}
 
 
 @app.get("/api/gallery/preview/status")
 async def api_gallery_preview_status():
     proj = _get_project()
-    img = next((i for i in proj.images if i.id == "preview"), None)
-    if img is None:
+    previews = _preview_images(proj)
+    if not previews:
         raise HTTPException(404, "No preview")
+    img = previews[-1]  # Latest preview
     image_url = f"/api/projects/{proj.id}/images/{img.image_filename}" if img.image_filename else None
     return {
         "id": img.id, "status": img.status, "image_url": image_url,
@@ -1505,14 +1527,25 @@ async def api_gallery_preview_status():
 
 @app.post("/api/gallery/cancel")
 async def api_gallery_cancel():
-    """Cancel the current preview render."""
+    """Cancel the current preview render and remove the in-progress entry."""
     task = render_tasks.pop("gallery_preview", None)
     if task and not task.done():
         task.cancel()
     proj = _get_project()
-    proj.images = [i for i in proj.images if i.id != "preview"]
+    # Remove the latest preview if it's still rendering
+    previews = _preview_images(proj)
+    if previews and previews[-1].status == KeyframeStatus.rendering:
+        proj.images = [i for i in proj.images if i.id != previews[-1].id]
     _save()
-    return {"cancelled": True}
+    # Return info about the now-current preview (if any)
+    previews = _preview_images(proj)
+    if previews:
+        img = previews[-1]
+        image_url = f"/api/projects/{proj.id}/images/{img.image_filename}" if img.image_filename else None
+        return {"cancelled": True, "current": {
+            "id": img.id, "status": img.status, "image_url": image_url, "seed": img.seed,
+        }}
+    return {"cancelled": True, "current": None}
 
 
 async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
@@ -1523,7 +1556,6 @@ async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
 
     async with _render_semaphore:
         try:
-            # Upload source image to ComfyUI
             server_name = await upload_image(source_path)
             base_wf = load_workflow(CAPY_I2I_WORKFLOW_PATH)
             neg_prompt = img.negative_prompt or "blurry, low quality, distorted, ugly, watermark, text"
@@ -1547,6 +1579,8 @@ async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
         except asyncio.CancelledError:
             img.status = KeyframeStatus.pending
         except Exception as e:
+            import traceback
+            print(f"ERROR refining gallery image {img.id}: {traceback.format_exc()}", flush=True)
             img.status = KeyframeStatus.error
             img.error_message = str(e)
 
@@ -1559,12 +1593,12 @@ async def api_gallery_refine(body: dict):
     if not prompt.strip():
         raise HTTPException(400, "Refinement prompt is required")
 
-    # Find existing preview image
-    preview = next((i for i in proj.images if i.id == "preview"), None)
-    if preview is None or not preview.image_filename:
+    previews = _preview_images(proj)
+    if not previews or not previews[-1].image_filename:
         raise HTTPException(400, "No preview image to refine")
 
-    source_path = os.path.join(images_dir(proj.id), preview.image_filename)
+    source = previews[-1]
+    source_path = os.path.join(images_dir(proj.id), source.image_filename)
     if not os.path.isfile(source_path):
         raise HTTPException(400, "Preview image file not found")
 
@@ -1574,39 +1608,86 @@ async def api_gallery_refine(body: dict):
         old.cancel()
 
     seed = body.get("seed") or random.randint(0, 2**32 - 1)
-    preview.prompt = prompt.strip()
-    preview.negative_prompt = body.get("negative_prompt", preview.negative_prompt)
-    preview.seed = seed
-    preview.status = KeyframeStatus.rendering
-    preview.error_message = None
+    preview_id = _next_preview_id(proj)
+    img = GalleryImage(
+        id=preview_id,
+        prompt=prompt.strip(),
+        negative_prompt=body.get("negative_prompt", source.negative_prompt),
+        model="capybara_i2i",
+        width=source.width,
+        height=source.height,
+        seed=seed,
+        status=KeyframeStatus.rendering,
+    )
+    proj.images.append(img)
 
-    task = asyncio.create_task(_do_refine_gallery_image(proj.id, preview, source_path, seed))
+    task = asyncio.create_task(_do_refine_gallery_image(proj.id, img, source_path, seed))
     render_tasks["gallery_preview"] = task
-    return {"status": "rendering", "seed": seed}
+    return {"status": "rendering", "seed": seed, "preview_id": preview_id}
+
+
+@app.post("/api/gallery/undo")
+async def api_gallery_undo():
+    """Remove the latest preview entry and revert to the previous one."""
+    proj = _get_project()
+    previews = _preview_images(proj)
+    if len(previews) <= 1:
+        raise HTTPException(400, "Nothing to undo")
+
+    # Cancel any in-progress render
+    old = render_tasks.pop("gallery_preview", None)
+    if old and not old.done():
+        old.cancel()
+
+    # Remove the latest preview and its file
+    latest = previews[-1]
+    if latest.image_filename:
+        path = os.path.join(images_dir(proj.id), latest.image_filename)
+        if os.path.exists(path):
+            os.unlink(path)
+    proj.images = [i for i in proj.images if i.id != latest.id]
+    _save()
+
+    # Return the now-current preview
+    current = _preview_images(proj)[-1]
+    image_url = f"/api/projects/{proj.id}/images/{current.image_filename}" if current.image_filename else None
+    return {
+        "id": current.id, "status": current.status, "image_url": image_url,
+        "seed": current.seed,
+    }
 
 
 @app.post("/api/gallery/save")
 async def api_gallery_save():
-    """Save the current preview to the gallery with a permanent ID."""
+    """Save the latest preview to the gallery with a permanent ID. Clears the preview stack."""
     proj = _get_project()
-    preview = next((i for i in proj.images if i.id == "preview"), None)
-    if preview is None or preview.status != KeyframeStatus.done:
+    previews = _preview_images(proj)
+    if not previews or previews[-1].status != KeyframeStatus.done:
         raise HTTPException(400, "No completed preview to save")
 
     import uuid as _uuid
+    latest = previews[-1]
     new_id = _uuid.uuid4().hex[:12]
 
-    # Rename the image file
-    old_path = os.path.join(images_dir(proj.id), f"preview.png")
+    # Rename the latest preview file
+    old_path = os.path.join(images_dir(proj.id), latest.image_filename)
     new_filename = f"{new_id}.png"
     new_path = os.path.join(images_dir(proj.id), new_filename)
     if os.path.exists(old_path):
         os.rename(old_path, new_path)
 
-    preview.id = new_id
-    preview.image_filename = new_filename
+    latest.id = new_id
+    latest.image_filename = new_filename
+
+    # Remove all other preview entries and their files
+    for img in previews[:-1]:
+        if img.image_filename:
+            path = os.path.join(images_dir(proj.id), img.image_filename)
+            if os.path.exists(path):
+                os.unlink(path)
+    proj.images = [i for i in proj.images if not i.id.startswith("preview_")]
     _save()
-    return {"image": preview.model_dump(), "project": proj.model_dump()}
+    return {"image": latest.model_dump(), "project": proj.model_dump()}
 
 
 @app.get("/api/gallery")

@@ -1,6 +1,6 @@
 <script>
-  import { Sparkles, RefreshCw, Save, X, RotateCcw, PanelRight, PanelBottom } from 'lucide-svelte';
-  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
+  import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, PanelRight, PanelBottom } from 'lucide-svelte';
+  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null) } = $props();
 
@@ -16,27 +16,24 @@
 
   // Preview state
   let previewUrl = $state(null);
-  let previewStatus = $state(null); // null | 'rendering' | 'done' | 'error'
+  let previewStatus = $state(null);
   let previewError = $state('');
   let previewSeed = $state(null);
 
-  // Summary state — once an image is generated, show prompt as summary
-  let summaryPrompt = $state('');
-  let summaryModel = $state('');
-  let summaryRes = $state('');
+  // History: [{prompt, model, seed, previewUrl}]
+  let history = $state([]);
 
   // Refinement
   let refinePrompt = $state('');
 
   let hasPreview = $derived(previewStatus === 'done' && previewUrl);
+  let canUndo = $derived(history.length > 1 && !generating);
 
   function clearAll() {
     prompt = '';
     negPrompt = '';
     refinePrompt = '';
-    summaryPrompt = '';
-    summaryModel = '';
-    summaryRes = '';
+    history = [];
     previewUrl = null;
     previewStatus = null;
     previewError = '';
@@ -52,6 +49,7 @@
     previewUrl = null;
     previewStatus = 'rendering';
     previewError = '';
+    history = [];
     try {
       const opts = {
         prompt: prompt.trim(),
@@ -62,12 +60,16 @@
       };
       const data = await galleryGenerate(opts);
       project = data.project;
-      // Move prompt to summary
-      summaryPrompt = prompt.trim();
-      summaryModel = T2I_MODELS.find(m => m.id === model)?.label || model;
-      summaryRes = `${resWidth}x${resHeight}`;
       prompt = '';
       await pollPreview();
+      if (previewStatus === 'done') {
+        history = [{
+          prompt: opts.prompt,
+          model: T2I_MODELS.find(m => m.id === model)?.label || model,
+          seed: previewSeed,
+          previewUrl,
+        }];
+      }
     } catch (e) {
       if (!cancelled) {
         previewStatus = 'error';
@@ -80,21 +82,34 @@
   }
 
   async function handleNewSeed() {
+    if (!history.length) return;
+    const first = history[0];
     generating = true;
     cancelled = false;
+    previewUrl = null;
     previewStatus = 'rendering';
     previewError = '';
+    history = [];
     try {
+      const modelId = T2I_MODELS.find(m => m.label === first.model)?.id || 'hidream';
       const opts = {
-        prompt: summaryPrompt,
+        prompt: first.prompt,
         negative_prompt: negPrompt.trim(),
-        model: T2I_MODELS.find(m => m.label === summaryModel)?.id || 'hidream',
+        model: modelId,
         width: resWidth,
         height: resHeight,
       };
       const data = await galleryGenerate(opts);
       project = data.project;
       await pollPreview();
+      if (previewStatus === 'done') {
+        history = [{
+          prompt: first.prompt,
+          model: first.model,
+          seed: previewSeed,
+          previewUrl,
+        }];
+      }
     } catch (e) {
       if (!cancelled) {
         previewStatus = 'error';
@@ -111,15 +126,22 @@
     cancelled = false;
     previewStatus = 'rendering';
     previewError = '';
+    const refinedPrompt = refinePrompt.trim();
+    refinePrompt = '';
     try {
       await galleryRefine({
-        prompt: refinePrompt.trim(),
+        prompt: refinedPrompt,
         negative_prompt: negPrompt.trim(),
       });
-      summaryPrompt = refinePrompt.trim();
-      summaryModel = 'Capybara I2I';
-      refinePrompt = '';
       await pollPreview();
+      if (previewStatus === 'done') {
+        history = [...history, {
+          prompt: refinedPrompt,
+          model: 'Capybara I2I',
+          seed: previewSeed,
+          previewUrl,
+        }];
+      }
     } catch (e) {
       if (!cancelled) {
         previewStatus = 'error';
@@ -131,19 +153,44 @@
     }
   }
 
+  async function handleUndo() {
+    if (!canUndo) return;
+    try {
+      const data = await galleryUndo();
+      history = history.slice(0, -1);
+      const prev = history[history.length - 1];
+      previewUrl = data.image_url + '?t=' + Date.now();
+      previewSeed = data.seed;
+      previewStatus = 'done';
+      previewError = '';
+      onstatus?.({ detail: 'Undone.' });
+    } catch (e) {
+      onstatus?.({ detail: `Undo failed: ${e.message}` });
+    }
+  }
+
   async function handleCancel() {
     cancelled = true;
     try {
-      await galleryCancel();
-    } catch {}
-    generating = false;
-    // If we had a previous preview, restore done state
-    if (summaryPrompt && previewUrl) {
-      previewStatus = 'done';
-    } else {
+      const data = await galleryCancel();
+      if (data.current?.image_url) {
+        previewUrl = data.current.image_url + '?t=' + Date.now();
+        previewSeed = data.current.seed;
+        previewStatus = 'done';
+      } else if (history.length) {
+        const prev = history[history.length - 1];
+        previewUrl = prev.previewUrl;
+        previewSeed = prev.seed;
+        previewStatus = 'done';
+      } else {
+        previewStatus = null;
+        previewUrl = null;
+      }
+    } catch {
       previewStatus = null;
       previewUrl = null;
     }
+    generating = false;
     previewError = '';
     onstatus?.({ detail: 'Generation cancelled.' });
   }
@@ -190,10 +237,9 @@
   }
 
   function editSummary() {
-    prompt = summaryPrompt;
-    summaryPrompt = '';
-    summaryModel = '';
-    summaryRes = '';
+    if (!history.length) return;
+    prompt = history[0].prompt;
+    history = [];
     refinePrompt = '';
     previewUrl = null;
     previewStatus = null;
@@ -244,7 +290,7 @@
 
   <div class="layout" class:side={sidePreview}>
     <div class="form-panel">
-      {#if !summaryPrompt}
+      {#if !history.length}
         <!-- Initial generation form -->
         <div class="controls">
           <div class="control-row">
@@ -300,24 +346,32 @@
           </div>
         </div>
       {:else}
-        <!-- Summary + refinement mode -->
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="summary clickable" onclick={editSummary} title="Click to edit prompt">
-          <div class="summary-meta">
-            <span class="summary-badge">{summaryModel}</span>
-            <span class="summary-badge">{summaryRes}</span>
-            {#if previewSeed}<span class="summary-seed">seed: {previewSeed}</span>{/if}
-          </div>
-          <p class="summary-prompt">{summaryPrompt}</p>
+        <!-- History + refinement mode -->
+        <div class="history-list">
+          {#each history as entry, i}
+            <div class="history-entry" class:first={i === 0} class:current={i === history.length - 1}>
+              <div class="history-header">
+                <span class="history-step">{i === 0 ? 'Original' : `Refine ${i}`}</span>
+                <span class="history-model">{entry.model}</span>
+              </div>
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+              <p class="history-prompt" class:clickable={i === 0}
+                 onclick={() => i === 0 && editSummary()}
+                 title={i === 0 ? 'Click to edit' : ''}>{entry.prompt}</p>
+            </div>
+          {/each}
         </div>
 
-        {#if previewUrl && previewStatus === 'done'}
+        {#if hasPreview}
           <div class="preview-actions">
+            <button class="action-btn" onclick={handleUndo} disabled={!canUndo} title="Undo last refinement">
+              <Undo2 size={14} /> Undo
+            </button>
             <button class="action-btn" onclick={handleNewSeed} disabled={generating}>
               <RefreshCw size={14} /> New Seed
             </button>
             <button class="save-btn" onclick={handleSave} disabled={saving}>
-              <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
+              <Save size={14} /> {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
 
@@ -522,50 +576,67 @@
     background: var(--accent-hover);
   }
 
-  /* Summary */
-  .summary {
+  /* History */
+  .history-list {
+    max-height: 240px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .history-entry {
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 16px;
+    padding: 8px 12px;
   }
 
-  .summary.clickable {
-    cursor: pointer;
-    transition: border-color 0.15s;
+  .history-entry.current {
+    border-color: var(--accent);
   }
 
-  .summary.clickable:hover {
-    border-color: var(--text-muted);
-  }
-
-  .summary-meta {
+  .history-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 2px;
   }
 
-  .summary-badge {
+  .history-step {
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .history-model {
+    font-size: 11px;
     color: var(--accent);
     background: var(--accent-bg);
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 1px 6px;
+    border-radius: 3px;
   }
 
-  .summary-seed {
-    font-size: 11px;
-    color: var(--text-muted);
-    font-family: monospace;
+  .history-prompt {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
-  .summary-prompt {
-    font-size: 14px;
+  .history-prompt.clickable {
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+
+  .history-prompt.clickable:hover {
     color: var(--text);
-    line-height: 1.5;
   }
 
   /* Preview */
@@ -632,6 +703,7 @@
     display: flex;
     gap: 8px;
     margin-top: 12px;
+    flex-wrap: wrap;
   }
 
   .action-btn {
@@ -667,9 +739,9 @@
 
   /* Refinement */
   .refine-section {
-    margin-top: 20px;
+    margin-top: 16px;
     border-top: 1px solid var(--border);
-    padding-top: 16px;
+    padding-top: 12px;
   }
 
   .refine-section label {
