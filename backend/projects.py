@@ -66,8 +66,11 @@ def load_project(project_id: str) -> Project | None:
         return Project(**json.load(f))
 
 
-def list_projects() -> list[dict]:
-    """Return summaries of all projects, most recent first."""
+def list_projects(activity: str | None = None) -> list[dict]:
+    """Return summaries of all projects, most recent first.
+
+    If *activity* is given, only return projects matching that activity type.
+    """
     results = []
     if not os.path.isdir(PROJECTS_DIR):
         return results
@@ -78,8 +81,12 @@ def list_projects() -> list[dict]:
         try:
             with open(path) as f:
                 data = json.load(f)
+            proj_activity = data.get("activity", "film-director")
+            if activity and proj_activity != activity:
+                continue
             results.append({
                 "id": data["id"],
+                "activity": proj_activity,
                 "name": data.get("name", ""),
                 "premise": data.get("premise", data.get("theme", "")),
                 "scene_count": data.get("scene_count", 0),

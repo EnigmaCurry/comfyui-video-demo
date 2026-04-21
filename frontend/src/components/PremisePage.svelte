@@ -2,7 +2,7 @@
   import { Sparkles, ArrowDown, Lock } from 'lucide-svelte';
   import { suggestPremise, setPremise } from '../lib/api.js';
 
-  let { onstatus, onpremise, locked = false } = $props();
+  let { onstatus, onpremise, locked = false, activity = 'film-director' } = $props();
 
   let notes = $state('');
   let premise = $state('');
@@ -37,7 +37,7 @@
     setting = true;
     onstatus({ detail: 'Creating project...' });
     try {
-      const data = await setPremise(premise.trim());
+      const data = await setPremise(premise.trim(), activity);
       onpremise({ detail: data.project });
       onstatus({ detail: `Project "${data.project.name}" created. Proceed to Story.` });
     } catch (e) {

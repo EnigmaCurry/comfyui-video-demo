@@ -52,6 +52,7 @@ class Transition(BaseModel):
 
 class Project(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    activity: str = "film-director"
     name: str = ""
     notes: str = ""
     premise: str = ""
@@ -135,6 +136,7 @@ class SuggestPremiseRequest(BaseModel):
 
 class SetPremiseRequest(BaseModel):
     premise: str
+    activity: str = "film-director"
 
 
 class GenerateStoryRequest(BaseModel):

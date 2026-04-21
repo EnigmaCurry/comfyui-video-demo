@@ -8,18 +8,30 @@
   import FinalPage from './components/FinalPage.svelte';
   import RenderPage from './components/RenderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
+  import ActivityMenu from './components/ActivityMenu.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import { getCurrentProject, renderKeyframe, renderTransition, renameProject } from './lib/api.js';
+  import { getCurrentProject, renderKeyframe, renderTransition, renameProject, ACTIVITIES } from './lib/api.js';
 
-  const tabs = [
-    { id: 'premise', label: 'Premise' },
-    { id: 'story', label: 'Story' },
-    { id: 'keyframes', label: 'Keyframes' },
-    { id: 'transitions', label: 'Transitions' },
-    { id: 'narration', label: 'Narration' },
-    { id: 'score', label: 'Score' },
-    { id: 'final', label: 'Final' },
-  ];
+  const ACTIVITY_TABS = {
+    'film-director': [
+      { id: 'premise', label: 'Premise' },
+      { id: 'story', label: 'Story' },
+      { id: 'keyframes', label: 'Keyframes' },
+      { id: 'transitions', label: 'Transitions' },
+      { id: 'narration', label: 'Narration' },
+      { id: 'score', label: 'Score' },
+      { id: 'final', label: 'Final' },
+    ],
+    'image-generator': [
+      { id: 'premise', label: 'Premise' },
+      { id: 'story', label: 'Story' },
+      { id: 'keyframes', label: 'Gallery' },
+    ],
+  };
+
+  let activity = $state('film-director');
+  let tabs = $derived(ACTIVITY_TABS[activity] || ACTIVITY_TABS['film-director']);
+  let activityLabel = $derived(ACTIVITIES.find(a => a.id === activity)?.label || 'Film Director');
 
   let activeTab = $state('premise');
   let project = $state(null);
@@ -42,36 +54,47 @@
   let soundtrackSections = $derived(project?.soundtrack_sections || []);
 
   let hasTransitions = $derived(transitions.length > 0);
-  let enabledThrough = $derived(
-    scoreLocked ? 'final' :
-    narrationLocked ? 'score' :
-    transitionsLocked ? 'narration' :
-    (keyframesLocked || hasTransitions) ? 'transitions' :
-    storyLocked ? 'keyframes' :
-    premiseLocked ? 'story' :
-    'premise'
-  );
+  let enabledThrough = $derived.by(() => {
+    if (activity === 'image-generator') {
+      return storyLocked ? 'keyframes' :
+             premiseLocked ? 'story' :
+             'premise';
+    }
+    // film-director
+    return scoreLocked ? 'final' :
+           narrationLocked ? 'score' :
+           transitionsLocked ? 'narration' :
+           (keyframesLocked || hasTransitions) ? 'transitions' :
+           storyLocked ? 'keyframes' :
+           premiseLocked ? 'story' :
+           'premise';
+  });
 
   async function init() {
     try {
       const data = await getCurrentProject();
       if (data.project) {
         project = data.project;
-        if (data.project.score_locked) {
-          activeTab = 'final';
-        } else if (data.project.narration_locked) {
-          activeTab = 'score';
-        } else if (data.project.transitions_locked) {
-          activeTab = 'narration';
-        } else if (data.project.keyframes_locked && data.project.transitions?.length > 0) {
-          activeTab = 'transitions';
-        } else if (data.project.story_locked && data.project.keyframes.length > 0) {
-          activeTab = 'keyframes';
-        } else if (data.project.premise_locked) {
-          activeTab = 'story';
-        }
+        activity = data.project.activity || 'film-director';
+        activeTab = pickTab(data.project);
       }
     } catch {}
+  }
+
+  function pickTab(proj) {
+    if (proj.activity === 'image-generator') {
+      if (proj.story_locked && proj.keyframes?.length > 0) return 'keyframes';
+      if (proj.premise_locked) return 'story';
+      return 'premise';
+    }
+    // film-director
+    if (proj.score_locked) return 'final';
+    if (proj.narration_locked) return 'score';
+    if (proj.transitions_locked) return 'narration';
+    if (proj.keyframes_locked && proj.transitions?.length > 0) return 'transitions';
+    if (proj.story_locked && proj.keyframes?.length > 0) return 'keyframes';
+    if (proj.premise_locked) return 'story';
+    return 'premise';
   }
 
   function handlePremise(event) {
@@ -117,16 +140,10 @@
 
   function handleLoadProject(event) {
     project = event.detail;
-    if (project.score_locked) {
-      activeTab = 'final';
-    } else if (project.narration_locked) {
-      activeTab = 'score';
-    } else if (project.transitions_locked) {
-      activeTab = 'narration';
-    } else if (project.keyframes_locked && project.transitions?.length > 0) {
-      activeTab = 'transitions';
-    } else if (project.story_locked && project.keyframes.length > 0) {
-      activeTab = 'keyframes';
+    activity = project.activity || 'film-director';
+    activeTab = pickTab(project);
+    // Auto-render pending keyframe if we land on keyframes tab
+    if (activeTab === 'keyframes' && project.story_locked && !project.keyframes_locked) {
       const idx = project.active_index || 0;
       if (idx < project.keyframes.length) {
         const kf = project.keyframes[idx];
@@ -135,14 +152,11 @@
           renderKeyframe(kf.id).catch(e => statusMessage = `Render error: ${e.message}`);
         }
       }
-    } else if (project.premise_locked) {
-      activeTab = 'story';
-    } else {
-      activeTab = 'premise';
-      if (premiseRef) {
-        premiseRef.setPremiseText(project.premise || '');
-        premiseRef.setNotesText(project.notes || '');
-      }
+    }
+    // Restore premise text if we're at premise tab
+    if (activeTab === 'premise' && premiseRef) {
+      premiseRef.setPremiseText(project.premise || '');
+      premiseRef.setNotesText(project.notes || '');
     }
   }
 
@@ -153,6 +167,20 @@
     if (premiseRef) {
       premiseRef.setPremiseText('');
       premiseRef.setNotesText('');
+    }
+  }
+
+  function handleActivityChange(event) {
+    const newActivity = event.detail;
+    // If switching activity while a project is loaded, start fresh
+    if (project && (project.activity || 'film-director') !== newActivity) {
+      project = null;
+      activeTab = 'premise';
+      editingTitle = false;
+      if (premiseRef) {
+        premiseRef.setPremiseText('');
+        premiseRef.setNotesText('');
+      }
     }
   }
 
@@ -202,7 +230,7 @@
   <div class="header-row">
     <div>
       {#if projectName}
-        <p class="app-label">Film Director</p>
+        <p class="app-label">{activityLabel}</p>
         {#if editingTitle}
           <input class="title-edit" bind:value={editTitle}
                  onkeydown={handleTitleKeydown} onblur={saveTitle} autofocus />
@@ -211,13 +239,14 @@
           <h1 class="project-title clickable" onclick={startEditTitle} title="Click to rename">{projectName}</h1>
         {/if}
       {:else}
-        <h1>Film Director</h1>
-        <p class="subtitle">Keyframe-driven video production with ComfyUI</p>
+        <h1>{activityLabel}</h1>
+        <p class="subtitle">{ACTIVITIES.find(a => a.id === activity)?.subtitle || ''}</p>
       {/if}
     </div>
     <div class="header-actions">
       <button class="new-btn" onclick={handleNewProject}>New</button>
-      <ProjectSelector onload={handleLoadProject} onstatus={handleStatus} />
+      <ProjectSelector {activity} onload={handleLoadProject} onstatus={handleStatus} />
+      <ActivityMenu bind:activity onchange={handleActivityChange} />
     </div>
   </div>
 </header>
@@ -227,7 +256,7 @@
 <main>
   {#if activeTab === 'premise'}
     <PremisePage bind:this={premiseRef} onstatus={handleStatus}
-                 onpremise={handlePremise} locked={premiseLocked} />
+                 onpremise={handlePremise} locked={premiseLocked} {activity} />
 
   {:else if activeTab === 'story'}
     <StoryPage onstatus={handleStatus} onstory={handleStory}

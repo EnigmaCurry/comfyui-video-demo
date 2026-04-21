@@ -2,7 +2,7 @@
   import { FolderOpen, Trash2, X } from 'lucide-svelte';
   import { listProjects, loadProject, deleteProject } from '../lib/api.js';
 
-  let { onload, onstatus } = $props();
+  let { onload, onstatus, activity = null } = $props();
 
   let open = $state(false);
   let projects = $state([]);
@@ -11,7 +11,7 @@
   async function fetchProjects() {
     loading = true;
     try {
-      const data = await listProjects();
+      const data = await listProjects(activity);
       projects = data.projects;
     } catch (e) {
       onstatus({ detail: `Failed to load projects: ${e.message}` });

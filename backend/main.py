@@ -85,8 +85,8 @@ def _save():
 # ── Project endpoints ───────────────────────────────────────────────
 
 @app.get("/api/projects")
-async def api_list_projects():
-    return {"projects": list_projects()}
+async def api_list_projects(activity: str | None = None):
+    return {"projects": list_projects(activity=activity)}
 
 
 @app.get("/api/projects/current")
@@ -137,7 +137,7 @@ async def api_set_premise(req: SetPremiseRequest):
     global current_project
     from llm import generate_project_name
     name = await generate_project_name(req.premise)
-    proj = Project(name=name, premise=req.premise, premise_locked=True)
+    proj = Project(activity=req.activity, name=name, premise=req.premise, premise_locked=True)
     current_project = proj
     _save()
     return {"project": proj.model_dump()}

@@ -16,8 +16,15 @@ async function request(method, path, body = null) {
   return resp.json();
 }
 
+// ── Activities ──
+export const ACTIVITIES = [
+  { id: 'film-director', label: 'Film Director', subtitle: 'Keyframe-driven video production with ComfyUI' },
+  { id: 'image-generator', label: 'Image Generator', subtitle: 'AI image generation and gallery' },
+];
+
 // ── Projects ──
-export const listProjects = () => request('GET', '/projects');
+export const listProjects = (activity) =>
+  request('GET', activity ? `/projects?activity=${encodeURIComponent(activity)}` : '/projects');
 export const getCurrentProject = () => request('GET', '/projects/current');
 export const loadProject = (id) => request('POST', `/projects/${id}/load`);
 export const deleteProject = (id) => request('DELETE', `/projects/${id}`);
@@ -25,7 +32,7 @@ export const renameProject = (name) => request('PUT', '/projects/current/name', 
 
 // ── Premise ──
 export const suggestPremise = (notes) => request('POST', '/premise/suggest', { notes });
-export const setPremise = (premise) => request('POST', '/premise/set', { premise });
+export const setPremise = (premise, activity = 'film-director') => request('POST', '/premise/set', { premise, activity });
 
 // ── Story ──
 export const generateStory = (scene_count, scene_duration, width, height, style = 'transition-story') =>
