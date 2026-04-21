@@ -1715,6 +1715,46 @@ async def api_gallery_delete(image_id: str):
     return {"deleted": image_id}
 
 
+@app.post("/api/gallery/upload")
+async def api_gallery_upload(file: bytes = fastapi_File(...)):
+    """Upload an image directly to the gallery."""
+    global current_project
+    proj = current_project
+    if proj is None or proj.activity != "image-generator":
+        proj = Project(activity="image-generator", name="Untitled Gallery")
+        current_project = proj
+
+    import uuid as _uuid
+    new_id = _uuid.uuid4().hex[:12]
+    filename = f"{new_id}.png"
+    dest = os.path.join(images_dir(proj.id), filename)
+    with open(dest, "wb") as f:
+        f.write(file)
+
+    # Detect dimensions
+    width, height = 0, 0
+    try:
+        from PIL import Image as PILImage
+        with PILImage.open(dest) as pil_img:
+            width, height = pil_img.size
+    except Exception:
+        pass
+
+    img = GalleryImage(
+        id=new_id,
+        prompt="(uploaded)",
+        model="upload",
+        width=width,
+        height=height,
+        image_filename=filename,
+        status=KeyframeStatus.done,
+    )
+    proj.images.append(img)
+    _save()
+    image_url = f"/api/projects/{proj.id}/images/{filename}"
+    return {"image": {**img.model_dump(), "image_url": image_url}, "project": proj.model_dump()}
+
+
 # ── Favicon ─────────────────────────────────────────────────────────
 FAVICON_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "favicon.svg")
 

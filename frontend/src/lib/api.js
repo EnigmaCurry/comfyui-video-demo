@@ -125,3 +125,10 @@ export const galleryUndo = () => request('POST', '/gallery/undo');
 export const gallerySave = () => request('POST', '/gallery/save');
 export const galleryList = () => request('GET', '/gallery');
 export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);
+export async function galleryUpload(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch('/api/gallery/upload', { method: 'POST', body: form });
+  if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
+  return resp.json();
+}

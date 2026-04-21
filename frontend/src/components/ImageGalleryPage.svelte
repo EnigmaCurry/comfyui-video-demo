@@ -1,6 +1,6 @@
 <script>
   import { Copy, Trash2, Plus, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-svelte';
-  import { galleryList, galleryDelete } from '../lib/api.js';
+  import { galleryList, galleryDelete, galleryUpload } from '../lib/api.js';
 
   let { projectId = '', onstatus, oncreate, onrecreate } = $props();
 
@@ -76,13 +76,35 @@
     }
   }
 
+  async function handlePaste(e) {
+    if (fullscreenIndex >= 0) return; // don't paste while in fullscreen
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+        onstatus?.({ detail: 'Uploading pasted image...' });
+        try {
+          const data = await galleryUpload(blob);
+          images = [...images, data.image];
+          onstatus?.({ detail: 'Image uploaded to gallery.' });
+        } catch (err) {
+          onstatus?.({ detail: `Upload failed: ${err.message}` });
+        }
+        return;
+      }
+    }
+  }
+
   // Fetch on mount and when projectId changes
   $effect(() => {
     if (projectId) fetchImages();
   });
 </script>
 
-<svelte:window onkeydown={handleFullscreenKey} />
+<svelte:window onkeydown={handleFullscreenKey} onpaste={handlePaste} />
 
 {#if fullscreenImg}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
