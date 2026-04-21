@@ -2,7 +2,9 @@
   import { Lock } from 'lucide-svelte';
   import { generateStory } from '../lib/api.js';
 
-  let { onstatus, onstory, premise = '', locked = false, scenes = [] } = $props();
+  let { onstatus, onstory, premise = '', locked = false, scenes = [],
+        projectWidth = 1024, projectHeight = 576, projectSceneCount = 6,
+        projectSceneDuration = 10 } = $props();
 
   const RESOLUTIONS = [
     { label: '512x512 (1:1)', w: 512, h: 512 },
@@ -57,6 +59,18 @@
     <div class="premise-summary">
       <span class="label">Premise</span>
       <p>{premise}</p>
+    </div>
+  {/if}
+
+  {#if locked}
+    <div class="settings-summary">
+      <span class="setting"><strong>{projectSceneCount}</strong> scenes</span>
+      <span class="sep">&middot;</span>
+      <span class="setting"><strong>{projectSceneDuration}s</strong> per scene</span>
+      <span class="sep">&middot;</span>
+      <span class="setting"><strong>{projectWidth}&times;{projectHeight}</strong></span>
+      <span class="sep">&middot;</span>
+      <span class="setting">~{Math.floor(projectSceneCount * projectSceneDuration / 60)}m {projectSceneCount * projectSceneDuration % 60}s total</span>
     </div>
   {/if}
 
@@ -154,6 +168,27 @@
     font-size: 14px;
     color: var(--text-dim);
     line-height: 1.6;
+  }
+
+  .settings-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .settings-summary strong {
+    color: var(--text);
+  }
+
+  .sep {
+    color: var(--text-muted);
   }
 
   .controls {

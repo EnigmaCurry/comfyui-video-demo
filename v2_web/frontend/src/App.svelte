@@ -231,7 +231,10 @@
 
   {:else if activeTab === 'story'}
     <StoryPage onstatus={handleStatus} onstory={handleStory}
-               {premise} locked={storyLocked} scenes={keyframes} />
+               {premise} locked={storyLocked} scenes={keyframes}
+               projectWidth={project?.width || 1024} projectHeight={project?.height || 576}
+               projectSceneCount={project?.scene_count || 6}
+               projectSceneDuration={project?.scene_duration || 10} />
 
   {:else if activeTab === 'keyframes'}
     <KeyframeGrid bind:this={gridRef} bind:keyframes={mutableKeyframes}
