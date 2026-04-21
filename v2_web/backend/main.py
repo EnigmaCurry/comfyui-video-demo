@@ -813,6 +813,7 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
                 "--voice", voice or settings.tts_voice,
                 "--output", os.path.abspath(audio_path),
                 "--seed", str(tr.narration_seed if tr.narration_seed is not None else settings.tts_seed),
+                "--token-scale", str(settings.tts_token_scale),
                 "--no-play",
                 tr.narration,
             ]

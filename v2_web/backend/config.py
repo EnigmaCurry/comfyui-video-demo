@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     tts_demo_dir: str = ""
     tts_voice: str = "despotism-doc.wav"
     tts_seed: int = 1
+    tts_token_scale: float = 1.5
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
