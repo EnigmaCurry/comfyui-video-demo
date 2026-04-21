@@ -21,6 +21,7 @@ class Keyframe(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     position: int
     prompt: str
+    model: str = "hidream"
     status: KeyframeStatus = KeyframeStatus.pending
     seed: Optional[int] = None
     image_filename: Optional[str] = None
@@ -109,6 +110,7 @@ class RenderRequest(BaseModel):
 class UpdateKeyframeRequest(BaseModel):
     prompt: Optional[str] = None
     negative_prompt: Optional[str] = None
+    model: Optional[str] = None
     position: Optional[int] = None
 
 

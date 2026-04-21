@@ -45,6 +45,10 @@ export async function uploadKeyframeImage(id, file) {
   return resp.json();
 }
 export const updateKeyframe = (id, updates) => request('PUT', `/keyframes/${id}`, updates);
+export const T2I_MODELS = [
+  { id: 'hidream', label: 'HiDream' },
+  { id: 'qwen_illustration', label: 'Qwen Illustration' },
+];
 export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
 export const reorderKeyframes = (ids) => request('POST', '/keyframes/reorder', ids);
 export const resetKeyframes = () => request('POST', '/keyframes/reset');

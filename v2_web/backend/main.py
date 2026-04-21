@@ -194,6 +194,8 @@ async def api_update_keyframe(keyframe_id: str, req: UpdateKeyframeRequest):
         kf.prompt = req.prompt
     if req.negative_prompt is not None:
         kf.negative_prompt = req.negative_prompt
+    if req.model is not None:
+        kf.model = req.model
     if req.position is not None:
         kf.position = req.position
     _save()
@@ -326,11 +328,12 @@ async def api_set_active_index(body: dict):
 async def _do_render_keyframe(proj_id: str, kf: Keyframe, seed: int, width: int, height: int):
     """Render a keyframe synchronously (for use in background tasks or auto-create)."""
     from comfyui import download_output, run_workflow
-    from workflows import T2I_WORKFLOW_PATH, load_workflow, patch_t2i_workflow
+    from workflows import get_t2i_workflow_and_patcher, load_workflow
 
     async with _render_semaphore:
         try:
-            base_wf = load_workflow(T2I_WORKFLOW_PATH)
+            wf_path, patch_fn = get_t2i_workflow_and_patcher(kf.model)
+            base_wf = load_workflow(wf_path)
             from llm import _load_style
             style = _load_style("transition-story")
             neg_parts = [style.get("negative_prompt", "")]
@@ -338,8 +341,8 @@ async def _do_render_keyframe(proj_id: str, kf: Keyframe, seed: int, width: int,
                 neg_parts.append(kf.negative_prompt)
             neg_prompt = ", ".join(p for p in neg_parts if p)
 
-            print(f"Rendering kf {kf.id}: seed={seed}", flush=True)
-            patched = patch_t2i_workflow(
+            print(f"Rendering kf {kf.id} ({kf.model}): seed={seed}", flush=True)
+            patched = patch_fn(
                 base_wf, prompt_text=kf.prompt, negative_prompt_text=neg_prompt,
                 seed_value=seed, width=width, height=height,
                 output_prefix=f"v2web/{kf.id}",

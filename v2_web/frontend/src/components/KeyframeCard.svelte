@@ -1,7 +1,7 @@
 <script>
   import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
-           getKeyframeStatus, rewriteKeyframe, uploadKeyframeImage } from '../lib/api.js';
+           getKeyframeStatus, rewriteKeyframe, uploadKeyframeImage, T2I_MODELS } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false, projectId = '' } = $props();
 
@@ -148,6 +148,17 @@
     }
   }
 
+  async function handleModelChange(e) {
+    const newModel = e.target.value;
+    keyframe.model = newModel;
+    try {
+      await updateKeyframe(keyframe.id, { model: newModel });
+      onstatus({ detail: `Keyframe ${index + 1} model set to ${T2I_MODELS.find(m => m.id === newModel)?.label}. Re-render to apply.` });
+    } catch (err) {
+      onstatus({ detail: `Failed: ${err.message}` });
+    }
+  }
+
   let fileInput;
 
   function triggerUpload() {
@@ -243,6 +254,12 @@
           class:error={keyframe.status === 'error'}>
       {keyframe.status}
     </span>
+    <select class="model-select" value={keyframe.model || 'hidream'}
+            onchange={handleModelChange}>
+      {#each T2I_MODELS as m}
+        <option value={m.id}>{m.label}</option>
+      {/each}
+    </select>
   </div>
 
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -409,6 +426,17 @@
     font-size: 18px;
     color: var(--text);
     min-width: 24px;
+  }
+
+  .model-select {
+    margin-left: auto;
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2px 6px;
   }
 
   .status-badge {

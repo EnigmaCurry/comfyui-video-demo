@@ -37,7 +37,28 @@ TRANS_DURATION_NODE = "139:143"
 TRANS_OUTPUT_NODE = "68"
 TRANS_OUTPUT_FIELD = "filename_prefix"
 
+# ── Qwen Illustration T2I node IDs ───────────────────────────────────
+QWEN_PROMPT_NODE = "76:6"
+QWEN_PROMPT_FIELD = "text"
+QWEN_NEG_PROMPT_NODE = "76:7"
+QWEN_NEG_PROMPT_FIELD = "text"
+QWEN_SEED_NODE = "76:3"
+QWEN_SEED_FIELD = "seed"
+QWEN_WIDTH_NODE = "76:58"
+QWEN_HEIGHT_NODE = "76:58"
+QWEN_OUTPUT_NODE = "60"
+QWEN_OUTPUT_FIELD = "filename_prefix"
+
+QWEN_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "qwen_illustration.json")
+
 TRANSITION_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "ltx_transition.json")
+
+
+# ── Available T2I models ─────────────────────────────────────────────
+T2I_MODELS = {
+    "hidream": {"label": "HiDream", "workflow": "T2I_WORKFLOW_PATH"},
+    "qwen_illustration": {"label": "Qwen Illustration", "workflow": "QWEN_WORKFLOW_PATH"},
+}
 
 
 def load_workflow(path: str) -> dict:
@@ -59,6 +80,29 @@ def patch_t2i_workflow(workflow: dict, *, prompt_text: str,
     wf[T2I_HEIGHT_NODE]["inputs"]["height"] = height
     wf[T2I_OUTPUT_NODE]["inputs"][T2I_OUTPUT_FIELD] = output_prefix
     return wf
+
+
+def patch_qwen_workflow(workflow: dict, *, prompt_text: str,
+                        negative_prompt_text: str = "",
+                        seed_value: int, width: int = 1024,
+                        height: int = 576,
+                        output_prefix: str = "ComfyUI") -> dict:
+    """Patch Qwen Illustration T2I workflow."""
+    wf = copy.deepcopy(workflow)
+    wf[QWEN_PROMPT_NODE]["inputs"][QWEN_PROMPT_FIELD] = prompt_text
+    wf[QWEN_NEG_PROMPT_NODE]["inputs"][QWEN_NEG_PROMPT_FIELD] = negative_prompt_text
+    wf[QWEN_SEED_NODE]["inputs"][QWEN_SEED_FIELD] = seed_value
+    wf[QWEN_WIDTH_NODE]["inputs"]["width"] = width
+    wf[QWEN_HEIGHT_NODE]["inputs"]["height"] = height
+    wf[QWEN_OUTPUT_NODE]["inputs"][QWEN_OUTPUT_FIELD] = output_prefix
+    return wf
+
+
+def get_t2i_workflow_and_patcher(model: str = "hidream"):
+    """Return (workflow_path, patch_function) for a T2I model name."""
+    if model == "qwen_illustration":
+        return QWEN_WORKFLOW_PATH, patch_qwen_workflow
+    return T2I_WORKFLOW_PATH, patch_t2i_workflow
 
 
 def patch_transition_workflow(workflow: dict, *, first_image_name: str,
