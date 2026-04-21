@@ -1,6 +1,6 @@
 <script>
-  import { Sparkles, RefreshCw, Save } from 'lucide-svelte';
-  import { galleryGenerate, galleryPreviewStatus, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
+  import { Sparkles, RefreshCw, Save, X } from 'lucide-svelte';
+  import { galleryGenerate, galleryPreviewStatus, galleryCancel, gallerySave, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery } = $props();
 
@@ -17,10 +17,12 @@
   let previewStatus = $state(null); // null | 'rendering' | 'done' | 'error'
   let previewError = $state('');
   let previewSeed = $state(null);
+  let cancelled = $state(false);
 
   async function handleGenerate(newSeed = true) {
     if (!prompt.trim()) return;
     generating = true;
+    cancelled = false;
     previewUrl = null;
     previewStatus = 'rendering';
     previewError = '';
@@ -39,16 +41,30 @@
       project = data.project;
       await pollPreview();
     } catch (e) {
-      previewStatus = 'error';
-      previewError = e.message;
-      onstatus?.({ detail: `Failed: ${e.message}` });
+      if (!cancelled) {
+        previewStatus = 'error';
+        previewError = e.message;
+        onstatus?.({ detail: `Failed: ${e.message}` });
+      }
     } finally {
       generating = false;
     }
   }
 
+  async function handleCancel() {
+    cancelled = true;
+    try {
+      await galleryCancel();
+    } catch {}
+    generating = false;
+    previewStatus = null;
+    previewUrl = null;
+    previewError = '';
+    onstatus?.({ detail: 'Generation cancelled.' });
+  }
+
   async function pollPreview() {
-    while (true) {
+    while (!cancelled) {
       try {
         const data = await galleryPreviewStatus();
         previewStatus = data.status;
@@ -159,6 +175,9 @@
         <div class="preview-placeholder">
           <div class="spinner"></div>
           <span>Generating...</span>
+          <button class="cancel-btn" onclick={handleCancel}>
+            <X size={14} /> Cancel
+          </button>
         </div>
       {:else if previewStatus === 'error'}
         <div class="preview-placeholder error">
@@ -294,6 +313,23 @@
   }
 
   .preview-placeholder.error { color: var(--error); }
+
+  .cancel-btn {
+    margin-top: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    padding: 6px 14px;
+  }
+
+  .cancel-btn:hover {
+    color: var(--error);
+    border-color: var(--error);
+  }
 
   .spinner {
     width: 24px;

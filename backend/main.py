@@ -1499,6 +1499,18 @@ async def api_gallery_preview_status():
     }
 
 
+@app.post("/api/gallery/cancel")
+async def api_gallery_cancel():
+    """Cancel the current preview render."""
+    task = render_tasks.pop("gallery_preview", None)
+    if task and not task.done():
+        task.cancel()
+    proj = _get_project()
+    proj.images = [i for i in proj.images if i.id != "preview"]
+    _save()
+    return {"cancelled": True}
+
+
 @app.post("/api/gallery/save")
 async def api_gallery_save():
     """Save the current preview to the gallery with a permanent ID."""

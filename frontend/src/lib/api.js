@@ -118,6 +118,7 @@ export const RESOLUTIONS = [
 ];
 export const galleryGenerate = (opts) => request('POST', '/gallery/generate', opts);
 export const galleryPreviewStatus = () => request('GET', '/gallery/preview/status');
+export const galleryCancel = () => request('POST', '/gallery/cancel');
 export const gallerySave = () => request('POST', '/gallery/save');
 export const galleryList = () => request('GET', '/gallery');
 export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);
