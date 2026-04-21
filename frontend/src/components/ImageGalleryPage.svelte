@@ -1,5 +1,5 @@
 <script>
-  import { Copy, Trash2, Plus, RefreshCw } from 'lucide-svelte';
+  import { Copy, Trash2, Plus, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import { galleryList, galleryDelete } from '../lib/api.js';
 
   let { projectId = '', onstatus, oncreate, onrecreate } = $props();
@@ -57,7 +57,24 @@
     });
   }
 
-  let fullscreenUrl = $state(null);
+  let fullscreenIndex = $state(-1);
+  let fullscreenImg = $derived(fullscreenIndex >= 0 ? images[fullscreenIndex] : null);
+
+  function openFullscreen(idx) { fullscreenIndex = idx; }
+  function closeFullscreen() { fullscreenIndex = -1; }
+  function prevImage(e) { e.stopPropagation(); if (fullscreenIndex > 0) fullscreenIndex--; }
+  function nextImage(e) { e.stopPropagation(); if (fullscreenIndex < images.length - 1) fullscreenIndex++; }
+
+  function handleFullscreenKey(e) {
+    if (fullscreenIndex < 0) return;
+    if (e.key === 'ArrowLeft') prevImage(e);
+    else if (e.key === 'ArrowRight') nextImage(e);
+    else if (e.key === 'Escape') closeFullscreen();
+    else if (e.key === 'c' && (e.ctrlKey || e.metaKey) && fullscreenImg) {
+      e.preventDefault();
+      handleCopy(fullscreenImg);
+    }
+  }
 
   // Fetch on mount and when projectId changes
   $effect(() => {
@@ -65,10 +82,22 @@
   });
 </script>
 
-{#if fullscreenUrl}
+<svelte:window onkeydown={handleFullscreenKey} />
+
+{#if fullscreenImg}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="fullscreen-overlay" onclick={() => fullscreenUrl = null}>
-    <img src={fullscreenUrl} alt="Full size" />
+  <div class="fullscreen-overlay" onclick={closeFullscreen}>
+    {#if fullscreenIndex > 0}
+      <button class="nav-btn nav-left" onclick={prevImage}>
+        <ChevronLeft size={36} />
+      </button>
+    {/if}
+    <img src={fullscreenImg.image_url} alt="Full size" />
+    {#if fullscreenIndex < images.length - 1}
+      <button class="nav-btn nav-right" onclick={nextImage}>
+        <ChevronRight size={36} />
+      </button>
+    {/if}
   </div>
 {/if}
 
@@ -84,11 +113,11 @@
     </div>
   {:else}
     <div class="gallery-grid">
-      {#each images as img (img.id)}
+      {#each images as img, idx (img.id)}
         <div class="gallery-item">
           {#if img.image_url}
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="image-wrap" onclick={() => fullscreenUrl = img.image_url}>
+            <div class="image-wrap" onclick={() => openFullscreen(idx)}>
               <img src={img.image_url} alt={img.prompt} />
             </div>
           {:else}
@@ -239,8 +268,31 @@
   }
 
   .fullscreen-overlay img {
-    max-width: 95vw;
+    max-width: 85vw;
     max-height: 95vh;
     object-fit: contain;
   }
+
+  .nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+    z-index: 2001;
+  }
+
+  .nav-btn:hover { opacity: 1; }
+  .nav-btn.nav-left { left: 24px; }
+  .nav-btn.nav-right { right: 24px; }
 </style>
