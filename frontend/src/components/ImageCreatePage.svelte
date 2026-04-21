@@ -87,41 +87,81 @@
 
   async function handleNewSeed() {
     if (!history.length) return;
+    const current = history[history.length - 1];
+    const isRefinement = history.length > 1;
     const first = history[0];
-    generating = true;
-    cancelled = false;
-    previewUrl = null;
-    previewStatus = 'rendering';
-    previewError = '';
-    // Keep original prompt visible, clear seed
-    history = [{ prompt: first.prompt, model: first.model, seed: null, previewUrl: null }];
-    try {
-      const modelId = T2I_MODELS.find(m => m.label === first.model)?.id || 'hidream';
-      const opts = {
-        prompt: first.prompt,
-        negative_prompt: negPrompt.trim(),
-        model: modelId,
-        width: resWidth,
-        height: resHeight,
-      };
-      const data = await galleryGenerate(opts);
-      project = data.project;
-      await pollPreview();
-      if (previewStatus === 'done') {
-        history = [{
+    const isT2I = T2I_MODELS.some(m => m.label === first.model);
+
+    if (isRefinement || !isT2I) {
+      // Re-run the latest refinement step with a new seed (undo then redo)
+      generating = true;
+      cancelled = false;
+      previewStatus = 'rendering';
+      previewError = '';
+      const redoPrompt = current.prompt;
+      const prevHistory = isRefinement ? history.slice(0, -1) : history;
+      history = [...prevHistory, { prompt: redoPrompt, model: 'Capybara I2I', seed: null, previewUrl: null }];
+      try {
+        if (isRefinement) {
+          await galleryUndo();
+        }
+        await galleryRefine({
+          prompt: redoPrompt,
+          negative_prompt: negPrompt.trim(),
+        });
+        await pollPreview();
+        if (previewStatus === 'done') {
+          history = [...prevHistory, {
+            prompt: redoPrompt,
+            model: 'Capybara I2I',
+            seed: previewSeed,
+            previewUrl,
+          }];
+        }
+      } catch (e) {
+        if (!cancelled) {
+          previewStatus = 'error';
+          previewError = e.message;
+        }
+      } finally {
+        generating = false;
+      }
+    } else {
+      // Original T2I generation — regenerate from scratch with new seed
+      generating = true;
+      cancelled = false;
+      previewUrl = null;
+      previewStatus = 'rendering';
+      previewError = '';
+      history = [{ prompt: first.prompt, model: first.model, seed: null, previewUrl: null }];
+      try {
+        const modelId = T2I_MODELS.find(m => m.label === first.model)?.id || 'hidream';
+        const opts = {
           prompt: first.prompt,
-          model: first.model,
-          seed: previewSeed,
-          previewUrl,
-        }];
+          negative_prompt: negPrompt.trim(),
+          model: modelId,
+          width: resWidth,
+          height: resHeight,
+        };
+        const data = await galleryGenerate(opts);
+        project = data.project;
+        await pollPreview();
+        if (previewStatus === 'done') {
+          history = [{
+            prompt: first.prompt,
+            model: first.model,
+            seed: previewSeed,
+            previewUrl,
+          }];
+        }
+      } catch (e) {
+        if (!cancelled) {
+          previewStatus = 'error';
+          previewError = e.message;
+        }
+      } finally {
+        generating = false;
       }
-    } catch (e) {
-      if (!cancelled) {
-        previewStatus = 'error';
-        previewError = e.message;
-      }
-    } finally {
-      generating = false;
     }
   }
 
