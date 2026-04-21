@@ -68,6 +68,7 @@ class Project(BaseModel):
     transition_active_index: int = 0
     narration_active_index: int = 0
     narration_direction: str = ""
+    narration_voice: str = ""
     narration_locked: bool = False
     score_locked: bool = False
     final_filename: Optional[str] = None

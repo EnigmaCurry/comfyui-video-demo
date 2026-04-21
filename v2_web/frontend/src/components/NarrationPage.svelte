@@ -1,11 +1,12 @@
 <script>
   import { Check, X, RotateCcw, Play, RefreshCw, Wand2, ArrowRight, Dice5 } from 'lucide-svelte';
   import { updateNarration, regenerateNarration, setNarrationActiveIndex,
-           setNarrationDirection, renderNarration, getNarrationStatus,
+           setNarrationDirection, setNarrationVoice, renderNarration, getNarrationStatus,
            rewriteNarration, lockNarration } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
-        direction: initialDirection = '', onstatus, onreset, onlocknarration } = $props();
+        direction: initialDirection = '', defaultVoice: initialVoice = '',
+        onstatus, onreset, onlocknarration } = $props();
 
   const DEFAULT_DIRECTION = "A contemplative, poetic narrator experiencing the scene firsthand. Stream of consciousness, present tense.";
   let activeIndex = $state(-1);
@@ -21,13 +22,14 @@
   ];
   let locking = $state(false);
   let direction = $state(initialDirection || DEFAULT_DIRECTION);
-  let voice = $state('despotism-doc');
+  let voice = $state(initialVoice || 'despotism-doc');
   let regenerating = $state(false);
   let directionDirty = $state(false);
   let polling = $state({});
   let renderVersion = $state({});
 
   $effect(() => { direction = initialDirection || DEFAULT_DIRECTION; });
+  $effect(() => { if (initialVoice) voice = initialVoice; });
 
   $effect(() => {
     if (initialized || transitions.length === 0) return;
@@ -264,7 +266,8 @@
     ></textarea>
     <div class="voice-row">
       <label for="voice-select">Voice</label>
-      <select id="voice-select" bind:value={voice} class="voice-select">
+      <select id="voice-select" bind:value={voice} class="voice-select"
+              onchange={() => setNarrationVoice(voice)}>
         {#each VOICES as v}
           <option value={v}>{v}</option>
         {/each}

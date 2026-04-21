@@ -747,9 +747,12 @@ async def api_lock_transitions():
 @app.put("/api/narration/direction")
 async def api_set_narration_direction(body: dict):
     proj = _get_project()
-    proj.narration_direction = body.get("direction", "")
+    if "direction" in body:
+        proj.narration_direction = body["direction"]
+    if "voice" in body:
+        proj.narration_voice = body["voice"]
     _save()
-    return {"direction": proj.narration_direction}
+    return {"direction": proj.narration_direction, "voice": proj.narration_voice}
 
 
 @app.post("/api/narration/rewrite/{transition_id}")

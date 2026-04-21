@@ -77,7 +77,8 @@ export const renderNarration = (transitionId, opts = {}) => request('POST', `/na
 export const rewriteNarration = (transitionId, instruction) => request('POST', `/narration/rewrite/${transitionId}`, { instruction });
 export const getNarrationStatus = (transitionId) => request('GET', `/narration/${transitionId}/status`);
 export const regenerateNarration = (direction) => request('POST', '/narration/regenerate', direction != null ? { direction } : null);
-export const setNarrationDirection = (direction) => request('PUT', '/narration/direction', { direction });
+export const setNarrationDirection = (direction, voice) => request('PUT', '/narration/direction', { direction, ...(voice != null ? { voice } : {}) });
+export const setNarrationVoice = (voice) => request('PUT', '/narration/direction', { voice });
 export const lockNarration = () => request('POST', '/narration/lock');
 export const setNarrationActiveIndex = (activeIndex) => request('PUT', '/narration-active-index', { active_index: activeIndex });
 

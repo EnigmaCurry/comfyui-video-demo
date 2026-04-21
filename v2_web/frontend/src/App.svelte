@@ -256,6 +256,7 @@
     <NarrationPage bind:transitions={mutableTransitions}
                    keyframes={keyframes} {projectId}
                    direction={project?.narration_direction || ''}
+                   defaultVoice={project?.narration_voice || ''}
                    onstatus={handleStatus}
                    onreset={(e) => { project = e.detail; }}
                    onlocknarration={handleLockNarration} />
