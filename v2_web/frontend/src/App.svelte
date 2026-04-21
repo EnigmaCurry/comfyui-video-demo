@@ -42,11 +42,12 @@
   let transitions = $derived(project?.transitions || []);
   let soundtrackSections = $derived(project?.soundtrack_sections || []);
 
+  let hasTransitions = $derived(transitions.length > 0);
   let enabledThrough = $derived(
     scoreLocked ? 'final' :
     narrationLocked ? 'score' :
     transitionsLocked ? 'narration' :
-    keyframesLocked ? 'transitions' :
+    (keyframesLocked || hasTransitions) ? 'transitions' :
     storyLocked ? 'keyframes' :
     premiseLocked ? 'story' :
     'premise'
@@ -241,7 +242,8 @@
                   {projectId} locked={keyframesLocked}
                   onupdated={handleUpdated} onstatus={handleStatus}
                   onreset={(e) => { project = e.detail; }}
-                  onlockkeyframes={handleLockKeyframes} />
+                  onlockkeyframes={handleLockKeyframes}
+                  onsync={(e) => { project = e.detail; }} />
 
   {:else if activeTab === 'transitions'}
     <TransitionsPage bind:transitions={mutableTransitions}

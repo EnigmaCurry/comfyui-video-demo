@@ -273,30 +273,89 @@ async def api_reset_keyframes():
     return {"project": proj.model_dump()}
 
 
-@app.post("/api/keyframes/lock")
-async def api_lock_keyframes():
-    """Lock all keyframes and generate transition descriptions."""
+@app.post("/api/keyframes/{keyframe_id}/lock")
+async def api_lock_keyframe(keyframe_id: str):
+    kf = _get_keyframe(keyframe_id)
+    kf.locked = True
+    _save()
+    return kf.model_dump()
+
+
+@app.post("/api/keyframes/{keyframe_id}/unlock")
+async def api_unlock_keyframe(keyframe_id: str):
+    kf = _get_keyframe(keyframe_id)
+    kf.locked = False
+    _save()
+    return kf.model_dump()
+
+
+@app.post("/api/keyframes/lock-all")
+async def api_lock_all_keyframes():
+    """Lock all done keyframes."""
+    proj = _get_project()
+    for kf in proj.keyframes:
+        if kf.status == KeyframeStatus.done:
+            kf.locked = True
+    proj.keyframes_locked = True
+    _save()
+    return {"project": proj.model_dump()}
+
+
+@app.post("/api/transitions/sync")
+async def api_sync_transitions():
+    """Create transitions for adjacent locked keyframe pairs, generate descriptions for new ones."""
     proj = _get_project()
     from llm import generate_transition_descriptions
     ordered = sorted(proj.keyframes, key=lambda k: k.position)
-    prompts = [kf.prompt for kf in ordered]
-    descriptions = await generate_transition_descriptions(
-        prompts, duration=proj.scene_duration, style=proj.style,
-    )
-    n_expected = len(ordered) - 1
-    proj.transitions = []
-    for i in range(n_expected):
-        desc = descriptions[i] if i < len(descriptions) else ""
-        if isinstance(desc, dict):
-            desc = " ".join(str(v) for v in desc.values())
-        proj.transitions.append(Transition(
-            position=i,
-            from_keyframe_id=ordered[i].id,
-            to_keyframe_id=ordered[i + 1].id,
-            prompt=str(desc),
-        ))
-    proj.keyframes_locked = True
-    proj.transition_active_index = 0
+
+    # Find adjacent locked pairs
+    locked_pairs = []
+    for i in range(len(ordered) - 1):
+        if ordered[i].locked and ordered[i + 1].locked:
+            locked_pairs.append((ordered[i], ordered[i + 1]))
+
+    # Keep existing transitions that still match a locked pair
+    existing = {(tr.from_keyframe_id, tr.to_keyframe_id): tr for tr in proj.transitions}
+    new_transitions = []
+    needs_description = []
+
+    for i, (from_kf, to_kf) in enumerate(locked_pairs):
+        pair = (from_kf.id, to_kf.id)
+        if pair in existing:
+            tr = existing[pair]
+            tr.position = i
+            new_transitions.append(tr)
+        else:
+            tr = Transition(
+                position=i,
+                from_keyframe_id=from_kf.id,
+                to_keyframe_id=to_kf.id,
+                prompt="",
+            )
+            new_transitions.append(tr)
+            needs_description.append((i, from_kf, to_kf))
+
+    # Generate descriptions for new transitions
+    if needs_description:
+        # Get prompts for the keyframes involved in new transitions
+        all_kf_prompts = [kf.prompt for kf in ordered if kf.locked]
+        try:
+            descriptions = await generate_transition_descriptions(
+                all_kf_prompts, duration=proj.scene_duration, style=proj.style,
+            )
+            # Map descriptions to new transitions by position
+            for idx, (pos, from_kf, to_kf) in enumerate(needs_description):
+                if pos < len(descriptions):
+                    desc = descriptions[pos]
+                    if isinstance(desc, dict):
+                        desc = " ".join(str(v) for v in desc.values())
+                    new_transitions[pos].prompt = str(desc)
+        except Exception as e:
+            print(f"Warning: failed to generate transition descriptions: {e}", flush=True)
+
+    proj.transitions = new_transitions
+    if all(kf.locked for kf in ordered if kf.status == KeyframeStatus.done):
+        proj.keyframes_locked = True
     _save()
     return {"project": proj.model_dump()}
 

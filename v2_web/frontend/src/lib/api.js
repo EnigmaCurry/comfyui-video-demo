@@ -53,7 +53,10 @@ export const T2I_MODELS = [
 export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
 export const reorderKeyframes = (ids) => request('POST', '/keyframes/reorder', ids);
 export const resetKeyframes = () => request('POST', '/keyframes/reset');
-export const lockKeyframes = () => request('POST', '/keyframes/lock');
+export const lockKeyframe = (id) => request('POST', `/keyframes/${id}/lock`);
+export const unlockKeyframe = (id) => request('POST', `/keyframes/${id}/unlock`);
+export const lockAllKeyframes = () => request('POST', '/keyframes/lock-all');
+export const syncTransitions = () => request('POST', '/transitions/sync');
 export const autoCreateKeyframes = () => request('POST', '/keyframes/auto-create');
 export const setActiveIndex = (activeIndex) => request('PUT', '/active-index', { active_index: activeIndex });
 

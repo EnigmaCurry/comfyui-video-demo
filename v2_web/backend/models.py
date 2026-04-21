@@ -26,6 +26,7 @@ class Keyframe(BaseModel):
     seed: Optional[int] = None
     image_filename: Optional[str] = None
     negative_prompt: str = ""
+    locked: bool = False
     error_message: Optional[str] = None
 
 

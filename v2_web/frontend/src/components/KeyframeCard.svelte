@@ -1,9 +1,10 @@
 <script>
-  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload } from 'lucide-svelte';
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
-           getKeyframeStatus, rewriteKeyframe, uploadKeyframeImage, T2I_MODELS } from '../lib/api.js';
+           getKeyframeStatus, rewriteKeyframe, uploadKeyframeImage, T2I_MODELS,
+           lockKeyframe, unlockKeyframe } from '../lib/api.js';
 
-  let { keyframe, index, onstatus, onupdated, ondelete, onapprove, active = false, projectId = '' } = $props();
+  let { keyframe, index, onstatus, onupdated, ondelete, onapprove, onlock, active = false, projectId = '' } = $props();
 
   let editing = $state(false);
   let editPrompt = $state('');
@@ -148,6 +149,21 @@
     }
   }
 
+  async function toggleLock() {
+    try {
+      if (keyframe.locked) {
+        await unlockKeyframe(keyframe.id);
+        keyframe.locked = false;
+      } else {
+        await lockKeyframe(keyframe.id);
+        keyframe.locked = true;
+      }
+      if (onlock) onlock({ detail: keyframe.id });
+    } catch (e) {
+      onstatus({ detail: `Lock failed: ${e.message}` });
+    }
+  }
+
   async function handleModelChange(e) {
     const newModel = e.target.value;
     keyframe.model = newModel;
@@ -245,7 +261,7 @@
   }
 </script>
 
-<div class="card" class:error={keyframe.status === 'error'} class:active>
+<div class="card" class:error={keyframe.status === 'error'} class:active class:locked={keyframe.locked}>
   <div class="card-header">
     <span class="position">{index + 1}</span>
     <span class="status-badge" class:pending={keyframe.status === 'pending'}
@@ -362,6 +378,15 @@
     <button class="btn-icon" class:btn-active={!!keyframe.negative_prompt}
             onclick={startEditNeg} title="Negative prompt">
       <ThumbsDown size={16} />
+    </button>
+    <button class="btn-icon" class:btn-locked={keyframe.locked} onclick={toggleLock}
+            title={keyframe.locked ? 'Unlock keyframe' : 'Lock keyframe'}
+            disabled={keyframe.status !== 'done'}>
+      {#if keyframe.locked}
+        <Lock size={16} />
+      {:else}
+        <Unlock size={16} />
+      {/if}
     </button>
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
@@ -662,6 +687,10 @@
 
   .btn-active {
     color: var(--warning);
+  }
+
+  .btn-locked {
+    color: var(--locked);
   }
 
   .fullscreen-overlay {

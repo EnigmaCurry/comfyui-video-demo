@@ -4,11 +4,11 @@
   import { RotateCcw, Zap, ArrowRight, Plus } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
   import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes,
-           lockKeyframes, autoCreateKeyframes, getKeyframeStatus, updateKeyframe,
-           addKeyframe } from '../lib/api.js';
+           lockAllKeyframes, autoCreateKeyframes, getKeyframeStatus, updateKeyframe,
+           addKeyframe, syncTransitions } from '../lib/api.js';
 
   let { keyframes = $bindable([]), projectId = '', locked = false,
-        onupdated, onstatus, onreset, onlockkeyframes } = $props();
+        onupdated, onstatus, onreset, onlockkeyframes, onsync } = $props();
 
   let activeIndex = $state(-1);
   let initialized = $state(false);
@@ -93,6 +93,19 @@
     }
   }
 
+  async function handleKeyframeLock() {
+    // Sync transitions whenever a keyframe is locked/unlocked
+    onstatus({ detail: 'Syncing transitions...' });
+    try {
+      const data = await syncTransitions();
+      if (onsync) onsync({ detail: data.project });
+      const lockedPairs = data.project.transitions?.length || 0;
+      onstatus({ detail: lockedPairs ? `${lockedPairs} transition(s) ready.` : '' });
+    } catch (e) {
+      onstatus({ detail: `Sync failed: ${e.message}` });
+    }
+  }
+
   async function handleAdd() {
     try {
       const kf = await addKeyframe();
@@ -156,11 +169,15 @@
 
   async function handleGoToTransitions() {
     locking = true;
-    onstatus({ detail: 'Locking keyframes and generating transition descriptions...' });
+    onstatus({ detail: 'Locking all keyframes and syncing transitions...' });
     try {
-      const data = await lockKeyframes();
+      await lockAllKeyframes();
+      for (const kf of keyframes) {
+        if (kf.status === 'done') kf.locked = true;
+      }
+      const data = await syncTransitions();
       if (onlockkeyframes) onlockkeyframes({ detail: data.project });
-      onstatus({ detail: 'Keyframes locked. Proceed to Transitions.' });
+      onstatus({ detail: 'All keyframes locked. Proceed to Transitions.' });
     } catch (e) {
       onstatus({ detail: `Failed: ${e.message}` });
     } finally {
@@ -199,6 +216,7 @@
           {onupdated}
           ondelete={handleDelete}
           onapprove={handleApprove}
+          onlock={handleKeyframeLock}
         />
       </div>
     {/each}
