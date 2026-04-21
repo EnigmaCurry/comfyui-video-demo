@@ -4,7 +4,7 @@
   import { RotateCcw, Zap, ArrowRight } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
   import { reorderKeyframes, renderKeyframe, setActiveIndex, resetKeyframes,
-           lockKeyframes, autoCreateKeyframes, getKeyframeStatus } from '../lib/api.js';
+           lockKeyframes, autoCreateKeyframes, getKeyframeStatus, updateKeyframe } from '../lib/api.js';
 
   let { keyframes = $bindable([]), projectId = '', locked = false,
         onupdated, onstatus, onreset, onlockkeyframes } = $props();
@@ -67,7 +67,13 @@
     if (nextIndex < keyframes.length) {
       activeIndex = nextIndex;
       setActiveIndex(activeIndex);
+      const currentKf = keyframes[activeIndex - 1];
       const nextKf = keyframes[nextIndex];
+      // Propagate model from current to next pending keyframe
+      if (nextKf.status === 'pending' && currentKf?.model && nextKf.model !== currentKf.model) {
+        nextKf.model = currentKf.model;
+        updateKeyframe(nextKf.id, { model: currentKf.model }).catch(() => {});
+      }
       if (nextKf.status === 'pending') {
         onstatus({ detail: `Approved #${activeIndex}. Rendering #${nextIndex + 1}...` });
         nextKf.status = 'rendering';
