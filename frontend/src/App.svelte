@@ -9,6 +9,8 @@
   import RenderPage from './components/RenderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
   import ActivityMenu from './components/ActivityMenu.svelte';
+  import ImageCreatePage from './components/ImageCreatePage.svelte';
+  import ImageGalleryPage from './components/ImageGalleryPage.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import { getCurrentProject, renderKeyframe, renderTransition, renameProject, ACTIVITIES } from './lib/api.js';
 
@@ -23,9 +25,8 @@
       { id: 'final', label: 'Final' },
     ],
     'image-generator': [
-      { id: 'premise', label: 'Premise' },
-      { id: 'story', label: 'Story' },
-      { id: 'keyframes', label: 'Gallery' },
+      { id: 'create', label: 'Create' },
+      { id: 'gallery', label: 'Gallery' },
     ],
   };
 
@@ -56,9 +57,7 @@
   let hasTransitions = $derived(transitions.length > 0);
   let enabledThrough = $derived.by(() => {
     if (activity === 'image-generator') {
-      return storyLocked ? 'keyframes' :
-             premiseLocked ? 'story' :
-             'premise';
+      return project ? 'gallery' : 'create';
     }
     // film-director
     return scoreLocked ? 'final' :
@@ -83,9 +82,7 @@
 
   function pickTab(proj) {
     if (proj.activity === 'image-generator') {
-      if (proj.story_locked && proj.keyframes?.length > 0) return 'keyframes';
-      if (proj.premise_locked) return 'story';
-      return 'premise';
+      return proj.keyframes?.length > 0 ? 'gallery' : 'create';
     }
     // film-director
     if (proj.score_locked) return 'final';
@@ -160,9 +157,13 @@
     }
   }
 
+  function defaultTab(act) {
+    return act === 'image-generator' ? 'create' : 'premise';
+  }
+
   function handleNewProject() {
     project = null;
-    activeTab = 'premise';
+    activeTab = defaultTab(activity);
     editingTitle = false;
     if (premiseRef) {
       premiseRef.setPremiseText('');
@@ -172,16 +173,15 @@
 
   function handleActivityChange(event) {
     const newActivity = event.detail;
-    // If switching activity while a project is loaded, start fresh
     if (project && (project.activity || 'film-director') !== newActivity) {
       project = null;
-      activeTab = 'premise';
       editingTitle = false;
       if (premiseRef) {
         premiseRef.setPremiseText('');
         premiseRef.setNotesText('');
       }
     }
+    activeTab = defaultTab(newActivity);
   }
 
   let statusTimer = null;
@@ -305,6 +305,15 @@
 
   {:else if activeTab === 'final'}
     <RenderPage {projectId} projectName={projectName} onstatus={handleStatus} />
+
+  {:else if activeTab === 'create'}
+    <ImageCreatePage bind:project onstatus={handleStatus}
+                     ongallery={() => activeTab = 'gallery'} />
+
+  {:else if activeTab === 'gallery'}
+    <ImageGalleryPage bind:keyframes={mutableKeyframes}
+                      {projectId} onstatus={handleStatus}
+                      oncreate={() => activeTab = 'create'} />
   {/if}
 </main>
 

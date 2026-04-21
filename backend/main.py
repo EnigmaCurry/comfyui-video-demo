@@ -123,6 +123,18 @@ async def api_rename_project(body: dict):
     return {"name": proj.name}
 
 
+@app.post("/api/projects/create")
+async def api_create_project(body: dict):
+    """Create a new project for any activity type."""
+    global current_project
+    activity = body.get("activity", "film-director")
+    name = body.get("name", "Untitled")
+    proj = Project(activity=activity, name=name)
+    current_project = proj
+    _save()
+    return {"project": proj.model_dump()}
+
+
 # ── Premise flow ────────────────────────────────────────────────────
 
 @app.post("/api/premise/suggest")

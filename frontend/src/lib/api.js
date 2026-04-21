@@ -28,6 +28,7 @@ export const listProjects = (activity) =>
 export const getCurrentProject = () => request('GET', '/projects/current');
 export const loadProject = (id) => request('POST', `/projects/${id}/load`);
 export const deleteProject = (id) => request('DELETE', `/projects/${id}`);
+export const createProject = (activity, name) => request('POST', '/projects/create', { activity, name });
 export const renameProject = (name) => request('PUT', '/projects/current/name', { name });
 
 // ── Premise ──
