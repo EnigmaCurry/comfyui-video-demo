@@ -548,6 +548,31 @@ async def api_upload_keyframe_image(keyframe_id: str, file: bytes = fastapi_File
     return kf.model_dump()
 
 
+@app.post("/api/keyframes/{keyframe_id}/load-gallery-image")
+async def api_load_gallery_image(keyframe_id: str, body: dict):
+    """Copy a gallery image into a keyframe."""
+    import shutil
+    proj = _get_project()
+    kf = _get_keyframe(keyframe_id)
+    gallery_id = body.get("gallery_image_id")
+    if not gallery_id:
+        raise HTTPException(400, "gallery_image_id is required")
+    img = next((i for i in proj.images if i.id == gallery_id), None)
+    if not img or not img.image_filename:
+        raise HTTPException(404, "Gallery image not found")
+    src = os.path.join(images_dir(proj.id), img.image_filename)
+    if not os.path.isfile(src):
+        raise HTTPException(404, "Gallery image file not found on disk")
+    dest_filename = f"{kf.id}.png"
+    dest = os.path.join(images_dir(proj.id), dest_filename)
+    shutil.copy2(src, dest)
+    kf.image_filename = dest_filename
+    kf.seed = random.randint(0, 2**32 - 1)
+    kf.status = KeyframeStatus.done
+    _save()
+    return kf.model_dump()
+
+
 @app.post("/api/keyframes/{keyframe_id}/refine")
 async def api_refine_keyframe(keyframe_id: str, body: dict):
     """Refine a keyframe image using Capybara I2I (image-to-image)."""

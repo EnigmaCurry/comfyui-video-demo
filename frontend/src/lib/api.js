@@ -60,6 +60,7 @@ export async function uploadKeyframeImage(id, file) {
   if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
   return resp.json();
 }
+export const loadGalleryImageToKeyframe = (id, galleryImageId) => request('POST', `/keyframes/${id}/load-gallery-image`, { gallery_image_id: galleryImageId });
 export const updateKeyframe = (id, updates) => request('PUT', `/keyframes/${id}`, updates);
 export const T2I_MODELS = [
   { id: 'hidream', label: 'HiDream' },

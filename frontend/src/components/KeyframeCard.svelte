@@ -2,7 +2,8 @@
   import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Paintbrush, Undo2, Redo2, Copy } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe, duplicateKeyframe,
            getKeyframeStatus, rewriteKeyframe, refineKeyframe, refineUndoKeyframe,
-           refineRedoKeyframe, uploadKeyframeImage, T2I_MODELS } from '../lib/api.js';
+           refineRedoKeyframe, uploadKeyframeImage, loadGalleryImageToKeyframe,
+           galleryList, T2I_MODELS } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onduplicate, projectId = '' } = $props();
 
@@ -16,6 +17,36 @@
   let polling = $state(false);
   let imageUrl = $state(null);
   let fullscreen = $state(false);
+  let showGalleryPicker = $state(false);
+  let galleryImages = $state([]);
+
+  async function openGalleryPicker() {
+    try {
+      const data = await galleryList();
+      galleryImages = data.images.filter(i => i.image_url);
+      if (galleryImages.length === 0) {
+        onstatus({ detail: 'No images in gallery yet.' });
+        return;
+      }
+      showGalleryPicker = true;
+    } catch (e) {
+      onstatus({ detail: `Failed to load gallery: ${e.message}` });
+    }
+  }
+
+  async function pickGalleryImage(img) {
+    showGalleryPicker = false;
+    onstatus({ detail: `Loading gallery image into keyframe ${index + 1}...` });
+    try {
+      const result = await loadGalleryImageToKeyframe(keyframe.id, img.id);
+      keyframe.image_filename = result.image_filename;
+      keyframe.seed = result.seed;
+      keyframe.status = result.status;
+      onstatus({ detail: `Keyframe ${index + 1} loaded from gallery.` });
+    } catch (err) {
+      onstatus({ detail: `Failed: ${err.message}` });
+    }
+  }
 
   $effect(() => {
     if (keyframe.image_filename && projectId) {
@@ -459,8 +490,9 @@
         <small>{keyframe.error_message || 'Unknown error'}</small>
       </div>
     {:else}
-      <div class="placeholder">
-        <span>Pending</span>
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <div class="placeholder clickable-placeholder" onclick={(e) => { e.stopPropagation(); openGalleryPicker(); }}>
+        <span>Click to load from gallery</span>
       </div>
     {/if}
   </div>
@@ -613,6 +645,25 @@
        tabindex="-1" use:focusOverlay>
     <img src={imageUrl} alt="Keyframe {index + 1} full size" />
     <div class="fullscreen-hint">Ctrl+C copy / Ctrl+V paste / Esc close</div>
+  </div>
+{/if}
+
+{#if showGalleryPicker}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="picker-overlay" onclick={() => showGalleryPicker = false}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="picker-modal" onclick={(e) => e.stopPropagation()}>
+      <h3>Select an image from gallery</h3>
+      <div class="picker-grid">
+        {#each galleryImages as img (img.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <div class="picker-item" onclick={() => pickGalleryImage(img)}>
+            <img src={img.image_url} alt={img.prompt} />
+          </div>
+        {/each}
+      </div>
+      <button class="picker-cancel" onclick={() => showGalleryPicker = false}>Cancel</button>
+    </div>
   </div>
 {/if}
 
@@ -1014,5 +1065,78 @@
     max-height: 95vh;
     object-fit: contain;
     border-radius: var(--radius);
+  }
+
+  .clickable-placeholder {
+    cursor: pointer;
+  }
+
+  .clickable-placeholder:hover {
+    color: var(--accent);
+  }
+
+  .picker-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+  }
+
+  .picker-modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    max-width: 700px;
+    max-height: 80vh;
+    overflow-y: auto;
+    width: 90%;
+  }
+
+  .picker-modal h3 {
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+
+  .picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .picker-item {
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .picker-item:hover {
+    border-color: var(--accent);
+  }
+
+  .picker-item img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+  }
+
+  .picker-cancel {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 16px;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  .picker-cancel:hover {
+    border-color: var(--text-muted);
   }
 </style>
