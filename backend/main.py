@@ -170,19 +170,22 @@ async def api_set_premise(req: SetPremiseRequest):
 
 @app.post("/api/skip-to-keyframes")
 async def api_skip_to_keyframes(body: dict | None = None):
-    """Create a new project that skips premise/story, starting at keyframes."""
+    """Skip premise/story, jumping straight to keyframes on the current project."""
     global current_project
-    name = (body or {}).get("name", "Freeform Keyframes")
-    proj = Project(
-        activity="film-director",
-        name=name,
-        premise="(freeform)",
-        premise_locked=True,
-        story_locked=True,
-        keyframes=[Keyframe(position=0, prompt="")],
-        active_index=0,
-    )
-    current_project = proj
+    name = (body or {}).get("name", None)
+    proj = current_project
+    if proj is None:
+        proj = Project(activity="film-director", name=name or "Freeform Keyframes")
+        current_project = proj
+    elif name:
+        proj.name = name
+    proj.activity = "film-director"
+    proj.premise = proj.premise or "(freeform)"
+    proj.premise_locked = True
+    proj.story_locked = True
+    if not proj.keyframes:
+        proj.keyframes = [Keyframe(position=0, prompt="")]
+    proj.active_index = 0
     _save()
     return {"project": proj.model_dump()}
 
