@@ -1057,7 +1057,7 @@ async def _do_render_narration(proj_id: str, tr: Transition, voice: str | None =
             tts_dir = settings.tts_demo_dir
             if not tts_dir:
                 # Default: sibling directory to the repo
-                repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                repo_root = os.path.dirname(os.path.dirname(__file__))
                 tts_dir = os.path.join(os.path.dirname(repo_root), "tts-demo")
             tts_script = os.path.join(tts_dir, "tts.py")
 
