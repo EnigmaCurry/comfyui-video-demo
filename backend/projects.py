@@ -19,7 +19,7 @@ def _resolve_projects_dir() -> str:
     if settings.projects_dir:
         return settings.projects_dir
     # Default: {repo_root}/projects
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(repo_root, "projects")
 
 
