@@ -558,10 +558,9 @@ async def api_refine_keyframe(keyframe_id: str, body: dict):
     # Truncate any redo entries beyond current index
     kf.refinement_history = kf.refinement_history[:kf.refinement_index + 1]
 
-    # Snapshot current image for this version
+    # Next version number — the result will be snapshotted after render completes
     version = len(kf.refinement_history)
     version_filename = f"{kf.id}_v{version}.png"
-    shutil.copy2(source_path, os.path.join(images_dir(proj.id), version_filename))
 
     seed = body.get("seed") or random.randint(0, 2**32 - 1)
     kf.status = KeyframeStatus.rendering
@@ -587,6 +586,7 @@ async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
 
     async with _render_semaphore:
         try:
+            import shutil
             server_name = await upload_image(source_path)
             base_wf = load_workflow(CAPY_I2I_WORKFLOW_PATH)
             neg_prompt = negative_prompt or "blurry, low quality, distorted, ugly, watermark, text"
@@ -602,6 +602,8 @@ async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
             filename = f"{kf.id}.png"
             dest = os.path.join(images_dir(proj_id), filename)
             await download_output(history, dest, output_type="images")
+            # Snapshot the result for redo support
+            shutil.copy2(dest, os.path.join(images_dir(proj_id), version_filename))
             kf.image_filename = filename
             kf.seed = seed
             kf.status = KeyframeStatus.done
