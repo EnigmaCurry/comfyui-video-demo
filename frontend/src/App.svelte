@@ -280,7 +280,10 @@
                   onupdated={handleUpdated} onstatus={handleStatus}
                   onreset={(e) => { project = e.detail; }}
                   ongotransitions={handleGoToTransitions}
-                  onsync={(e) => { project = e.detail; }} />
+                  onsync={(e) => {
+                    if (e.detail.id) { project = e.detail; }
+                    else if (e.detail.transitions && project) { project.transitions = e.detail.transitions; }
+                  }} />
 
   {:else if activeTab === 'transitions'}
     <TransitionsPage bind:transitions={mutableTransitions}

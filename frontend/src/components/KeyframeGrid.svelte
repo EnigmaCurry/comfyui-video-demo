@@ -32,25 +32,36 @@
     keyframes = e.detail.items;
     try {
       const ids = keyframes.map(kf => kf.id);
-      await reorderKeyframes(ids);
+      const data = await reorderKeyframes(ids);
+      syncTransitionsFromResponse(data);
     } catch (err) {
       onstatus({ detail: `Reorder failed: ${err.message}` });
     }
   }
 
+  function syncTransitionsFromResponse(data) {
+    if (data.transitions && onsync) {
+      onsync({ detail: { transitions: data.transitions } });
+    }
+  }
+
   function handleDelete(event) {
-    const id = event.detail;
+    const { id, transitions } = event.detail;
     keyframes = keyframes.filter(kf => kf.id !== id);
+    syncTransitionsFromResponse({ transitions });
   }
 
   function handleDuplicate(event) {
-    keyframes = event.detail;
+    keyframes = event.detail.keyframes;
+    syncTransitionsFromResponse(event.detail);
   }
 
   async function handleAdd() {
     try {
-      const kf = await addKeyframe();
+      const data = await addKeyframe();
+      const { transitions, ...kf } = data;
       keyframes = [...keyframes, kf];
+      syncTransitionsFromResponse(data);
       onstatus({ detail: `Added keyframe ${keyframes.length}. Drag to reorder.` });
     } catch (e) {
       onstatus({ detail: `Failed: ${e.message}` });

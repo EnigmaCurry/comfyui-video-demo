@@ -220,6 +220,18 @@ async def api_list_keyframes():
     return {"keyframes": [k.model_dump() for k in ordered]}
 
 
+def _prune_transitions(proj):
+    """Remove transitions whose keyframe pairs are no longer adjacent."""
+    ordered = sorted(proj.keyframes, key=lambda k: k.position)
+    adjacent = set()
+    for i in range(len(ordered) - 1):
+        adjacent.add((ordered[i].id, ordered[i + 1].id))
+    proj.transitions = [
+        tr for tr in proj.transitions
+        if (tr.from_keyframe_id, tr.to_keyframe_id) in adjacent
+    ]
+
+
 @app.post("/api/keyframes/add")
 async def api_add_keyframe(body: dict | None = None):
     """Add a new blank keyframe at the end."""
@@ -232,8 +244,9 @@ async def api_add_keyframe(body: dict | None = None):
         model = ordered[-1].model
     kf = Keyframe(position=next_pos, prompt=body.get("prompt", "") if body else "", model=model)
     proj.keyframes.append(kf)
+    _prune_transitions(proj)
     _save()
-    return kf.model_dump()
+    return {**kf.model_dump(), "transitions": [tr.model_dump() for tr in proj.transitions]}
 
 
 @app.post("/api/keyframes/{keyframe_id}/duplicate")
@@ -267,8 +280,9 @@ async def api_duplicate_keyframe(keyframe_id: str):
             dup.seed = src.seed
 
     proj.keyframes.append(dup)
+    _prune_transitions(proj)
     _save()
-    return {"keyframe": dup.model_dump(), "keyframes": [k.model_dump() for k in sorted(proj.keyframes, key=lambda k: k.position)]}
+    return {"keyframe": dup.model_dump(), "keyframes": [k.model_dump() for k in sorted(proj.keyframes, key=lambda k: k.position)], "transitions": [tr.model_dump() for tr in proj.transitions]}
 
 
 @app.get("/api/keyframes/{keyframe_id}/status")
@@ -311,8 +325,9 @@ async def api_delete_keyframe(keyframe_id: str):
         if os.path.exists(path):
             os.unlink(path)
     proj.keyframes = [k for k in proj.keyframes if k.id != keyframe_id]
+    _prune_transitions(proj)
     _save()
-    return {"deleted": keyframe_id}
+    return {"deleted": keyframe_id, "transitions": [tr.model_dump() for tr in proj.transitions]}
 
 
 @app.post("/api/keyframes/reorder")
@@ -322,9 +337,10 @@ async def api_reorder_keyframes(order: list[str]):
     for i, kid in enumerate(order):
         if kid in id_to_kf:
             id_to_kf[kid].position = i
+    _prune_transitions(proj)
     _save()
     ordered = sorted(proj.keyframes, key=lambda k: k.position)
-    return {"keyframes": [k.model_dump() for k in ordered]}
+    return {"keyframes": [k.model_dump() for k in ordered], "transitions": [tr.model_dump() for tr in proj.transitions]}
 
 
 @app.post("/api/keyframes/reset")

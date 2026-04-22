@@ -247,7 +247,7 @@
     onstatus({ detail: `Duplicating keyframe ${index + 1}...` });
     try {
       const data = await duplicateKeyframe(keyframe.id);
-      if (onduplicate) onduplicate({ detail: data.keyframes });
+      if (onduplicate) onduplicate({ detail: { keyframes: data.keyframes, transitions: data.transitions } });
       onstatus({ detail: `Keyframe ${index + 1} duplicated.` });
     } catch (e) {
       onstatus({ detail: `Duplicate failed: ${e.message}` });
@@ -290,8 +290,8 @@
 
   async function handleDelete() {
     try {
-      await deleteKeyframe(keyframe.id);
-      ondelete({ detail: keyframe.id });
+      const data = await deleteKeyframe(keyframe.id);
+      ondelete({ detail: { id: keyframe.id, transitions: data.transitions } });
       onstatus({ detail: `Deleted keyframe ${index + 1}` });
     } catch (e) {
       onstatus({ detail: `Delete failed: ${e.message}` });
