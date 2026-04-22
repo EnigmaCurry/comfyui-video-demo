@@ -1733,11 +1733,7 @@ def _clear_preview_stack(proj: Project):
 @app.post("/api/gallery/generate")
 async def api_gallery_generate(body: dict):
     """Generate a preview image. Creates the project if needed. Clears any existing preview stack."""
-    global current_project
-    proj = current_project
-    if proj is None or proj.activity != "image-generator":
-        proj = Project(activity="image-generator", name=body.get("name", "Untitled Gallery"))
-        current_project = proj
+    proj = _get_project()
 
     prompt = body.get("prompt", "")
     if not prompt.strip():
@@ -2100,12 +2096,7 @@ def _run_stitch_2x(src_path: str, dest_path: str, mirror_x: bool, mirror_y: bool
 @app.post("/api/gallery/filter")
 async def api_gallery_filter(body: dict):
     """Apply an image filter (pure Pillow, no ComfyUI)."""
-    global current_project
-
-    proj = current_project
-    if proj is None or proj.activity != "image-generator":
-        proj = Project(activity="image-generator", name="Untitled Gallery")
-        current_project = proj
+    proj = _get_project()
 
     source_id = body.get("source_id")
     filter_id = body.get("filter", "stitch_2x")
@@ -2280,11 +2271,7 @@ async def api_gallery_filter_save():
 @app.post("/api/gallery/upload")
 async def api_gallery_upload(file: bytes = fastapi_File(...)):
     """Upload an image directly to the gallery."""
-    global current_project
-    proj = current_project
-    if proj is None or proj.activity != "image-generator":
-        proj = Project(activity="image-generator", name="Untitled Gallery")
-        current_project = proj
+    proj = _get_project()
 
     import uuid as _uuid
     new_id = _uuid.uuid4().hex[:12]
