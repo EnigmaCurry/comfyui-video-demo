@@ -2076,6 +2076,14 @@ async def api_gallery_filter(body: dict):
     if not os.path.isfile(src_path):
         raise HTTPException(404, "Source image file not found")
 
+    # If source is the filter preview, copy it to a temp file before clearing
+    import shutil
+    tmp_src = None
+    if source_id == "filter_preview":
+        tmp_src = src_path + ".tmp"
+        shutil.copy2(src_path, tmp_src)
+        src_path = tmp_src
+
     # Clear any previous filter preview
     for img in list(proj.images):
         if img.id.startswith("filter_preview"):
@@ -2103,6 +2111,9 @@ async def api_gallery_filter(body: dict):
         import traceback
         print(f"ERROR filter: {traceback.format_exc()}", flush=True)
         raise HTTPException(500, str(e))
+    finally:
+        if tmp_src and os.path.exists(tmp_src):
+            os.unlink(tmp_src)
 
     out_img = GalleryImage(
         id=new_id,

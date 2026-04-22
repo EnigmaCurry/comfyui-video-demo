@@ -134,6 +134,14 @@
       saving = false;
     }
   }
+
+  function handleApplyToEditor() {
+    // Feed the current result back as the new source (without saving to gallery)
+    sourceId = 'filter_preview';
+    sourceUrl = resultUrl;
+    resultUrl = null;
+    resultError = '';
+  }
 </script>
 
 <svelte:window onpaste={handlePaste} />
@@ -257,6 +265,9 @@
           <img src={resultUrl} alt="Result" />
         </div>
         <div class="preview-actions">
+          <button class="apply-btn" onclick={handleApplyToEditor} disabled={processing}>
+            Apply
+          </button>
           <button class="save-btn" onclick={handleSave} disabled={saving}>
             <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
           </button>
@@ -542,6 +553,21 @@
     gap: 8px;
     margin-top: 12px;
     justify-content: flex-end;
+  }
+
+  .apply-btn {
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 8px 16px;
+  }
+
+  .apply-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
   }
 
   .save-btn {
