@@ -402,8 +402,8 @@ async def api_sync_transitions():
             new_transitions.append(tr)
             needs_description.append((i, from_kf, to_kf))
 
-    # Generate descriptions for new transitions (per pair)
-    if needs_description:
+    # Generate descriptions for new transitions (skip for freeform projects)
+    if needs_description and proj.premise != "(freeform)":
         from llm import call_llm_text
         for pos, from_kf, to_kf in needs_description:
             try:
