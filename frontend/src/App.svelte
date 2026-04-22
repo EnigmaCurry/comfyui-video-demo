@@ -8,7 +8,6 @@
   import FinalPage from './components/FinalPage.svelte';
   import RenderPage from './components/RenderPage.svelte';
   import ProjectSelector from './components/ProjectSelector.svelte';
-  import ActivityMenu from './components/ActivityMenu.svelte';
   import ImageCreatePage from './components/ImageCreatePage.svelte';
   import ImageGalleryPage from './components/ImageGalleryPage.svelte';
   import ImageEditPage from './components/ImageEditPage.svelte';
@@ -34,7 +33,6 @@
 
   let activity = $state('film-director');
   let tabs = $derived(ACTIVITY_TABS[activity] || ACTIVITY_TABS['film-director']);
-  let activityLabel = $derived(ACTIVITIES.find(a => a.id === activity)?.label || 'Film Director');
 
   let activeTab = $state('premise');
   let project = $state(null);
@@ -237,9 +235,16 @@
 
 <header>
   <div class="header-row">
-    <div>
+    <div class="header-left">
+      <div class="activity-toggle">
+        {#each ACTIVITIES as act}
+          <button class="toggle-btn" class:active={activity === act.id}
+                  onclick={() => { if (act.id !== activity) { activity = act.id; handleActivityChange({ detail: act.id }); } }}>
+            {act.label}
+          </button>
+        {/each}
+      </div>
       {#if projectName}
-        <p class="app-label">{activityLabel}</p>
         {#if editingTitle}
           <input class="title-edit" bind:value={editTitle}
                  onkeydown={handleTitleKeydown} onblur={saveTitle} autofocus />
@@ -247,15 +252,11 @@
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <h1 class="project-title clickable" onclick={startEditTitle} title="Click to rename">{projectName}</h1>
         {/if}
-      {:else}
-        <h1>{activityLabel}</h1>
-        <p class="subtitle">{ACTIVITIES.find(a => a.id === activity)?.subtitle || ''}</p>
       {/if}
     </div>
     <div class="header-actions">
       <button class="new-btn" onclick={handleNewProject}>New</button>
       <ProjectSelector {activity} onload={handleLoadProject} onstatus={handleStatus} />
-      <ActivityMenu bind:activity onchange={handleActivityChange} />
     </div>
   </div>
 </header>
@@ -352,17 +353,41 @@
     gap: 16px;
   }
 
-  h1 { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
-
-  .app-label {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    margin-bottom: 2px;
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
   }
 
-  .project-title { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
+  .activity-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .toggle-btn {
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-right: 1px solid var(--border);
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .toggle-btn:last-child { border-right: none; }
+
+  .toggle-btn:hover { color: var(--text); background: var(--bg-card-hover); }
+
+  .toggle-btn.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .project-title { font-size: 22px; font-weight: 600; margin: 0; }
 
   .project-title.clickable {
     cursor: pointer;
@@ -371,8 +396,6 @@
   }
 
   .project-title.clickable:hover { border-bottom-color: var(--text-muted); }
-
-  .subtitle { color: var(--text-dim); font-size: 15px; }
 
   .title-edit {
     font-size: 24px;
