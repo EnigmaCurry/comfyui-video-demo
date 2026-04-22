@@ -221,13 +221,13 @@
   $effect(() => { activeTab; window.scrollTo(0, 0); });
 
   let mutableKeyframes = $state([]);
-  $effect(() => { if (project?.keyframes) mutableKeyframes = project.keyframes; });
+  $effect.pre(() => { if (project?.keyframes) mutableKeyframes = project.keyframes; });
 
   let mutableTransitions = $state([]);
-  $effect(() => { if (project?.transitions) mutableTransitions = project.transitions; });
+  $effect.pre(() => { if (project?.transitions) mutableTransitions = project.transitions; });
 
   let mutableSections = $state([]);
-  $effect(() => { if (project?.soundtrack_sections) mutableSections = project.soundtrack_sections; });
+  $effect.pre(() => { if (project?.soundtrack_sections) mutableSections = project.soundtrack_sections; });
 
   init();
 </script>
