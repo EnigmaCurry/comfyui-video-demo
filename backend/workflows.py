@@ -81,6 +81,14 @@ CAPY_OUTPUT_FIELD = "filename_prefix"
 
 CAPY_I2I_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "capybara_i2i.json")
 
+# ── Image Stitch 2x node IDs ──────────────────────────────────────
+STITCH2X_IMAGE_NODES = ["12", "13", "14", "15"]
+STITCH2X_RESIZE_NODE = "21"
+STITCH2X_OUTPUT_NODE = "19"
+STITCH2X_OUTPUT_FIELD = "filename_prefix"
+
+STITCH2X_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "image_stitch_2x.json")
+
 
 # ── Available T2I models ─────────────────────────────────────────────
 T2I_MODELS = {
@@ -199,6 +207,19 @@ def patch_capybara_i2i_workflow(workflow: dict, *, input_image_name: str,
     wf[CAPY_RESIZE_NODE]["inputs"]["resize_type.width"] = width
     wf[CAPY_RESIZE_NODE]["inputs"]["resize_type.height"] = height
     wf[CAPY_OUTPUT_NODE]["inputs"][CAPY_OUTPUT_FIELD] = output_prefix
+    return wf
+
+
+def patch_image_stitch_2x_workflow(workflow: dict, *, input_image_name: str,
+                                   width: int = 2048, height: int = 2048,
+                                   output_prefix: str = "ComfyUI") -> dict:
+    """Patch 2x image stitch workflow: tile image in a 2x2 grid and resize."""
+    wf = copy.deepcopy(workflow)
+    for node_id in STITCH2X_IMAGE_NODES:
+        wf[node_id]["inputs"]["image"] = input_image_name
+    wf[STITCH2X_RESIZE_NODE]["inputs"]["resize_type.width"] = width
+    wf[STITCH2X_RESIZE_NODE]["inputs"]["resize_type.height"] = height
+    wf[STITCH2X_OUTPUT_NODE]["inputs"][STITCH2X_OUTPUT_FIELD] = output_prefix
     return wf
 
 

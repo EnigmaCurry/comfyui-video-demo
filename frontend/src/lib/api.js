@@ -122,6 +122,9 @@ export const RESOLUTIONS = [
   { label: '1920x1088 (16:9 HD)', w: 1920, h: 1088 },
   { label: '3000x3000 (1:1 XL)', w: 3000, h: 3000 },
 ];
+export const IMAGE_FILTERS = [
+  { id: 'stitch_2x', label: '2x Image Stitch' },
+];
 export const galleryGenerate = (opts) => request('POST', '/gallery/generate', opts);
 export const galleryPreviewStatus = () => request('GET', '/gallery/preview/status');
 export const galleryCancel = () => request('POST', '/gallery/cancel');
@@ -129,6 +132,7 @@ export const galleryRefine = (opts) => request('POST', '/gallery/refine', opts);
 export const galleryUndo = () => request('POST', '/gallery/undo');
 export const gallerySave = () => request('POST', '/gallery/save');
 export const galleryEdit = (imageId) => request('POST', `/gallery/edit/${imageId}`);
+export const galleryFilter = (opts) => request('POST', '/gallery/filter', opts);
 export const galleryList = () => request('GET', '/gallery');
 export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);
 export async function galleryUpload(file) {

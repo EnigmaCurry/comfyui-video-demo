@@ -11,6 +11,7 @@
   import ActivityMenu from './components/ActivityMenu.svelte';
   import ImageCreatePage from './components/ImageCreatePage.svelte';
   import ImageGalleryPage from './components/ImageGalleryPage.svelte';
+  import ImageEditPage from './components/ImageEditPage.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import { getCurrentProject, renderKeyframe, renderTransition, renameProject, ACTIVITIES } from './lib/api.js';
 
@@ -26,6 +27,7 @@
     ],
     'image-generator': [
       { id: 'create', label: 'Create' },
+      { id: 'edit', label: 'Edit' },
       { id: 'gallery', label: 'Gallery' },
     ],
   };
@@ -58,7 +60,7 @@
   let hasTransitions = $derived(transitions.length > 0);
   let enabledThrough = $derived.by(() => {
     if (activity === 'image-generator') {
-      return project ? 'gallery' : 'create';
+      return project ? 'gallery' : 'edit';
     }
     // film-director
     return scoreLocked ? 'final' :
@@ -323,6 +325,10 @@
     <ImageCreatePage bind:project onstatus={handleStatus}
                      ongallery={() => activeTab = 'gallery'}
                      bind:recreateImage />
+
+  {:else if activeTab === 'edit'}
+    <ImageEditPage bind:project onstatus={handleStatus}
+                   ongallery={() => activeTab = 'gallery'} />
 
   {:else if activeTab === 'gallery'}
     <ImageGalleryPage {projectId} onstatus={handleStatus}

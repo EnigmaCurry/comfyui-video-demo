@@ -1978,6 +1978,88 @@ async def api_gallery_delete(image_id: str):
     return {"deleted": image_id}
 
 
+@app.post("/api/gallery/filter")
+async def api_gallery_filter(body: dict):
+    """Apply a filter workflow to an uploaded image."""
+    global current_project
+    from comfyui import download_output, run_workflow, upload_image
+    from workflows import (
+        STITCH2X_WORKFLOW_PATH, load_workflow,
+        patch_image_stitch_2x_workflow,
+    )
+
+    proj = current_project
+    if proj is None or proj.activity != "image-generator":
+        proj = Project(activity="image-generator", name="Untitled Gallery")
+        current_project = proj
+
+    source_id = body.get("source_id")
+    filter_id = body.get("filter", "stitch_2x")
+    width = body.get("width", 2048)
+    height = body.get("height", 2048)
+
+    if not source_id:
+        raise HTTPException(400, "source_id is required")
+
+    # Find source image
+    src_img = None
+    for img in proj.images:
+        if img.id == source_id:
+            src_img = img
+            break
+    if not src_img or not src_img.image_filename:
+        raise HTTPException(404, "Source image not found")
+
+    src_path = os.path.join(images_dir(proj.id), src_img.image_filename)
+    if not os.path.isfile(src_path):
+        raise HTTPException(404, "Source image file not found")
+
+    # Create output gallery entry
+    import uuid as _uuid
+    new_id = _uuid.uuid4().hex[:12]
+    out_img = GalleryImage(
+        id=new_id,
+        prompt=f"(filter: {filter_id})",
+        model="filter",
+        width=width,
+        height=height,
+        status=KeyframeStatus.rendering,
+    )
+    proj.images.insert(0, out_img)
+    _save()
+
+    async def _run_filter():
+        async with _render_semaphore:
+            try:
+                comfy_name = await upload_image(src_path)
+                if filter_id == "stitch_2x":
+                    base_wf = load_workflow(STITCH2X_WORKFLOW_PATH)
+                    patched = patch_image_stitch_2x_workflow(
+                        base_wf, input_image_name=comfy_name,
+                        width=width, height=height,
+                        output_prefix=f"v2web/{new_id}",
+                    )
+                else:
+                    raise ValueError(f"Unknown filter: {filter_id}")
+                history = await run_workflow(patched, timeout=600)
+                filename = f"{new_id}.png"
+                dest = os.path.join(images_dir(proj.id), filename)
+                await download_output(history, dest, output_type="images")
+                out_img.image_filename = filename
+                out_img.status = KeyframeStatus.done
+            except Exception as e:
+                import traceback
+                print(f"ERROR filter {new_id}: {traceback.format_exc()}", flush=True)
+                out_img.status = KeyframeStatus.error
+                out_img.error_message = str(e)
+            if current_project and current_project.id == proj.id:
+                _save()
+
+    task = asyncio.create_task(_run_filter())
+    render_tasks[f"filter_{new_id}"] = task
+    return {"image_id": new_id, "project": proj.model_dump()}
+
+
 @app.post("/api/gallery/upload")
 async def api_gallery_upload(file: bytes = fastapi_File(...)):
     """Upload an image directly to the gallery."""
