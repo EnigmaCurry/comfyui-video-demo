@@ -317,7 +317,7 @@
   {/if}
 {:else}
   <div class="empty">
-    <p>No transitions yet. Approve all keyframes first.</p>
+    <p>No transitions yet. Go to Keyframes and click "Go to Transitions" when ready.</p>
   </div>
 {/if}
 
