@@ -281,7 +281,7 @@
   </div>
 </header>
 
-<TabBar {tabs} bind:active={activeTab} {enabledThrough} />
+<TabBar {tabs} bind:active={activeTab} {enabledThrough} showLocks={activity !== 'image-generator'} />
 
 <main>
   {#if activeTab === 'premise'}

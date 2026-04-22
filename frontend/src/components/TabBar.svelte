@@ -3,7 +3,7 @@
 
   // tabs: [{ id, label }]
   // enabledThrough: the furthest tab id that is reachable
-  let { tabs, active = $bindable(''), enabledThrough = 'premise' } = $props();
+  let { tabs, active = $bindable(''), enabledThrough = 'premise', showLocks = true } = $props();
 
   const tabIndex = (id) => tabs.findIndex(t => t.id === id);
   const enabledIndex = $derived(tabIndex(enabledThrough));
@@ -13,7 +13,7 @@
   }
 
   function isLocked(id) {
-    // A tab is "locked" (greyed out content) if it's before the current frontier
+    if (!showLocks) return false;
     return tabIndex(id) < enabledIndex;
   }
 </script>
