@@ -189,14 +189,6 @@
 
   function handleActivityChange(event) {
     const newActivity = event.detail;
-    if (project && (project.activity || 'film-director') !== newActivity) {
-      project = null;
-      editingTitle = false;
-      if (premiseRef) {
-        premiseRef.setPremiseText('');
-        premiseRef.setNotesText('');
-      }
-    }
     activeTab = defaultTab(newActivity);
   }
 
