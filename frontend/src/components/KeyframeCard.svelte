@@ -310,7 +310,7 @@
       </div>
     {:else}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-      <p class="prompt-text clickable" onclick={startEdit}>{keyframe.prompt}</p>
+      <p class="prompt-text clickable" class:empty={!keyframe.prompt} onclick={startEdit}>{keyframe.prompt || 'Click to enter prompt...'}</p>
     {/if}
 
     {#if editingNeg}
@@ -548,6 +548,11 @@
 
   .prompt-text.clickable:hover {
     color: var(--text);
+  }
+
+  .prompt-text.empty {
+    font-style: italic;
+    color: var(--text-muted);
   }
 
   .edit-textarea {
