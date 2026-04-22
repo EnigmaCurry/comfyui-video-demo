@@ -59,7 +59,7 @@
   let hasTransitions = $derived(transitions.length > 0);
   let enabledThrough = $derived.by(() => {
     if (activity === 'image-generator') {
-      return project ? 'gallery' : 'edit';
+      return 'gallery';
     }
     // film-director
     return scoreLocked ? 'final' :
