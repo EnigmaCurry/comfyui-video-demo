@@ -45,7 +45,8 @@
       await updateTransition(tr.id, { prompt: editPrompts[tr.id] });
       tr.prompt = editPrompts[tr.id];
       editing[tr.id] = false;
-      onstatus({ detail: `Updated transition ${tr.position + 1} prompt` });
+      onstatus({ detail: `Updated transition ${tr.position + 1} prompt. Re-rendering...` });
+      handleRerender(tr);
     } catch (e) {
       onstatus({ detail: `Update failed: ${e.message}` });
     }
