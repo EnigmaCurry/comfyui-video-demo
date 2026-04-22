@@ -1,7 +1,8 @@
 <script>
-  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush } from 'lucide-svelte';
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush, Undo2 } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
-           getKeyframeStatus, rewriteKeyframe, refineKeyframe, uploadKeyframeImage, T2I_MODELS,
+           getKeyframeStatus, rewriteKeyframe, refineKeyframe, refineUndoKeyframe,
+           uploadKeyframeImage, T2I_MODELS,
            lockKeyframe, unlockKeyframe } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onlock, projectId = '' } = $props();
@@ -46,6 +47,9 @@
         }
         if (status.image_url) {
           keyframe.image_filename = status.image_url.split('/').pop();
+        }
+        if (status.refinement_history) {
+          keyframe.refinement_history = status.refinement_history;
         }
       } catch {
         break;
@@ -153,6 +157,9 @@
   let refinePrompt = $state('');
   let refineLoading = $state(false);
 
+  let refineHistory = $derived(keyframe.refinement_history || []);
+  let canRefineUndo = $derived(refineHistory.length > 1 && keyframe.status !== 'rendering');
+
   function startRefine() {
     refinePrompt = '';
     refining = true;
@@ -165,12 +172,28 @@
     try {
       const result = await refineKeyframe(keyframe.id, refinePrompt.trim(), keyframe.negative_prompt);
       keyframe.status = 'rendering';
-      refining = false;
+      refinePrompt = '';
       onstatus({ detail: `Keyframe ${index + 1} refining...` });
     } catch (e) {
       onstatus({ detail: `Refine failed: ${e.message}` });
     } finally {
       refineLoading = false;
+    }
+  }
+
+  async function handleRefineUndo() {
+    onstatus({ detail: `Undoing refinement on keyframe ${index + 1}...` });
+    try {
+      const result = await refineUndoKeyframe(keyframe.id);
+      keyframe.status = result.status;
+      keyframe.seed = result.seed;
+      keyframe.refinement_history = result.refinement_history;
+      if (result.image_url) {
+        keyframe.image_filename = result.image_url.split('/').pop();
+      }
+      onstatus({ detail: 'Refinement undone.' });
+    } catch (e) {
+      onstatus({ detail: `Undo failed: ${e.message}` });
     }
   }
 
@@ -469,6 +492,24 @@
     {#if refining}
       <div class="refine-edit">
         <label class="refine-label">Refine image (img2img)</label>
+
+        {#if refineHistory.length > 0}
+          <div class="refine-history">
+            {#each refineHistory as entry, i}
+              <div class="refine-history-entry" class:current={i === refineHistory.length - 1}>
+                <span class="refine-history-step">{i === 0 ? 'Original' : `Refine ${i}`}</span>
+                <span class="refine-history-model">{entry.model}</span>
+                <p class="refine-history-prompt">{entry.prompt}</p>
+              </div>
+            {/each}
+          </div>
+          <div class="refine-actions">
+            <button class="btn-cancel" onclick={handleRefineUndo} disabled={!canRefineUndo}>
+              <Undo2 size={14} /> Undo
+            </button>
+          </div>
+        {/if}
+
         <textarea
           bind:value={refinePrompt}
           onkeydown={handleRefineKeydown}
@@ -483,7 +524,7 @@
             <Paintbrush size={14} /> {refineLoading ? 'Refining...' : 'Refine Image'}
           </button>
           <button class="btn-cancel" onclick={cancelRefine} disabled={refineLoading}>
-            <X size={14} /> Cancel
+            <X size={14} /> Close
           </button>
         </div>
       </div>
@@ -773,6 +814,60 @@
     color: var(--success);
     display: block;
     margin-bottom: 4px;
+  }
+
+  .refine-history {
+    max-height: 140px;
+    overflow-y: auto;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .refine-history-entry {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+  }
+
+  .refine-history-entry.current {
+    border-color: var(--success);
+  }
+
+  .refine-history-step {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-right: 6px;
+  }
+
+  .refine-history-model {
+    font-size: 10px;
+    color: var(--success);
+    background: rgba(34, 197, 94, 0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .refine-history-prompt {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.3;
+    margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .refine-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
   }
 
   .refine-btn {

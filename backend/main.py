@@ -13,6 +13,7 @@ from models import (
     GenerateStoryRequest,
     Keyframe,
     KeyframeStatus,
+    RefinementEntry,
     Project,
     RenderRequest,
     SetPremiseRequest,
@@ -243,6 +244,7 @@ async def api_get_keyframe_status(keyframe_id: str):
     return {
         "id": kf.id, "status": kf.status, "image_url": image_url,
         "seed": kf.seed, "error_message": kf.error_message,
+        "refinement_history": [e.model_dump() for e in kf.refinement_history],
     }
 
 
@@ -527,6 +529,7 @@ async def api_upload_keyframe_image(keyframe_id: str, file: bytes = fastapi_File
 @app.post("/api/keyframes/{keyframe_id}/refine")
 async def api_refine_keyframe(keyframe_id: str, body: dict):
     """Refine a keyframe image using Capybara I2I (image-to-image)."""
+    import shutil
     proj = _get_project()
     kf = _get_keyframe(keyframe_id)
     prompt = body.get("prompt", "")
@@ -542,6 +545,20 @@ async def api_refine_keyframe(keyframe_id: str, body: dict):
     if old and not old.done():
         old.cancel()
 
+    # Snapshot current image into history if this is the first refinement
+    if not kf.refinement_history:
+        orig_filename = f"{kf.id}_v0.png"
+        shutil.copy2(source_path, os.path.join(images_dir(proj.id), orig_filename))
+        kf.refinement_history.append(RefinementEntry(
+            prompt=kf.prompt, seed=kf.seed, image_filename=orig_filename,
+            model=kf.model,
+        ))
+
+    # Snapshot current image for this version
+    version = len(kf.refinement_history)
+    version_filename = f"{kf.id}_v{version}.png"
+    shutil.copy2(source_path, os.path.join(images_dir(proj.id), version_filename))
+
     seed = body.get("seed") or random.randint(0, 2**32 - 1)
     kf.status = KeyframeStatus.rendering
     kf.error_message = None
@@ -549,7 +566,8 @@ async def api_refine_keyframe(keyframe_id: str, body: dict):
 
     task = asyncio.create_task(
         _do_refine_keyframe(proj.id, kf, source_path, seed, proj.width, proj.height,
-                            prompt.strip(), body.get("negative_prompt", kf.negative_prompt))
+                            prompt.strip(), body.get("negative_prompt", kf.negative_prompt),
+                            version_filename)
     )
     render_tasks[keyframe_id] = task
     return {"id": kf.id, "status": kf.status, "seed": seed}
@@ -557,7 +575,8 @@ async def api_refine_keyframe(keyframe_id: str, body: dict):
 
 async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
                                seed: int, width: int, height: int,
-                               prompt: str, negative_prompt: str):
+                               prompt: str, negative_prompt: str,
+                               version_filename: str):
     """Refine a keyframe image using Capybara I2I."""
     from comfyui import download_output, run_workflow, upload_image
     from workflows import CAPY_I2I_WORKFLOW_PATH, load_workflow, patch_capybara_i2i_workflow
@@ -582,6 +601,11 @@ async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
             kf.image_filename = filename
             kf.seed = seed
             kf.status = KeyframeStatus.done
+            # Record in refinement history
+            kf.refinement_history.append(RefinementEntry(
+                prompt=prompt, seed=seed, image_filename=version_filename,
+                model="Capybara I2I",
+            ))
             if current_project and current_project.id == proj_id:
                 _save()
         except asyncio.CancelledError:
@@ -591,6 +615,47 @@ async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
             print(f"ERROR refining keyframe {kf.id}: {traceback.format_exc()}", flush=True)
             kf.status = KeyframeStatus.error
             kf.error_message = str(e)
+
+
+@app.post("/api/keyframes/{keyframe_id}/refine-undo")
+async def api_refine_undo(keyframe_id: str):
+    """Undo the last refinement step, restoring the previous image."""
+    import shutil
+    proj = _get_project()
+    kf = _get_keyframe(keyframe_id)
+    if len(kf.refinement_history) <= 1:
+        raise HTTPException(400, "Nothing to undo")
+
+    # Cancel any in-progress render
+    old = render_tasks.pop(keyframe_id, None)
+    if old and not old.done():
+        old.cancel()
+
+    # Remove last entry
+    removed = kf.refinement_history.pop()
+
+    # Restore the previous version's image as the current keyframe image
+    prev = kf.refinement_history[-1]
+    prev_path = os.path.join(images_dir(proj.id), prev.image_filename)
+    current_path = os.path.join(images_dir(proj.id), f"{kf.id}.png")
+    if os.path.isfile(prev_path):
+        shutil.copy2(prev_path, current_path)
+    kf.image_filename = f"{kf.id}.png"
+    kf.seed = prev.seed
+    kf.status = KeyframeStatus.done
+    kf.error_message = None
+
+    # If we're back to the original, clear history
+    if len(kf.refinement_history) <= 1:
+        kf.refinement_history = []
+
+    _save()
+    image_url = f"/api/projects/{proj.id}/images/{kf.image_filename}"
+    return {
+        "id": kf.id, "status": kf.status, "seed": kf.seed,
+        "image_url": image_url,
+        "refinement_history": [e.model_dump() for e in kf.refinement_history],
+    }
 
 
 @app.post("/api/keyframes/{keyframe_id}/rewrite")

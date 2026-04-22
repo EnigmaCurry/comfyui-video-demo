@@ -17,6 +17,13 @@ class KeyframeStatus(str, Enum):
     error = "error"
 
 
+class RefinementEntry(BaseModel):
+    prompt: str
+    seed: Optional[int] = None
+    image_filename: Optional[str] = None
+    model: str = ""
+
+
 class Keyframe(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     position: int
@@ -28,6 +35,7 @@ class Keyframe(BaseModel):
     negative_prompt: str = ""
     locked: bool = False
     error_message: Optional[str] = None
+    refinement_history: list[RefinementEntry] = Field(default_factory=list)
 
 
 class Transition(BaseModel):
