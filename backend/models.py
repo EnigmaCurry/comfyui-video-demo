@@ -36,6 +36,7 @@ class Keyframe(BaseModel):
     locked: bool = False
     error_message: Optional[str] = None
     refinement_history: list[RefinementEntry] = Field(default_factory=list)
+    refinement_index: int = -1
 
 
 class Transition(BaseModel):

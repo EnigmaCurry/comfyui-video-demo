@@ -52,6 +52,7 @@ export const rerenderKeyframe = (id, opts = {}) => request('POST', `/keyframes/$
 export const rewriteKeyframe = (id, instruction) => request('POST', `/keyframes/${id}/rewrite`, { instruction });
 export const refineKeyframe = (id, prompt, negative_prompt) => request('POST', `/keyframes/${id}/refine`, { prompt, ...(negative_prompt ? { negative_prompt } : {}) });
 export const refineUndoKeyframe = (id) => request('POST', `/keyframes/${id}/refine-undo`);
+export const refineRedoKeyframe = (id) => request('POST', `/keyframes/${id}/refine-redo`);
 export async function uploadKeyframeImage(id, file) {
   const form = new FormData();
   form.append('file', file);

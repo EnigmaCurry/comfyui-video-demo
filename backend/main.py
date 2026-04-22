@@ -245,6 +245,7 @@ async def api_get_keyframe_status(keyframe_id: str):
         "id": kf.id, "status": kf.status, "image_url": image_url,
         "seed": kf.seed, "error_message": kf.error_message,
         "refinement_history": [e.model_dump() for e in kf.refinement_history],
+        "refinement_index": kf.refinement_index,
     }
 
 
@@ -553,6 +554,10 @@ async def api_refine_keyframe(keyframe_id: str, body: dict):
             prompt=kf.prompt, seed=kf.seed, image_filename=orig_filename,
             model=kf.model,
         ))
+        kf.refinement_index = 0
+
+    # Truncate any redo entries beyond current index
+    kf.refinement_history = kf.refinement_history[:kf.refinement_index + 1]
 
     # Snapshot current image for this version
     version = len(kf.refinement_history)
@@ -601,11 +606,12 @@ async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
             kf.image_filename = filename
             kf.seed = seed
             kf.status = KeyframeStatus.done
-            # Record in refinement history
+            # Record in refinement history and advance index
             kf.refinement_history.append(RefinementEntry(
                 prompt=prompt, seed=seed, image_filename=version_filename,
                 model="Capybara I2I",
             ))
+            kf.refinement_index = len(kf.refinement_history) - 1
             if current_project and current_project.id == proj_id:
                 _save()
         except asyncio.CancelledError:
@@ -617,45 +623,63 @@ async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
             kf.error_message = str(e)
 
 
-@app.post("/api/keyframes/{keyframe_id}/refine-undo")
-async def api_refine_undo(keyframe_id: str):
-    """Undo the last refinement step, restoring the previous image."""
+def _refine_restore(proj, kf, idx):
+    """Restore keyframe image from refinement history at given index."""
     import shutil
-    proj = _get_project()
-    kf = _get_keyframe(keyframe_id)
-    if len(kf.refinement_history) <= 1:
-        raise HTTPException(400, "Nothing to undo")
-
-    # Cancel any in-progress render
-    old = render_tasks.pop(keyframe_id, None)
-    if old and not old.done():
-        old.cancel()
-
-    # Remove last entry
-    removed = kf.refinement_history.pop()
-
-    # Restore the previous version's image as the current keyframe image
-    prev = kf.refinement_history[-1]
-    prev_path = os.path.join(images_dir(proj.id), prev.image_filename)
-    current_path = os.path.join(images_dir(proj.id), f"{kf.id}.png")
-    if os.path.isfile(prev_path):
-        shutil.copy2(prev_path, current_path)
+    entry = kf.refinement_history[idx]
+    src = os.path.join(images_dir(proj.id), entry.image_filename)
+    dst = os.path.join(images_dir(proj.id), f"{kf.id}.png")
+    if os.path.isfile(src):
+        shutil.copy2(src, dst)
     kf.image_filename = f"{kf.id}.png"
-    kf.seed = prev.seed
+    kf.seed = entry.seed
+    kf.refinement_index = idx
     kf.status = KeyframeStatus.done
     kf.error_message = None
 
-    # If we're back to the original, clear history
-    if len(kf.refinement_history) <= 1:
-        kf.refinement_history = []
 
-    _save()
+def _refine_response(proj, kf):
     image_url = f"/api/projects/{proj.id}/images/{kf.image_filename}"
     return {
         "id": kf.id, "status": kf.status, "seed": kf.seed,
         "image_url": image_url,
         "refinement_history": [e.model_dump() for e in kf.refinement_history],
+        "refinement_index": kf.refinement_index,
     }
+
+
+@app.post("/api/keyframes/{keyframe_id}/refine-undo")
+async def api_refine_undo(keyframe_id: str):
+    """Move back one step in refinement history."""
+    proj = _get_project()
+    kf = _get_keyframe(keyframe_id)
+    if kf.refinement_index <= 0:
+        raise HTTPException(400, "Nothing to undo")
+
+    old = render_tasks.pop(keyframe_id, None)
+    if old and not old.done():
+        old.cancel()
+
+    _refine_restore(proj, kf, kf.refinement_index - 1)
+    _save()
+    return _refine_response(proj, kf)
+
+
+@app.post("/api/keyframes/{keyframe_id}/refine-redo")
+async def api_refine_redo(keyframe_id: str):
+    """Move forward one step in refinement history."""
+    proj = _get_project()
+    kf = _get_keyframe(keyframe_id)
+    if kf.refinement_index >= len(kf.refinement_history) - 1:
+        raise HTTPException(400, "Nothing to redo")
+
+    old = render_tasks.pop(keyframe_id, None)
+    if old and not old.done():
+        old.cancel()
+
+    _refine_restore(proj, kf, kf.refinement_index + 1)
+    _save()
+    return _refine_response(proj, kf)
 
 
 @app.post("/api/keyframes/{keyframe_id}/rewrite")

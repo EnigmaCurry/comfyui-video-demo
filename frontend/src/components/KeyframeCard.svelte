@@ -1,8 +1,8 @@
 <script>
-  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush, Undo2 } from 'lucide-svelte';
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush, Undo2, Redo2 } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
            getKeyframeStatus, rewriteKeyframe, refineKeyframe, refineUndoKeyframe,
-           uploadKeyframeImage, T2I_MODELS,
+           refineRedoKeyframe, uploadKeyframeImage, T2I_MODELS,
            lockKeyframe, unlockKeyframe } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onlock, projectId = '' } = $props();
@@ -50,6 +50,9 @@
         }
         if (status.refinement_history) {
           keyframe.refinement_history = status.refinement_history;
+        }
+        if (status.refinement_index != null) {
+          keyframe.refinement_index = status.refinement_index;
         }
       } catch {
         break;
@@ -158,7 +161,9 @@
   let refineLoading = $state(false);
 
   let refineHistory = $derived(keyframe.refinement_history || []);
-  let canRefineUndo = $derived(refineHistory.length > 1 && keyframe.status !== 'rendering');
+  let refineIndex = $derived(keyframe.refinement_index ?? -1);
+  let canRefineUndo = $derived(refineIndex > 0 && keyframe.status !== 'rendering');
+  let canRefineRedo = $derived(refineIndex >= 0 && refineIndex < refineHistory.length - 1 && keyframe.status !== 'rendering');
 
   function startRefine() {
     refinePrompt = '';
@@ -181,19 +186,33 @@
     }
   }
 
+  function applyRefineResult(result) {
+    keyframe.status = result.status;
+    keyframe.seed = result.seed;
+    keyframe.refinement_history = result.refinement_history;
+    keyframe.refinement_index = result.refinement_index;
+    if (result.image_url) {
+      keyframe.image_filename = result.image_url.split('/').pop();
+    }
+  }
+
   async function handleRefineUndo() {
     onstatus({ detail: `Undoing refinement on keyframe ${index + 1}...` });
     try {
-      const result = await refineUndoKeyframe(keyframe.id);
-      keyframe.status = result.status;
-      keyframe.seed = result.seed;
-      keyframe.refinement_history = result.refinement_history;
-      if (result.image_url) {
-        keyframe.image_filename = result.image_url.split('/').pop();
-      }
+      applyRefineResult(await refineUndoKeyframe(keyframe.id));
       onstatus({ detail: 'Refinement undone.' });
     } catch (e) {
       onstatus({ detail: `Undo failed: ${e.message}` });
+    }
+  }
+
+  async function handleRefineRedo() {
+    onstatus({ detail: `Redoing refinement on keyframe ${index + 1}...` });
+    try {
+      applyRefineResult(await refineRedoKeyframe(keyframe.id));
+      onstatus({ detail: 'Refinement redone.' });
+    } catch (e) {
+      onstatus({ detail: `Redo failed: ${e.message}` });
     }
   }
 
@@ -496,7 +515,7 @@
         {#if refineHistory.length > 0}
           <div class="refine-history">
             {#each refineHistory as entry, i}
-              <div class="refine-history-entry" class:current={i === refineHistory.length - 1}>
+              <div class="refine-history-entry" class:current={i === refineIndex} class:future={i > refineIndex}>
                 <span class="refine-history-step">{i === 0 ? 'Original' : `Refine ${i}`}</span>
                 <span class="refine-history-model">{entry.model}</span>
                 <p class="refine-history-prompt">{entry.prompt}</p>
@@ -506,6 +525,9 @@
           <div class="refine-actions">
             <button class="btn-cancel" onclick={handleRefineUndo} disabled={!canRefineUndo}>
               <Undo2 size={14} /> Undo
+            </button>
+            <button class="btn-cancel" onclick={handleRefineRedo} disabled={!canRefineRedo}>
+              <Redo2 size={14} /> Redo
             </button>
           </div>
         {/if}
@@ -834,6 +856,10 @@
 
   .refine-history-entry.current {
     border-color: var(--success);
+  }
+
+  .refine-history-entry.future {
+    opacity: 0.45;
   }
 
   .refine-history-step {
