@@ -89,6 +89,17 @@ STITCH2X_OUTPUT_FIELD = "filename_prefix"
 
 STITCH2X_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "image_stitch_2x.json")
 
+# ── Upscale node IDs ──────────────────────────────────────────────
+UPSCALE_IMAGE_NODE = "77"
+UPSCALE_PROMPT_NODE = "87:67"
+UPSCALE_NEG_PROMPT_NODE = "87:71"
+UPSCALE_SEED_NODE = "87:69"
+UPSCALE_SEED_FIELD = "seed"
+UPSCALE_OUTPUT_NODE = "9"
+UPSCALE_OUTPUT_FIELD = "filename_prefix"
+
+UPSCALE_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "upscale.json")
+
 
 # ── Available T2I models ─────────────────────────────────────────────
 T2I_MODELS = {
@@ -220,6 +231,17 @@ def patch_image_stitch_2x_workflow(workflow: dict, *, input_image_name: str,
     wf[STITCH2X_RESIZE_NODE]["inputs"]["resize_type.width"] = width
     wf[STITCH2X_RESIZE_NODE]["inputs"]["resize_type.height"] = height
     wf[STITCH2X_OUTPUT_NODE]["inputs"][STITCH2X_OUTPUT_FIELD] = output_prefix
+    return wf
+
+
+def patch_upscale_workflow(workflow: dict, *, input_image_name: str,
+                          seed_value: int,
+                          output_prefix: str = "ComfyUI") -> dict:
+    """Patch upscale workflow: RealESRGAN + z_image_turbo refinement."""
+    wf = copy.deepcopy(workflow)
+    wf[UPSCALE_IMAGE_NODE]["inputs"]["image"] = input_image_name
+    wf[UPSCALE_SEED_NODE]["inputs"][UPSCALE_SEED_FIELD] = seed_value
+    wf[UPSCALE_OUTPUT_NODE]["inputs"][UPSCALE_OUTPUT_FIELD] = output_prefix
     return wf
 
 

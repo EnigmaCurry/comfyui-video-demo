@@ -125,6 +125,7 @@ export const RESOLUTIONS = [
 export const IMAGE_FILTERS = [
   { id: 'stitch_2x', label: '2x Grid' },
   { id: 'integer_crop', label: 'Integer Crop' },
+  { id: 'upscale', label: 'Upscale', slow: true },
 ];
 export const galleryGenerate = (opts) => request('POST', '/gallery/generate', opts);
 export const galleryPreviewStatus = () => request('GET', '/gallery/preview/status');
@@ -134,6 +135,7 @@ export const galleryUndo = () => request('POST', '/gallery/undo');
 export const gallerySave = () => request('POST', '/gallery/save');
 export const galleryEdit = (imageId) => request('POST', `/gallery/edit/${imageId}`);
 export const galleryFilter = (opts) => request('POST', '/gallery/filter', opts);
+export const galleryFilterStatus = () => request('GET', '/gallery/filter/status');
 export const galleryFilterSave = () => request('POST', '/gallery/filter/save');
 export const galleryList = () => request('GET', '/gallery');
 export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);

@@ -1,6 +1,6 @@
 <script>
   import { X, ClipboardPaste, Save } from 'lucide-svelte';
-  import { galleryFilter, galleryFilterSave, galleryUpload, galleryList, IMAGE_FILTERS } from '../lib/api.js';
+  import { galleryFilter, galleryFilterStatus, galleryFilterSave, galleryUpload, galleryList, IMAGE_FILTERS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, editImage = $bindable(null) } = $props();
 
@@ -69,7 +69,9 @@
     showGalleryPicker = false;
   }
 
-  // Auto-preview when source or settings change
+  let isSlow = $derived(IMAGE_FILTERS.find(f => f.id === filter)?.slow || false);
+
+  // Auto-preview for instant filters when source or settings change
   $effect(() => {
     const sid = sourceId;
     const f = filter;
@@ -77,11 +79,17 @@
     const my = mirrorY;
     const d = divisor;
     const p = position;
-    if (!sid) return;
-    runPreview(sid, f, mx, my, d, p);
+    const slow = IMAGE_FILTERS.find(x => x.id === f)?.slow;
+    if (!sid || slow) return;
+    runFilter(sid, f, mx, my, d, p);
   });
 
-  async function runPreview(sid, f, mx, my, d, p) {
+  async function handleRun() {
+    if (!sourceId) return;
+    runFilter(sourceId, filter, mirrorX, mirrorY, divisor, position);
+  }
+
+  async function runFilter(sid, f, mx, my, d, p) {
     processing = true;
     resultUrl = null;
     resultError = '';
@@ -92,12 +100,36 @@
         divisor: d, position: p,
       });
       project = data.project;
-      resultUrl = data.image_url;
+      if (data.async) {
+        // Poll for completion
+        await pollFilterResult();
+      } else {
+        resultUrl = data.image_url;
+        processing = false;
+      }
     } catch (e) {
       resultError = e.message;
-    } finally {
       processing = false;
     }
+  }
+
+  async function pollFilterResult() {
+    const interval = setInterval(async () => {
+      try {
+        const data = await galleryFilterStatus();
+        if (data.status === 'done') {
+          clearInterval(interval);
+          resultUrl = `${data.image_url}?t=${Date.now()}`;
+          processing = false;
+        } else if (data.status === 'error') {
+          clearInterval(interval);
+          resultError = data.error_message || 'Filter failed';
+          processing = false;
+        }
+      } catch {
+        // keep polling
+      }
+    }, 2000);
   }
 
   // Consume editImage prop from gallery
@@ -253,6 +285,14 @@
                 {/each}
               {/each}
             </div>
+          </div>
+        {/if}
+
+        {#if isSlow}
+          <div class="actions">
+            <button class="run-btn" onclick={handleRun} disabled={processing || !sourceId}>
+              {processing ? 'Processing...' : 'Run'}
+            </button>
           </div>
         {/if}
 
@@ -513,6 +553,24 @@
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+
+  .run-btn {
+    background: var(--accent);
+    color: white;
+    font-weight: 500;
+    padding: 10px 28px;
+    font-size: 15px;
+  }
+
+  .run-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
   }
 
   /* Preview */
