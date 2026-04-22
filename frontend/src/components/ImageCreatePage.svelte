@@ -2,7 +2,7 @@
   import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, Columns2 } from 'lucide-svelte';
   import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, galleryList, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
-  let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null) } = $props();
+  let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null), kleinImage = $bindable(null) } = $props();
 
   // Form state
   let prompt = $state('');
@@ -349,6 +349,18 @@
   }
 
   // Handle recreate from gallery — load image into refinement mode
+  $effect(() => {
+    if (kleinImage) {
+      const img = kleinImage;
+      kleinImage = null;
+      clearAll();
+      model = 'flux2_klein';
+      figure1Id = img.id;
+      fetchGalleryImages();
+      onstatus?.({ detail: 'Klein model selected — choose a second image.' });
+    }
+  });
+
   $effect(() => {
     if (recreateImage) {
       const img = recreateImage;

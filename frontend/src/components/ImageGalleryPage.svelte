@@ -1,8 +1,8 @@
 <script>
-  import { Copy, Trash2, Plus, RefreshCw, ChevronLeft, ChevronRight, Pencil } from 'lucide-svelte';
+  import { Copy, Trash2, Plus, RefreshCw, ChevronLeft, ChevronRight, Pencil, Combine } from 'lucide-svelte';
   import { galleryList, galleryDelete, galleryUpload } from '../lib/api.js';
 
-  let { projectId = '', onstatus, oncreate, onrecreate, onedit } = $props();
+  let { projectId = '', onstatus, oncreate, onrecreate, onedit, onklein } = $props();
 
   let images = $state([]);
   let loading = $state(true);
@@ -159,6 +159,9 @@
               </button>
               <button class="icon-btn" onclick={() => onrecreate?.({ detail: img })} title="Recreate in generator">
                 <RefreshCw size={14} />
+              </button>
+              <button class="icon-btn" onclick={() => onklein?.({ detail: img })} title="Combine with Klein">
+                <Combine size={14} />
               </button>
               <button class="icon-btn" onclick={() => handleCopy(img)} title="Copy to clipboard">
                 <Copy size={14} />
