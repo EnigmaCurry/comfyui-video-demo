@@ -275,6 +275,8 @@
   {:else if activeTab === 'keyframes'}
     <KeyframeGrid bind:keyframes={mutableKeyframes}
                   {projectId} locked={keyframesLocked}
+                  projectWidth={project?.width || 1024}
+                  projectHeight={project?.height || 576}
                   onupdated={handleUpdated} onstatus={handleStatus}
                   onreset={(e) => { project = e.detail; }}
                   onlockkeyframes={handleLockKeyframes}

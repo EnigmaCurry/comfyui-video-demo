@@ -6,19 +6,8 @@
         projectWidth = 1024, projectHeight = 576, projectSceneCount = 6,
         projectSceneDuration = 10 } = $props();
 
-  const RESOLUTIONS = [
-    { label: '512x512 (1:1)', w: 512, h: 512 },
-    { label: '768x512 (3:2)', w: 768, h: 512 },
-    { label: '1024x576 (16:9)', w: 1024, h: 576 },
-    { label: '1024x768 (4:3)', w: 1024, h: 768 },
-    { label: '1024x1024 (1:1)', w: 1024, h: 1024 },
-    { label: '1280x768 (5:3)', w: 1280, h: 768 },
-    { label: '1920x1088 (16:9 HD)', w: 1920, h: 1088 },
-  ];
   let sceneCount = $state(6);
   let sceneDuration = $state(10);
-  let resWidth = $state(1024);
-  let resHeight = $state(576);
   let generating = $state(false);
 
   let arcLabel = $derived(
@@ -37,7 +26,7 @@
     generating = true;
     onstatus({ detail: `Generating ${sceneCount}-scene story...` });
     try {
-      const data = await generateStory(sceneCount, sceneDuration, resWidth, resHeight);
+      const data = await generateStory(sceneCount, sceneDuration, projectWidth, projectHeight);
       onstory({ detail: data.project });
       onstatus({ detail: `Story generated with ${data.project.keyframes.length} scenes. Proceed to Keyframes.` });
     } catch (e) {
@@ -87,18 +76,6 @@
         <input id="scene-dur" type="number" min="3" max="60"
                bind:value={sceneDuration} disabled={generating} class="num-input" />
         <span class="hint">seconds</span>
-      </div>
-      <div class="control-group">
-        <label for="resolution">Resolution</label>
-        <select id="resolution" disabled={generating} class="res-select"
-                onchange={(e) => {
-                  const r = RESOLUTIONS[e.target.selectedIndex];
-                  resWidth = r.w; resHeight = r.h;
-                }}>
-          {#each RESOLUTIONS as r}
-            <option selected={r.w === resWidth && r.h === resHeight}>{r.label}</option>
-          {/each}
-        </select>
       </div>
       <div class="control-group">
         <span class="total">Total: ~{durationLabel}</span>
@@ -226,16 +203,6 @@
     font-size: 14px;
     color: var(--text-dim);
     font-weight: 500;
-  }
-
-  .res-select {
-    font-family: inherit;
-    font-size: 14px;
-    color: var(--text);
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 6px 10px;
   }
 
   .generate-btn {

@@ -5,9 +5,10 @@
   import KeyframeCard from './KeyframeCard.svelte';
   import { reorderKeyframes, resetKeyframes,
            lockAllKeyframes, autoCreateKeyframes, getKeyframeStatus,
-           addKeyframe, syncTransitions } from '../lib/api.js';
+           addKeyframe, syncTransitions, setResolution, RESOLUTIONS } from '../lib/api.js';
 
   let { keyframes = $bindable([]), projectId = '', locked = false,
+        projectWidth = 1024, projectHeight = 576,
         onupdated, onstatus, onreset, onlockkeyframes, onsync } = $props();
 
   let autoCreating = $state(false);
@@ -112,6 +113,16 @@
     }
   }
 
+  async function handleResolutionChange(e) {
+    const r = RESOLUTIONS[e.target.selectedIndex];
+    try {
+      await setResolution(r.w, r.h);
+      onstatus({ detail: `Resolution set to ${r.w}×${r.h}. New renders will use this size.` });
+    } catch (err) {
+      onstatus({ detail: `Failed: ${err.message}` });
+    }
+  }
+
   async function handleGoToTransitions() {
     locking = true;
     onstatus({ detail: 'Locking all keyframes and syncing transitions...' });
@@ -144,6 +155,11 @@
         <Zap size={14} /> {autoCreating ? 'Creating...' : 'Auto Create'}
       </button>
     {/if}
+    <select class="res-select" onchange={handleResolutionChange}>
+      {#each RESOLUTIONS as r}
+        <option selected={r.w === projectWidth && r.h === projectHeight}>{r.label}</option>
+      {/each}
+    </select>
   </div>
 {/if}
 
@@ -203,6 +219,17 @@
   .toolbar-btn:hover:not(:disabled) {
     color: var(--text-dim);
     border-color: var(--text-muted);
+  }
+
+  .res-select {
+    margin-left: auto;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text-dim);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px;
   }
 
   .grid {

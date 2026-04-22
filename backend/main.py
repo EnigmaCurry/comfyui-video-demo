@@ -124,6 +124,15 @@ async def api_rename_project(body: dict):
     return {"name": proj.name}
 
 
+@app.put("/api/projects/current/resolution")
+async def api_set_resolution(body: dict):
+    proj = _get_project()
+    proj.width = body.get("width", proj.width)
+    proj.height = body.get("height", proj.height)
+    _save()
+    return {"width": proj.width, "height": proj.height}
+
+
 @app.post("/api/projects/create")
 async def api_create_project(body: dict):
     """Create a new project for any activity type."""
