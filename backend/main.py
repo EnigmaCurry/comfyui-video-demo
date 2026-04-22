@@ -1958,7 +1958,7 @@ async def api_gallery_list():
     proj = _get_project()
     results = []
     for img in proj.images:
-        if img.id.startswith("preview"):
+        if img.id.startswith("preview") or img.id.startswith("filter_preview"):
             continue
         image_url = f"/api/projects/{proj.id}/images/{img.image_filename}" if img.image_filename else None
         results.append({**img.model_dump(), "image_url": image_url})
