@@ -39,6 +39,10 @@
     keyframes = keyframes.filter(kf => kf.id !== id);
   }
 
+  function handleDuplicate(event) {
+    keyframes = event.detail;
+  }
+
   async function handleKeyframeLock() {
     // Sync transitions whenever a keyframe is locked/unlocked
     onstatus({ detail: 'Syncing transitions...' });
@@ -178,6 +182,7 @@
           {onupdated}
           ondelete={handleDelete}
           onlock={handleKeyframeLock}
+          onduplicate={handleDuplicate}
         />
       </div>
     {/each}

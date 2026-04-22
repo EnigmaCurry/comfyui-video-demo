@@ -236,6 +236,41 @@ async def api_add_keyframe(body: dict | None = None):
     return kf.model_dump()
 
 
+@app.post("/api/keyframes/{keyframe_id}/duplicate")
+async def api_duplicate_keyframe(keyframe_id: str):
+    """Duplicate a keyframe, inserting the copy right after the original."""
+    import shutil
+    proj = _get_project()
+    src = _get_keyframe(keyframe_id)
+    ordered = sorted(proj.keyframes, key=lambda k: k.position)
+
+    # Shift positions of keyframes after the source
+    for kf in ordered:
+        if kf.position > src.position:
+            kf.position += 1
+
+    dup = Keyframe(
+        position=src.position + 1,
+        prompt=src.prompt,
+        model=src.model,
+        negative_prompt=src.negative_prompt,
+        status=KeyframeStatus.done if src.image_filename else KeyframeStatus.pending,
+    )
+
+    # Copy the image file if it exists
+    if src.image_filename:
+        src_path = os.path.join(images_dir(proj.id), src.image_filename)
+        if os.path.isfile(src_path):
+            dup_filename = f"{dup.id}.png"
+            shutil.copy2(src_path, os.path.join(images_dir(proj.id), dup_filename))
+            dup.image_filename = dup_filename
+            dup.seed = src.seed
+
+    proj.keyframes.append(dup)
+    _save()
+    return {"keyframe": dup.model_dump(), "keyframes": [k.model_dump() for k in sorted(proj.keyframes, key=lambda k: k.position)]}
+
+
 @app.get("/api/keyframes/{keyframe_id}/status")
 async def api_get_keyframe_status(keyframe_id: str):
     kf = _get_keyframe(keyframe_id)

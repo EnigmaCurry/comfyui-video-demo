@@ -67,6 +67,7 @@ export const T2I_MODELS = [
   { id: 'z_image', label: 'Z-Image' },
 ];
 export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
+export const duplicateKeyframe = (id) => request('POST', `/keyframes/${id}/duplicate`);
 export const reorderKeyframes = (ids) => request('POST', '/keyframes/reorder', ids);
 export const resetKeyframes = () => request('POST', '/keyframes/reset');
 export const lockKeyframe = (id) => request('POST', `/keyframes/${id}/lock`);

@@ -1,11 +1,11 @@
 <script>
-  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush, Undo2, Redo2 } from 'lucide-svelte';
-  import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush, Undo2, Redo2, Copy } from 'lucide-svelte';
+  import { rerenderKeyframe, updateKeyframe, deleteKeyframe, duplicateKeyframe,
            getKeyframeStatus, rewriteKeyframe, refineKeyframe, refineUndoKeyframe,
            refineRedoKeyframe, uploadKeyframeImage, T2I_MODELS,
            lockKeyframe, unlockKeyframe } from '../lib/api.js';
 
-  let { keyframe, index, onstatus, onupdated, ondelete, onlock, projectId = '' } = $props();
+  let { keyframe, index, onstatus, onupdated, ondelete, onlock, onduplicate, projectId = '' } = $props();
 
   let editing = $state(false);
   let editPrompt = $state('');
@@ -241,6 +241,17 @@
       submitRefine();
     } else if (e.key === 'Escape') {
       cancelRefine();
+    }
+  }
+
+  async function handleDuplicate() {
+    onstatus({ detail: `Duplicating keyframe ${index + 1}...` });
+    try {
+      const data = await duplicateKeyframe(keyframe.id);
+      if (onduplicate) onduplicate({ detail: data.keyframes });
+      onstatus({ detail: `Keyframe ${index + 1} duplicated.` });
+    } catch (e) {
+      onstatus({ detail: `Duplicate failed: ${e.message}` });
     }
   }
 
@@ -591,6 +602,9 @@
     <button class="btn-icon" class:btn-active={!!keyframe.negative_prompt}
             onclick={startEditNeg} title="Negative prompt">
       <ThumbsDown size={16} />
+    </button>
+    <button class="btn-icon" onclick={handleDuplicate} title="Duplicate keyframe">
+      <Copy size={16} />
     </button>
     <button class="btn-icon" class:btn-locked={keyframe.locked} onclick={toggleLock}
             title={keyframe.locked ? 'Unlock keyframe' : 'Lock keyframe'}
@@ -952,6 +966,7 @@
 
   .card-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     padding: 8px 14px;
     border-top: 1px solid var(--border);
