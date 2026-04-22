@@ -724,6 +724,8 @@ async def api_update_transition(transition_id: str, req: UpdateTransitionRequest
         tr.prompt = req.prompt
     if req.negative_prompt is not None:
         tr.negative_prompt = req.negative_prompt
+    if req.duration is not None:
+        tr.duration = req.duration if req.duration > 0 else None
     _save()
     return tr.model_dump()
 
@@ -812,7 +814,7 @@ async def api_render_transition(transition_id: str, req: TransitionRenderRequest
     width = proj.width
     height = proj.height
     frame_rate = req.frame_rate if req else 25
-    duration = req.duration_seconds if req else proj.scene_duration
+    duration = tr.duration or (req.duration_seconds if req else proj.scene_duration)
     old = render_tasks.pop(transition_id, None)
     if old and not old.done():
         old.cancel()
@@ -843,7 +845,8 @@ async def api_auto_create_transitions():
             seed = random.randint(0, 2**32 - 1)
             tr.status = KeyframeStatus.rendering
             await _do_render_transition(
-                proj.id, tr, seed, proj.width, proj.height, 25, proj.scene_duration
+                proj.id, tr, seed, proj.width, proj.height, 25,
+                tr.duration or proj.scene_duration
             )
             rendered += 1
     proj.transition_active_index = len(ordered)

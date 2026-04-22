@@ -46,6 +46,7 @@ class Transition(BaseModel):
     to_keyframe_id: str
     prompt: str
     negative_prompt: str = ""
+    duration: Optional[int] = None  # per-transition override; None = use project default
     status: KeyframeStatus = KeyframeStatus.pending
     seed: Optional[int] = None
     video_filename: Optional[str] = None
@@ -144,6 +145,7 @@ class UpdateKeyframeRequest(BaseModel):
 class UpdateTransitionRequest(BaseModel):
     prompt: Optional[str] = None
     negative_prompt: Optional[str] = None
+    duration: Optional[int] = None
 
 
 class TransitionRenderRequest(BaseModel):

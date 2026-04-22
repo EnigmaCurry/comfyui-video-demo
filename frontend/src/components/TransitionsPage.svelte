@@ -6,7 +6,8 @@
            autoCreateTransitions, lockTransitions } from '../lib/api.js';
 
   let { transitions = $bindable([]), keyframes = [], projectId = '',
-        locked = false, onstatus, onreset, onlocktransitions } = $props();
+        locked = false, projectSceneDuration = 10,
+        onstatus, onreset, onlocktransitions } = $props();
 
   let autoCreating = $state(false);
   let locking = $state(false);
@@ -70,6 +71,18 @@
   }
 
   function cancelNegEdit(tr) { editingNeg[tr.id] = false; }
+
+  async function handleDurationChange(tr, e) {
+    const val = parseInt(e.target.value, 10);
+    if (isNaN(val) || val < 1) return;
+    tr.duration = val;
+    try {
+      await updateTransition(tr.id, { duration: val });
+      onstatus({ detail: `Transition ${tr.position + 1} duration set to ${val}s. Re-render to apply.` });
+    } catch (err) {
+      onstatus({ detail: `Failed: ${err.message}` });
+    }
+  }
 
   async function handleRender(tr) {
     onstatus({ detail: `Rendering transition ${tr.position + 1}...` });
@@ -199,6 +212,17 @@
                 class:error={tr.status === 'error'}>
             {tr.status}
           </span>
+          {#if !locked}
+            <span class="duration-control">
+              <input type="number" min="1" max="120"
+                     value={tr.duration || projectSceneDuration}
+                     onchange={(e) => handleDurationChange(tr, e)}
+                     class="duration-input" />
+              <span class="duration-label">sec</span>
+            </span>
+          {:else}
+            <span class="duration-display">{tr.duration || projectSceneDuration}s</span>
+          {/if}
         </div>
 
         <div class="keyframe-pair">
@@ -374,6 +398,36 @@
   .status-badge.rendering { background: var(--accent-bg); color: var(--accent-hover); }
   .status-badge.done { background: rgba(34, 197, 94, 0.15); color: var(--success); }
   .status-badge.error { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+
+  .duration-control {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .duration-input {
+    width: 52px;
+    text-align: center;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 2px 4px;
+    color: var(--text);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .duration-label {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .duration-display {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
 
   .keyframe-pair {
     display: flex;

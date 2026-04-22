@@ -286,6 +286,7 @@
     <TransitionsPage bind:transitions={mutableTransitions}
                      keyframes={keyframes} {projectId}
                      locked={transitionsLocked}
+                     projectSceneDuration={project?.scene_duration || 10}
                      onstatus={handleStatus}
                      onreset={(e) => { project = e.detail; }}
                      onlocktransitions={handleLockTransitions} />
