@@ -63,9 +63,10 @@ frontend:
 # Run both backend and frontend for development
 dev:
     #!/usr/bin/env bash
-    trap 'kill 0' EXIT
-    just backend &
-    just frontend &
+    trap 'kill 0' EXIT INT TERM
+    source .venv/bin/activate
+    (cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000) &
+    (cd frontend && npm run dev -- --host 0.0.0.0) &
     wait
 
 # Build frontend for production
