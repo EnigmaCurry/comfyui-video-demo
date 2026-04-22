@@ -1,5 +1,5 @@
 <script>
-  import { Sparkles, X, ClipboardPaste, Save } from 'lucide-svelte';
+  import { X, ClipboardPaste, Save } from 'lucide-svelte';
   import { galleryFilter, galleryFilterSave, galleryUpload, galleryList, IMAGE_FILTERS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, editImage = $bindable(null) } = $props();
@@ -61,15 +61,24 @@
     showGalleryPicker = false;
   }
 
-  async function handleApply() {
-    if (!sourceId) return;
+  // Auto-apply when source or settings change
+  $effect(() => {
+    const sid = sourceId;
+    const f = filter;
+    const mx = mirrorX;
+    const my = mirrorY;
+    if (!sid) return;
+    applyFilter(sid, f, mx, my);
+  });
+
+  async function applyFilter(sid, f, mx, my) {
     processing = true;
     resultUrl = null;
     resultError = '';
     try {
       const data = await galleryFilter({
-        source_id: sourceId, filter,
-        mirror_x: mirrorX, mirror_y: mirrorY,
+        source_id: sid, filter: f,
+        mirror_x: mx, mirror_y: my,
       });
       project = data.project;
       resultUrl = data.image_url;
@@ -197,12 +206,6 @@
           </label>
         </div>
 
-        <div class="actions">
-          <button class="generate-btn" onclick={handleApply} disabled={processing || !sourceId}>
-            <Sparkles size={16} />
-            {processing ? 'Processing...' : 'Apply'}
-          </button>
-        </div>
       </div>
     </div>
 
@@ -419,27 +422,6 @@
 
   .checkbox-label input[type="checkbox"] {
     cursor: pointer;
-  }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 4px;
-  }
-
-  .generate-btn {
-    background: var(--accent);
-    color: white;
-    font-weight: 500;
-    padding: 10px 28px;
-    font-size: 15px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .generate-btn:hover:not(:disabled) {
-    background: var(--accent-hover);
   }
 
   /* Preview */
