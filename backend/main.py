@@ -1603,7 +1603,7 @@ async def api_get_video(project_id: str, filename: str):
     return FileResponse(path, media_type="video/mp4")
 
 
-# ── Image Generator endpoints ───────────────────────────────────────
+# ── Editor endpoints ────────────────────────────────────────────────
 
 
 def _get_gallery_image(image_id: str) -> GalleryImage:

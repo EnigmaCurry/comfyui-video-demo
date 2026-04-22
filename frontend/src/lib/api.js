@@ -19,7 +19,7 @@ async function request(method, path, body = null) {
 // ── Activities ──
 export const ACTIVITIES = [
   { id: 'film-director', label: 'Film Director', subtitle: 'Keyframe-driven video production with ComfyUI' },
-  { id: 'image-generator', label: 'Image Generator', subtitle: 'AI image generation and gallery' },
+  { id: 'image-generator', label: 'Editor', subtitle: 'AI image generation and gallery' },
 ];
 
 // ── Projects ──
@@ -112,7 +112,7 @@ export const lockScore = () => request('POST', '/score/lock');
 export const renderFinal = () => request('POST', '/final/render');
 export const getFinalStatus = () => request('GET', '/final/status');
 
-// ── Image Generator / Gallery ──
+// ── Editor / Gallery ──
 export const RESOLUTIONS = [
   { label: '512x512 (1:1)', w: 512, h: 512 },
   { label: '768x512 (3:2)', w: 768, h: 512 },
