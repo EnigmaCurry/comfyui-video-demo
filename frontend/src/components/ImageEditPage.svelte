@@ -7,8 +7,16 @@
   let filter = $state('stitch_2x');
   let mirrorX = $state(true);
   let mirrorY = $state(true);
+  let divisor = $state(2);
+  let position = $state('C');
   let processing = $state(false);
   let saving = $state(false);
+
+  const POSITIONS = [
+    ['NW', 'N', 'NE'],
+    ['W',  'C',  'E'],
+    ['SW', 'S', 'SE'],
+  ];
 
   // Source image (pasted or picked from gallery)
   let sourceId = $state(null);
@@ -67,11 +75,13 @@
     const f = filter;
     const mx = mirrorX;
     const my = mirrorY;
+    const d = divisor;
+    const p = position;
     if (!sid) return;
-    applyFilter(sid, f, mx, my);
+    applyFilter(sid, f, mx, my, d, p);
   });
 
-  async function applyFilter(sid, f, mx, my) {
+  async function applyFilter(sid, f, mx, my, d, p) {
     processing = true;
     resultUrl = null;
     resultError = '';
@@ -79,6 +89,7 @@
       const data = await galleryFilter({
         source_id: sid, filter: f,
         mirror_x: mx, mirror_y: my,
+        divisor: d, position: p,
       });
       project = data.project;
       resultUrl = data.image_url;
@@ -195,16 +206,38 @@
           </div>
         </div>
 
-        <div class="checkbox-row">
-          <label class="checkbox-label">
-            <input type="checkbox" bind:checked={mirrorX} disabled={processing} />
-            Mirror X
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" bind:checked={mirrorY} disabled={processing} />
-            Mirror Y
-          </label>
-        </div>
+        {#if filter === 'stitch_2x'}
+          <div class="checkbox-row">
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={mirrorX} disabled={processing} />
+              Mirror X
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={mirrorY} disabled={processing} />
+              Mirror Y
+            </label>
+          </div>
+        {:else if filter === 'integer_crop'}
+          <div class="control-group" style="margin-bottom: 12px;">
+            <label for="ie-divisor">Divisor</label>
+            <input id="ie-divisor" type="number" min="2" max="16"
+                   bind:value={divisor} disabled={processing} class="divisor-input" />
+          </div>
+          <div class="control-group">
+            <label>Position</label>
+            <div class="position-grid">
+              {#each POSITIONS as row}
+                {#each row as pos}
+                  <button class="pos-btn" class:active={position === pos}
+                          disabled={processing}
+                          onclick={() => position = pos}>
+                    {pos}
+                  </button>
+                {/each}
+              {/each}
+            </div>
+          </div>
+        {/if}
 
       </div>
     </div>
@@ -422,6 +455,44 @@
 
   .checkbox-label input[type="checkbox"] {
     cursor: pointer;
+  }
+
+  .divisor-input {
+    width: 80px;
+    font-size: 14px;
+    font-family: monospace;
+    padding: 8px 12px;
+  }
+
+  .position-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    width: 160px;
+    margin-top: 4px;
+  }
+
+  .pos-btn {
+    padding: 6px 0;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .pos-btn:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+
+  .pos-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
   }
 
   /* Preview */

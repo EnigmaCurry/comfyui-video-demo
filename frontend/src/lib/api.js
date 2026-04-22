@@ -124,6 +124,7 @@ export const RESOLUTIONS = [
 ];
 export const IMAGE_FILTERS = [
   { id: 'stitch_2x', label: '2x Grid' },
+  { id: 'integer_crop', label: 'Integer Crop' },
 ];
 export const galleryGenerate = (opts) => request('POST', '/gallery/generate', opts);
 export const galleryPreviewStatus = () => request('GET', '/gallery/preview/status');

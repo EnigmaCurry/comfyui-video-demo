@@ -1978,6 +1978,43 @@ async def api_gallery_delete(image_id: str):
     return {"deleted": image_id}
 
 
+def _run_integer_crop(src_path: str, dest_path: str, divisor: int, position: str):
+    """Crop an image to 1/divisor of its size at the given position."""
+    from PIL import Image as PILImage
+
+    with PILImage.open(src_path) as src:
+        src = src.convert("RGB")
+        w, h = src.size
+        new_w = w // divisor
+        new_h = h // divisor
+
+        # Compute crop origin from position
+        col = {"NW": 0, "W": 0, "SW": 0, "N": 1, "C": 1, "S": 1, "NE": 2, "E": 2, "SE": 2}
+        row = {"NW": 0, "N": 0, "NE": 0, "W": 1, "C": 1, "E": 1, "SW": 2, "S": 2, "SE": 2}
+        pos = position.upper()
+        cx = col.get(pos, 1)
+        cy = row.get(pos, 1)
+
+        # Map 0/1/2 to left/center/right offsets
+        if cx == 0:
+            x0 = 0
+        elif cx == 1:
+            x0 = (w - new_w) // 2
+        else:
+            x0 = w - new_w
+
+        if cy == 0:
+            y0 = 0
+        elif cy == 1:
+            y0 = (h - new_h) // 2
+        else:
+            y0 = h - new_h
+
+        cropped = src.crop((x0, y0, x0 + new_w, y0 + new_h))
+        cropped.save(dest_path, "PNG")
+        return new_w, new_h
+
+
 def _run_stitch_2x(src_path: str, dest_path: str, mirror_x: bool, mirror_y: bool):
     """Stitch an image into a 2x2 grid with optional mirroring (pure Pillow)."""
     from PIL import Image as PILImage, ImageOps
@@ -2052,9 +2089,14 @@ async def api_gallery_filter(body: dict):
     filename = f"{new_id}.png"
     dest = os.path.join(images_dir(proj.id), filename)
 
+    divisor = body.get("divisor", 2)
+    position = body.get("position", "C")
+
     try:
         if filter_id == "stitch_2x":
             width, height = _run_stitch_2x(src_path, dest, mirror_x, mirror_y)
+        elif filter_id == "integer_crop":
+            width, height = _run_integer_crop(src_path, dest, divisor, position)
         else:
             raise ValueError(f"Unknown filter: {filter_id}")
     except Exception as e:
