@@ -11,7 +11,7 @@
   async function fetchProjects() {
     loading = true;
     try {
-      const data = await listProjects(activity);
+      const data = await listProjects();
       projects = data.projects;
     } catch (e) {
       onstatus({ detail: `Failed to load projects: ${e.message}` });
