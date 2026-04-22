@@ -351,7 +351,6 @@ async def api_lock_all_keyframes():
 async def api_sync_transitions():
     """Create transitions for adjacent locked keyframe pairs, generate descriptions for new ones."""
     proj = _get_project()
-    from llm import generate_transition_descriptions
     ordered = sorted(proj.keyframes, key=lambda k: k.position)
 
     # Find adjacent locked pairs

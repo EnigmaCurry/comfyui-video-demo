@@ -148,7 +148,10 @@ async def call_llm_text(system_prompt: str, user_msg: str,
         resp = await client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
         resp_json = resp.json()
-        return resp_json["choices"][0]["message"]["content"].strip()
+        content = resp_json["choices"][0]["message"]["content"]
+        if content is None:
+            return ""
+        return content.strip()
 
 
 async def suggest_premise(notes: str) -> str:
