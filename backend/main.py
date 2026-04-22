@@ -2014,9 +2014,17 @@ async def api_gallery_filter(body: dict):
     if not os.path.isfile(src_path):
         raise HTTPException(404, "Source image file not found")
 
-    # Create output gallery entry
-    import uuid as _uuid
-    new_id = _uuid.uuid4().hex[:12]
+    # Clear any previous filter preview
+    for img in list(proj.images):
+        if img.id.startswith("filter_preview"):
+            if img.image_filename:
+                path = os.path.join(images_dir(proj.id), img.image_filename)
+                if os.path.exists(path):
+                    os.unlink(path)
+    proj.images = [i for i in proj.images if not i.id.startswith("filter_preview")]
+
+    # Create temporary filter preview entry (not visible in gallery)
+    new_id = "filter_preview"
     out_img = GalleryImage(
         id=new_id,
         prompt=f"(filter: {filter_id})",
@@ -2056,8 +2064,50 @@ async def api_gallery_filter(body: dict):
                 _save()
 
     task = asyncio.create_task(_run_filter())
-    render_tasks[f"filter_{new_id}"] = task
+    render_tasks["filter_preview"] = task
     return {"image_id": new_id, "project": proj.model_dump()}
+
+
+@app.get("/api/gallery/filter/status")
+async def api_gallery_filter_status():
+    """Check status of the current filter preview."""
+    proj = _get_project()
+    fp = None
+    for img in proj.images:
+        if img.id == "filter_preview":
+            fp = img
+            break
+    if not fp:
+        raise HTTPException(404, "No filter preview")
+    image_url = f"/api/projects/{proj.id}/images/{fp.image_filename}" if fp.image_filename else None
+    return {**fp.model_dump(), "image_url": image_url}
+
+
+@app.post("/api/gallery/filter/save")
+async def api_gallery_filter_save():
+    """Save the filter preview to the gallery as a permanent image."""
+    proj = _get_project()
+    fp = None
+    for img in proj.images:
+        if img.id == "filter_preview":
+            fp = img
+            break
+    if not fp or fp.status != KeyframeStatus.done:
+        raise HTTPException(400, "No completed filter preview to save")
+
+    import uuid as _uuid
+    new_id = _uuid.uuid4().hex[:12]
+    old_path = os.path.join(images_dir(proj.id), fp.image_filename)
+    new_filename = f"{new_id}.png"
+    new_path = os.path.join(images_dir(proj.id), new_filename)
+    if os.path.exists(old_path):
+        os.rename(old_path, new_path)
+
+    fp.id = new_id
+    fp.image_filename = new_filename
+    _save()
+    image_url = f"/api/projects/{proj.id}/images/{new_filename}"
+    return {"image": {**fp.model_dump(), "image_url": image_url}, "project": proj.model_dump()}
 
 
 @app.post("/api/gallery/upload")

@@ -1,8 +1,8 @@
 <script>
   import { Sparkles, X, ClipboardPaste, Save } from 'lucide-svelte';
-  import { galleryFilter, galleryUpload, galleryList, galleryPreviewStatus, IMAGE_FILTERS } from '../lib/api.js';
+  import { galleryFilter, galleryFilterStatus, galleryFilterSave, galleryUpload, galleryList, IMAGE_FILTERS } from '../lib/api.js';
 
-  let { project = $bindable(null), onstatus, ongallery } = $props();
+  let { project = $bindable(null), onstatus, ongallery, editImage = $bindable(null) } = $props();
 
   let filter = $state('stitch_2x');
   let width = $state(2048);
@@ -77,8 +77,7 @@
       const data = await galleryFilter({ source_id: sourceId, filter, width, height });
       project = data.project;
       resultId = data.image_id;
-      // Poll for completion
-      await pollResult(data.image_id);
+      pollResult();
     } catch (e) {
       resultStatus = 'error';
       resultError = e.message;
@@ -86,21 +85,19 @@
     }
   }
 
-  async function pollResult(imageId) {
+  async function pollResult() {
     const interval = setInterval(async () => {
       try {
-        const data = await galleryList();
-        const img = data.images.find(i => i.id === imageId);
-        if (!img) return;
-        if (img.status === 'done') {
+        const data = await galleryFilterStatus();
+        if (data.status === 'done') {
           clearInterval(interval);
-          resultUrl = img.image_url;
+          resultUrl = data.image_url;
           resultStatus = 'done';
           processing = false;
-        } else if (img.status === 'error') {
+        } else if (data.status === 'error') {
           clearInterval(interval);
           resultStatus = 'error';
-          resultError = img.error_message || 'Filter failed';
+          resultError = data.error_message || 'Filter failed';
           processing = false;
         }
       } catch {
@@ -108,6 +105,17 @@
       }
     }, 2000);
   }
+
+  // Consume editImage prop from gallery
+  $effect(() => {
+    if (editImage) {
+      sourceId = editImage.id;
+      sourceUrl = editImage.image_url;
+      if (editImage.width) width = editImage.width * 2;
+      if (editImage.height) height = editImage.height * 2;
+      editImage = null;
+    }
+  });
 
   function clearAll() {
     sourceId = null;
@@ -121,10 +129,19 @@
     showGalleryPicker = false;
   }
 
-  function handleSaved() {
-    onstatus?.({ detail: 'Filter result saved to gallery.' });
-    clearAll();
-    ongallery?.();
+  async function handleSave() {
+    saving = true;
+    try {
+      const data = await galleryFilterSave();
+      project = data.project;
+      onstatus?.({ detail: 'Saved to gallery.' });
+      clearAll();
+      ongallery?.();
+    } catch (e) {
+      onstatus?.({ detail: `Save failed: ${e.message}` });
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
@@ -231,8 +248,8 @@
             <img src={resultUrl} alt="Result" />
           </div>
           <div class="preview-actions">
-            <button class="save-btn" onclick={handleSaved}>
-              <Save size={14} /> Done
+            <button class="save-btn" onclick={handleSave} disabled={saving}>
+              <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
             </button>
           </div>
         {/if}

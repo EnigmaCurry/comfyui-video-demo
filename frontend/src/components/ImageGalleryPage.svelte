@@ -1,8 +1,8 @@
 <script>
-  import { Copy, Trash2, Plus, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { Copy, Trash2, Plus, RefreshCw, ChevronLeft, ChevronRight, Pencil } from 'lucide-svelte';
   import { galleryList, galleryDelete, galleryUpload } from '../lib/api.js';
 
-  let { projectId = '', onstatus, oncreate, onrecreate } = $props();
+  let { projectId = '', onstatus, oncreate, onrecreate, onedit } = $props();
 
   let images = $state([]);
   let loading = $state(true);
@@ -154,6 +154,9 @@
               <span>{img.model}</span>
             </div>
             <div class="item-actions">
+              <button class="icon-btn" onclick={() => onedit?.({ detail: img })} title="Edit with filters">
+                <Pencil size={14} />
+              </button>
               <button class="icon-btn" onclick={() => onrecreate?.({ detail: img })} title="Recreate in generator">
                 <RefreshCw size={14} />
               </button>
