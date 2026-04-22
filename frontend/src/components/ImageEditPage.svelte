@@ -5,8 +5,8 @@
   let { project = $bindable(null), onstatus, ongallery, editImage = $bindable(null) } = $props();
 
   let filter = $state('stitch_2x');
-  let width = $state(2048);
-  let height = $state(2048);
+  let width = $state(0);
+  let height = $state(0);
   let processing = $state(false);
   let saving = $state(false);
 
@@ -109,11 +109,12 @@
   // Consume editImage prop from gallery
   $effect(() => {
     if (editImage) {
-      sourceId = editImage.id;
-      sourceUrl = editImage.image_url;
-      width = (editImage.width || 1024) * 2;
-      height = (editImage.height || 1024) * 2;
+      const img = editImage;
       editImage = null;
+      sourceId = img.id;
+      sourceUrl = img.image_url;
+      width = (img.width || 1024) * 2;
+      height = (img.height || 1024) * 2;
     }
   });
 
