@@ -978,17 +978,22 @@ async def api_reset_transitions():
 async def api_lock_transitions():
     """Lock transitions and generate narration text via LLM."""
     proj = _get_project()
-    from llm import generate_narration
     ordered_kf = sorted(proj.keyframes, key=lambda k: k.position)
     ordered_tr = sorted(proj.transitions, key=lambda t: t.position)
     kf_prompts = [kf.prompt for kf in ordered_kf]
     tr_prompts = [tr.prompt for tr in ordered_tr]
-    narrations = await generate_narration(
-        kf_prompts, tr_prompts, duration=proj.scene_duration, style=proj.style,
-        direction=proj.narration_direction,
-    )
-    for i, tr in enumerate(ordered_tr):
-        tr.narration = narrations[i] if i < len(narrations) else ""
+
+    # Skip narration generation for freeform projects (no story)
+    has_prompts = any(p.strip() for p in kf_prompts) or any(p.strip() for p in tr_prompts)
+    if has_prompts:
+        from llm import generate_narration
+        narrations = await generate_narration(
+            kf_prompts, tr_prompts, duration=proj.scene_duration, style=proj.style,
+            direction=proj.narration_direction,
+        )
+        for i, tr in enumerate(ordered_tr):
+            tr.narration = narrations[i] if i < len(narrations) else ""
+
     proj.transitions_locked = True
     proj.narration_active_index = 0
     _save()
