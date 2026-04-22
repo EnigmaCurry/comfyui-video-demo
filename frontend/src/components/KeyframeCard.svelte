@@ -78,10 +78,17 @@
 
   async function saveEdit() {
     try {
+      const wasBlank = !keyframe.prompt;
       await updateKeyframe(keyframe.id, { prompt: editPrompt });
       keyframe.prompt = editPrompt;
       editing = false;
-      onstatus({ detail: `Updated keyframe ${index + 1} prompt` });
+      if (wasBlank && editPrompt.trim()) {
+        onstatus({ detail: `Rendering keyframe ${index + 1}...` });
+        const result = await rerenderKeyframe(keyframe.id);
+        keyframe.status = result.status;
+      } else {
+        onstatus({ detail: `Updated keyframe ${index + 1} prompt` });
+      }
     } catch (e) {
       onstatus({ detail: `Update failed: ${e.message}` });
     }
