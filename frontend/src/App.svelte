@@ -47,7 +47,7 @@
   let premise = $derived(project?.premise || '');
   let premiseLocked = $derived(project?.premise_locked || false);
   let storyLocked = $derived(project?.story_locked || false);
-  let keyframesLocked = $derived(project?.keyframes_locked || false);
+  let hasKeyframes = $derived((project?.keyframes || []).some(kf => kf.status === 'done'));
   let transitionsLocked = $derived(project?.transitions_locked || false);
   let narrationLocked = $derived(project?.narration_locked || false);
   let scoreLocked = $derived(project?.score_locked || false);
@@ -64,7 +64,7 @@
     return scoreLocked ? 'final' :
            narrationLocked ? 'score' :
            transitionsLocked ? 'narration' :
-           (keyframesLocked || hasTransitions) ? 'transitions' :
+           (hasKeyframes || hasTransitions) ? 'transitions' :
            storyLocked ? 'keyframes' :
            premiseLocked ? 'story' :
            'premise';
@@ -89,7 +89,7 @@
     if (proj.score_locked) return 'final';
     if (proj.narration_locked) return 'score';
     if (proj.transitions_locked) return 'narration';
-    if (proj.keyframes_locked && proj.transitions?.length > 0) return 'transitions';
+    if (proj.transitions?.length > 0) return 'transitions';
     if (proj.story_locked && proj.keyframes?.length > 0) return 'keyframes';
     if (proj.premise_locked) return 'story';
     return 'premise';
@@ -115,14 +115,14 @@
     }
   }
 
-  function handleLockKeyframes(event) {
+  function handleGoToTransitions(event) {
     project = event.detail;
     activeTab = 'transitions';
-    // Render the first transition
-    if (project.transitions.length > 0) {
-      const tr = project.transitions[0];
-      tr.status = 'rendering';
-      renderTransition(tr.id).catch(e => statusMessage = `Render error: ${e.message}`);
+    // Render the first pending transition
+    const pending = project.transitions.find(tr => tr.status === 'pending');
+    if (pending) {
+      pending.status = 'rendering';
+      renderTransition(pending.id).catch(e => statusMessage = `Render error: ${e.message}`);
     }
   }
 
@@ -146,7 +146,7 @@
     activity = project.activity || 'film-director';
     activeTab = pickTab(project);
     // Auto-render pending keyframe if we land on keyframes tab
-    if (activeTab === 'keyframes' && project.story_locked && !project.keyframes_locked) {
+    if (activeTab === 'keyframes' && project.story_locked) {
       const idx = project.active_index || 0;
       if (idx < project.keyframes.length) {
         const kf = project.keyframes[idx];
@@ -274,12 +274,12 @@
 
   {:else if activeTab === 'keyframes'}
     <KeyframeGrid bind:keyframes={mutableKeyframes}
-                  {projectId} locked={keyframesLocked}
+                  {projectId}
                   projectWidth={project?.width || 1024}
                   projectHeight={project?.height || 576}
                   onupdated={handleUpdated} onstatus={handleStatus}
                   onreset={(e) => { project = e.detail; }}
-                  onlockkeyframes={handleLockKeyframes}
+                  ongotransitions={handleGoToTransitions}
                   onsync={(e) => { project = e.detail; }} />
 
   {:else if activeTab === 'transitions'}

@@ -4,27 +4,31 @@
   import { RotateCcw, Zap, ArrowRight, Plus } from 'lucide-svelte';
   import KeyframeCard from './KeyframeCard.svelte';
   import { reorderKeyframes, resetKeyframes,
-           lockAllKeyframes, autoCreateKeyframes, getKeyframeStatus,
+           autoCreateKeyframes, getKeyframeStatus,
            addKeyframe, syncTransitions, setResolution, RESOLUTIONS } from '../lib/api.js';
 
-  let { keyframes = $bindable([]), projectId = '', locked = false,
+  let { keyframes = $bindable([]), projectId = '',
         projectWidth = 1024, projectHeight = 576,
-        onupdated, onstatus, onreset, onlockkeyframes, onsync } = $props();
+        onupdated, onstatus, onreset, ongotransitions, onsync } = $props();
 
   let autoCreating = $state(false);
-  let locking = $state(false);
+  let syncing = $state(false);
 
   const flipDurationMs = 200;
 
   let allDone = $derived(keyframes.length > 0 && keyframes.every(kf => kf.status === 'done'));
+  let hasDonePairs = $derived(() => {
+    for (let i = 0; i < keyframes.length - 1; i++) {
+      if (keyframes[i].status === 'done' && keyframes[i + 1].status === 'done') return true;
+    }
+    return false;
+  });
 
   function handleDndConsider(e) {
-    if (locked) return;
     keyframes = e.detail.items;
   }
 
   async function handleDndFinalize(e) {
-    if (locked) return;
     keyframes = e.detail.items;
     try {
       const ids = keyframes.map(kf => kf.id);
@@ -41,19 +45,6 @@
 
   function handleDuplicate(event) {
     keyframes = event.detail;
-  }
-
-  async function handleKeyframeLock() {
-    // Sync transitions whenever a keyframe is locked/unlocked
-    onstatus({ detail: 'Syncing transitions...' });
-    try {
-      const data = await syncTransitions();
-      if (onsync) onsync({ detail: data.project });
-      const lockedPairs = data.project.transitions?.length || 0;
-      onstatus({ detail: lockedPairs ? `${lockedPairs} transition(s) ready.` : '' });
-    } catch (e) {
-      onstatus({ detail: `Sync failed: ${e.message}` });
-    }
   }
 
   async function handleAdd() {
@@ -73,7 +64,6 @@
       const data = await resetKeyframes();
       if (onreset) onreset({ detail: data.project });
       onstatus({ detail: 'Keyframes reset to original story.' });
-      initialized = false;
     } catch (e) {
       onstatus({ detail: `Reset failed: ${e.message}` });
     }
@@ -86,11 +76,8 @@
     try {
       const data = await autoCreateKeyframes();
       onstatus({ detail: `Auto-creating ${data.started} keyframes...` });
-      // Poll each pending/rendering keyframe until all done
       await pollAllKeyframes();
       onstatus({ detail: 'All keyframes auto-created!' });
-      // Re-derive active index
-      initialized = false;
     } catch (e) {
       onstatus({ detail: `Auto-create failed: ${e.message}` });
     } finally {
@@ -128,48 +115,42 @@
   }
 
   async function handleGoToTransitions() {
-    locking = true;
-    onstatus({ detail: 'Locking all keyframes and syncing transitions...' });
+    syncing = true;
+    onstatus({ detail: 'Syncing transitions...' });
     try {
-      await lockAllKeyframes();
-      for (const kf of keyframes) {
-        if (kf.status === 'done') kf.locked = true;
-      }
       const data = await syncTransitions();
-      if (onlockkeyframes) onlockkeyframes({ detail: data.project });
-      onstatus({ detail: 'All keyframes locked. Proceed to Transitions.' });
+      if (ongotransitions) ongotransitions({ detail: data.project });
+      onstatus({ detail: 'Transitions synced.' });
     } catch (e) {
       onstatus({ detail: `Failed: ${e.message}` });
     } finally {
-      locking = false;
+      syncing = false;
     }
   }
 </script>
 
-{#if !locked}
-  <div class="toolbar">
-    <button class="toolbar-btn" onclick={handleAdd}>
-      <Plus size={14} /> Add
+<div class="toolbar">
+  <button class="toolbar-btn" onclick={handleAdd}>
+    <Plus size={14} /> Add
+  </button>
+  {#if keyframes.length > 0}
+    <button class="toolbar-btn" onclick={handleReset}>
+      <RotateCcw size={14} /> Reset
     </button>
-    {#if keyframes.length > 0}
-      <button class="toolbar-btn" onclick={handleReset}>
-        <RotateCcw size={14} /> Reset
-      </button>
-      <button class="toolbar-btn" onclick={handleAutoCreate} disabled={autoCreating || allDone}>
-        <Zap size={14} /> {autoCreating ? 'Creating...' : 'Auto Create'}
-      </button>
-    {/if}
-    <select class="res-select" onchange={handleResolutionChange}>
-      {#each RESOLUTIONS as r}
-        <option selected={r.w === projectWidth && r.h === projectHeight}>{r.label}</option>
-      {/each}
-    </select>
-  </div>
-{/if}
+    <button class="toolbar-btn" onclick={handleAutoCreate} disabled={autoCreating || allDone}>
+      <Zap size={14} /> {autoCreating ? 'Creating...' : 'Auto Create'}
+    </button>
+  {/if}
+  <select class="res-select" onchange={handleResolutionChange}>
+    {#each RESOLUTIONS as r}
+      <option selected={r.w === projectWidth && r.h === projectHeight}>{r.label}</option>
+    {/each}
+  </select>
+</div>
 
 {#if keyframes.length > 0}
   <div class="grid"
-       use:dndzone={{ items: keyframes, flipDurationMs, type: 'keyframes', dragDisabled: locked }}
+       use:dndzone={{ items: keyframes, flipDurationMs, type: 'keyframes' }}
        onconsider={handleDndConsider}
        onfinalize={handleDndFinalize}>
     {#each keyframes as kf, i (kf.id)}
@@ -181,18 +162,17 @@
           {onstatus}
           {onupdated}
           ondelete={handleDelete}
-          onlock={handleKeyframeLock}
           onduplicate={handleDuplicate}
         />
       </div>
     {/each}
   </div>
 
-  {#if allDone && !locked}
+  {#if allDone}
     <div class="all-done">
-      <span>All keyframes approved!</span>
-      <button class="go-btn" onclick={handleGoToTransitions} disabled={locking}>
-        {locking ? 'Generating transitions...' : 'Go to Transitions'} <ArrowRight size={16} />
+      <span>All keyframes ready!</span>
+      <button class="go-btn" onclick={handleGoToTransitions} disabled={syncing}>
+        {syncing ? 'Syncing transitions...' : 'Go to Transitions'} <ArrowRight size={16} />
       </button>
     </div>
   {/if}

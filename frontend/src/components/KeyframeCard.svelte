@@ -1,11 +1,10 @@
 <script>
-  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush, Undo2, Redo2, Copy } from 'lucide-svelte';
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Paintbrush, Undo2, Redo2, Copy } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe, duplicateKeyframe,
            getKeyframeStatus, rewriteKeyframe, refineKeyframe, refineUndoKeyframe,
-           refineRedoKeyframe, uploadKeyframeImage, T2I_MODELS,
-           lockKeyframe, unlockKeyframe } from '../lib/api.js';
+           refineRedoKeyframe, uploadKeyframeImage, T2I_MODELS } from '../lib/api.js';
 
-  let { keyframe, index, onstatus, onupdated, ondelete, onlock, onduplicate, projectId = '' } = $props();
+  let { keyframe, index, onstatus, onupdated, ondelete, onduplicate, projectId = '' } = $props();
 
   let editing = $state(false);
   let editPrompt = $state('');
@@ -255,21 +254,6 @@
     }
   }
 
-  async function toggleLock() {
-    try {
-      if (keyframe.locked) {
-        await unlockKeyframe(keyframe.id);
-        keyframe.locked = false;
-      } else {
-        await lockKeyframe(keyframe.id);
-        keyframe.locked = true;
-      }
-      if (onlock) onlock({ detail: keyframe.id });
-    } catch (e) {
-      onstatus({ detail: `Lock failed: ${e.message}` });
-    }
-  }
-
   async function handleModelChange(e) {
     const newModel = e.target.value;
     keyframe.model = newModel;
@@ -426,7 +410,7 @@
   }
 </script>
 
-<div class="card" class:error={keyframe.status === 'error'} class:locked={keyframe.locked}>
+<div class="card" class:error={keyframe.status === 'error'}>
   <div class="card-header">
     <span class="position">{index + 1}</span>
     <span class="status-badge" class:pending={keyframe.status === 'pending'}
@@ -606,15 +590,6 @@
     <button class="btn-icon" onclick={handleDuplicate} title="Duplicate keyframe">
       <Copy size={16} />
     </button>
-    <button class="btn-icon" class:btn-locked={keyframe.locked} onclick={toggleLock}
-            title={keyframe.locked ? 'Unlock keyframe' : 'Lock keyframe'}
-            disabled={keyframe.status !== 'done'}>
-      {#if keyframe.locked}
-        <Lock size={16} />
-      {:else}
-        <Unlock size={16} />
-      {/if}
-    </button>
     <button class="btn-icon btn-danger" onclick={handleDelete} title="Delete">
       <Trash2 size={16} />
     </button>
@@ -649,11 +624,6 @@
   .card.active {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
-  }
-
-  .card.locked {
-    border-color: var(--locked);
-    box-shadow: 0 0 0 1px var(--locked);
   }
 
   .card.error {
@@ -700,17 +670,6 @@
   .status-badge.done { background: rgba(34, 197, 94, 0.15); color: var(--success); }
   .status-badge.error { background: rgba(239, 68, 68, 0.15); color: var(--error); }
 
-  .lock-badge {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-weight: 500;
-    background: var(--locked-bg);
-    color: var(--locked);
-    margin-left: auto;
-  }
 
   .image-area {
     position: relative;
@@ -1012,10 +971,6 @@
 
   .btn-active {
     color: var(--warning);
-  }
-
-  .btn-locked {
-    color: var(--locked);
   }
 
   .fullscreen-overlay {

@@ -347,59 +347,30 @@ async def api_reset_keyframes():
         for i, desc in enumerate(proj.original_prompts)
     ]
     proj.active_index = 0
-    proj.keyframes_locked = False
     proj.transitions = []
     proj.transition_active_index = 0
     _save()
     return {"project": proj.model_dump()}
 
 
-@app.post("/api/keyframes/{keyframe_id}/lock")
-async def api_lock_keyframe(keyframe_id: str):
-    kf = _get_keyframe(keyframe_id)
-    kf.locked = True
-    _save()
-    return kf.model_dump()
-
-
-@app.post("/api/keyframes/{keyframe_id}/unlock")
-async def api_unlock_keyframe(keyframe_id: str):
-    kf = _get_keyframe(keyframe_id)
-    kf.locked = False
-    _save()
-    return kf.model_dump()
-
-
-@app.post("/api/keyframes/lock-all")
-async def api_lock_all_keyframes():
-    """Lock all done keyframes."""
-    proj = _get_project()
-    for kf in proj.keyframes:
-        if kf.status == KeyframeStatus.done:
-            kf.locked = True
-    proj.keyframes_locked = True
-    _save()
-    return {"project": proj.model_dump()}
-
-
 @app.post("/api/transitions/sync")
 async def api_sync_transitions():
-    """Create transitions for adjacent locked keyframe pairs, generate descriptions for new ones."""
+    """Create transitions for adjacent done keyframe pairs, generate descriptions for new ones."""
     proj = _get_project()
     ordered = sorted(proj.keyframes, key=lambda k: k.position)
 
-    # Find adjacent locked pairs
-    locked_pairs = []
+    # Find adjacent done pairs
+    done_pairs = []
     for i in range(len(ordered) - 1):
-        if ordered[i].locked and ordered[i + 1].locked:
-            locked_pairs.append((ordered[i], ordered[i + 1]))
+        if ordered[i].status == KeyframeStatus.done and ordered[i + 1].status == KeyframeStatus.done:
+            done_pairs.append((ordered[i], ordered[i + 1]))
 
-    # Keep existing transitions that still match a locked pair
+    # Keep existing transitions that still match a done pair
     existing = {(tr.from_keyframe_id, tr.to_keyframe_id): tr for tr in proj.transitions}
     new_transitions = []
     needs_description = []
 
-    for i, (from_kf, to_kf) in enumerate(locked_pairs):
+    for i, (from_kf, to_kf) in enumerate(done_pairs):
         pair = (from_kf.id, to_kf.id)
         if pair in existing:
             tr = existing[pair]
@@ -434,9 +405,7 @@ async def api_sync_transitions():
                 print(f"Warning: failed to generate description for transition {pos}: {e}", flush=True)
 
     proj.transitions = new_transitions
-    print(f"Sync: {len(locked_pairs)} locked pairs, {len(new_transitions)} transitions", flush=True)
-    if all(kf.locked for kf in ordered if kf.status == KeyframeStatus.done):
-        proj.keyframes_locked = True
+    print(f"Sync: {len(done_pairs)} done pairs, {len(new_transitions)} transitions", flush=True)
     _save()
     return {"project": proj.model_dump()}
 
@@ -922,8 +891,6 @@ async def api_repair_transitions():
 async def api_reset_transitions():
     """Re-generate transition descriptions and reset all to pending."""
     proj = _get_project()
-    if not proj.keyframes_locked:
-        raise HTTPException(400, "Keyframes must be locked first")
     for task in render_tasks.values():
         if not task.done():
             task.cancel()
@@ -965,8 +932,6 @@ async def api_reset_transitions():
 async def api_lock_transitions():
     """Lock transitions and generate narration text via LLM."""
     proj = _get_project()
-    if not proj.keyframes_locked:
-        raise HTTPException(400, "Keyframes must be locked first")
     from llm import generate_narration
     ordered_kf = sorted(proj.keyframes, key=lambda k: k.position)
     ordered_tr = sorted(proj.transitions, key=lambda t: t.position)
