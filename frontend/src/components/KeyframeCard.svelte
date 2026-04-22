@@ -216,6 +216,21 @@
     }
   }
 
+  async function handleRefineNewSeed() {
+    if (refineHistory.length < 2) return;
+    const lastPrompt = refineHistory[refineHistory.length - 1].prompt;
+    onstatus({ detail: `Re-rolling keyframe ${index + 1} with new seed...` });
+    try {
+      // Undo the last step, then re-refine with same prompt but new seed
+      await refineUndoKeyframe(keyframe.id);
+      const result = await refineKeyframe(keyframe.id, lastPrompt, keyframe.negative_prompt);
+      keyframe.status = 'rendering';
+      onstatus({ detail: `Keyframe ${index + 1} refining with new seed...` });
+    } catch (e) {
+      onstatus({ detail: `New seed failed: ${e.message}` });
+    }
+  }
+
   function cancelRefine() {
     refining = false;
   }
@@ -528,6 +543,10 @@
             </button>
             <button class="btn-cancel" onclick={handleRefineRedo} disabled={!canRefineRedo}>
               <Redo2 size={14} /> Redo
+            </button>
+            <button class="btn-cancel" onclick={handleRefineNewSeed}
+                    disabled={refineHistory.length < 2 || keyframe.status === 'rendering'}>
+              <RefreshCw size={14} /> New Seed
             </button>
           </div>
         {/if}
