@@ -1,7 +1,7 @@
 <script>
-  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock } from 'lucide-svelte';
+  import { RefreshCw, Trash2, Check, X, ThumbsDown, Wand2, Upload, Lock, Unlock, Paintbrush } from 'lucide-svelte';
   import { rerenderKeyframe, updateKeyframe, deleteKeyframe,
-           getKeyframeStatus, rewriteKeyframe, uploadKeyframeImage, T2I_MODELS,
+           getKeyframeStatus, rewriteKeyframe, refineKeyframe, uploadKeyframeImage, T2I_MODELS,
            lockKeyframe, unlockKeyframe } from '../lib/api.js';
 
   let { keyframe, index, onstatus, onupdated, ondelete, onlock, projectId = '' } = $props();
@@ -146,6 +146,44 @@
       submitRewrite();
     } else if (e.key === 'Escape') {
       cancelRewrite();
+    }
+  }
+
+  let refining = $state(false);
+  let refinePrompt = $state('');
+  let refineLoading = $state(false);
+
+  function startRefine() {
+    refinePrompt = '';
+    refining = true;
+  }
+
+  async function submitRefine() {
+    if (!refinePrompt.trim()) return;
+    refineLoading = true;
+    onstatus({ detail: `Refining keyframe ${index + 1}...` });
+    try {
+      const result = await refineKeyframe(keyframe.id, refinePrompt.trim(), keyframe.negative_prompt);
+      keyframe.status = 'rendering';
+      refining = false;
+      onstatus({ detail: `Keyframe ${index + 1} refining...` });
+    } catch (e) {
+      onstatus({ detail: `Refine failed: ${e.message}` });
+    } finally {
+      refineLoading = false;
+    }
+  }
+
+  function cancelRefine() {
+    refining = false;
+  }
+
+  function handleRefineKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitRefine();
+    } else if (e.key === 'Escape') {
+      cancelRefine();
     }
   }
 
@@ -427,6 +465,29 @@
         </div>
       </div>
     {/if}
+
+    {#if refining}
+      <div class="refine-edit">
+        <label class="refine-label">Refine image (img2img)</label>
+        <textarea
+          bind:value={refinePrompt}
+          onkeydown={handleRefineKeydown}
+          rows="2"
+          class="edit-textarea"
+          placeholder="e.g. Add more clouds, change the lighting to golden hour..."
+          disabled={refineLoading}
+          use:autoFocus
+        ></textarea>
+        <div class="edit-actions">
+          <button class="btn-save refine-btn" onclick={submitRefine} disabled={refineLoading || !refinePrompt.trim()}>
+            <Paintbrush size={14} /> {refineLoading ? 'Refining...' : 'Refine Image'}
+          </button>
+          <button class="btn-cancel" onclick={cancelRefine} disabled={refineLoading}>
+            <X size={14} /> Cancel
+          </button>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <div class="card-actions">
@@ -438,8 +499,12 @@
       <Upload size={16} />
     </button>
     <input type="file" accept="image/*" bind:this={fileInput} onchange={handleUpload} class="hidden-input" />
-    <button class="btn-icon" onclick={startRewrite} title="Rewrite with AI">
+    <button class="btn-icon" onclick={startRewrite} title="Rewrite prompt with AI">
       <Wand2 size={16} />
+    </button>
+    <button class="btn-icon" onclick={startRefine} title="Refine image (img2img)"
+            disabled={!keyframe.image_filename || keyframe.status === 'rendering'}>
+      <Paintbrush size={16} />
     </button>
     <button class="btn-icon" class:btn-active={!!keyframe.negative_prompt}
             onclick={startEditNeg} title="Negative prompt">
@@ -693,6 +758,29 @@
     color: var(--accent);
     display: block;
     margin-bottom: 4px;
+  }
+
+  .refine-edit {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .refine-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--success);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .refine-btn {
+    background: var(--success);
+  }
+
+  .refine-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
   }
 
   .edit-actions {

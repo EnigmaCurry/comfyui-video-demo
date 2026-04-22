@@ -524,6 +524,75 @@ async def api_upload_keyframe_image(keyframe_id: str, file: bytes = fastapi_File
     return kf.model_dump()
 
 
+@app.post("/api/keyframes/{keyframe_id}/refine")
+async def api_refine_keyframe(keyframe_id: str, body: dict):
+    """Refine a keyframe image using Capybara I2I (image-to-image)."""
+    proj = _get_project()
+    kf = _get_keyframe(keyframe_id)
+    prompt = body.get("prompt", "")
+    if not prompt.strip():
+        raise HTTPException(400, "Refinement prompt is required")
+    if not kf.image_filename:
+        raise HTTPException(400, "Keyframe has no image to refine")
+    source_path = os.path.join(images_dir(proj.id), kf.image_filename)
+    if not os.path.isfile(source_path):
+        raise HTTPException(400, "Keyframe image file not found")
+
+    old = render_tasks.pop(keyframe_id, None)
+    if old and not old.done():
+        old.cancel()
+
+    seed = body.get("seed") or random.randint(0, 2**32 - 1)
+    kf.status = KeyframeStatus.rendering
+    kf.error_message = None
+    _save()
+
+    task = asyncio.create_task(
+        _do_refine_keyframe(proj.id, kf, source_path, seed, proj.width, proj.height,
+                            prompt.strip(), body.get("negative_prompt", kf.negative_prompt))
+    )
+    render_tasks[keyframe_id] = task
+    return {"id": kf.id, "status": kf.status, "seed": seed}
+
+
+async def _do_refine_keyframe(proj_id: str, kf: Keyframe, source_path: str,
+                               seed: int, width: int, height: int,
+                               prompt: str, negative_prompt: str):
+    """Refine a keyframe image using Capybara I2I."""
+    from comfyui import download_output, run_workflow, upload_image
+    from workflows import CAPY_I2I_WORKFLOW_PATH, load_workflow, patch_capybara_i2i_workflow
+
+    async with _render_semaphore:
+        try:
+            server_name = await upload_image(source_path)
+            base_wf = load_workflow(CAPY_I2I_WORKFLOW_PATH)
+            neg_prompt = negative_prompt or "blurry, low quality, distorted, ugly, watermark, text"
+
+            print(f"Refining keyframe {kf.id}: seed={seed}", flush=True)
+            patched = patch_capybara_i2i_workflow(
+                base_wf, input_image_name=server_name,
+                prompt_text=prompt, negative_prompt_text=neg_prompt,
+                seed_value=seed, width=width, height=height,
+                output_prefix=f"v2web/{kf.id}",
+            )
+            history = await run_workflow(patched, timeout=600)
+            filename = f"{kf.id}.png"
+            dest = os.path.join(images_dir(proj_id), filename)
+            await download_output(history, dest, output_type="images")
+            kf.image_filename = filename
+            kf.seed = seed
+            kf.status = KeyframeStatus.done
+            if current_project and current_project.id == proj_id:
+                _save()
+        except asyncio.CancelledError:
+            kf.status = KeyframeStatus.pending
+        except Exception as e:
+            import traceback
+            print(f"ERROR refining keyframe {kf.id}: {traceback.format_exc()}", flush=True)
+            kf.status = KeyframeStatus.error
+            kf.error_message = str(e)
+
+
 @app.post("/api/keyframes/{keyframe_id}/rewrite")
 async def api_rewrite_keyframe(keyframe_id: str, body: dict):
     """Rewrite keyframe prompt via LLM and auto-render."""

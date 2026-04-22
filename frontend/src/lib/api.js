@@ -50,6 +50,7 @@ export const getKeyframeStatus = (id) => request('GET', `/keyframes/${id}/status
 export const renderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/render`, opts);
 export const rerenderKeyframe = (id, opts = {}) => request('POST', `/keyframes/${id}/rerender`, opts);
 export const rewriteKeyframe = (id, instruction) => request('POST', `/keyframes/${id}/rewrite`, { instruction });
+export const refineKeyframe = (id, prompt, negative_prompt) => request('POST', `/keyframes/${id}/refine`, { prompt, ...(negative_prompt ? { negative_prompt } : {}) });
 export async function uploadKeyframeImage(id, file) {
   const form = new FormData();
   form.append('file', file);
