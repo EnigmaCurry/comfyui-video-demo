@@ -65,7 +65,8 @@
   }
 
   async function handleGenerate() {
-    if (!prompt.trim()) return;
+    const effectivePrompt = prompt.trim() || (isTwoImageModel ? 'combine these two images' : '');
+    if (!effectivePrompt) return;
     generating = true;
     cancelled = false;
     previewUrl = null;
@@ -74,7 +75,7 @@
     history = [];
     try {
       const opts = {
-        prompt: prompt.trim(),
+        prompt: effectivePrompt,
         negative_prompt: negPrompt.trim(),
         model,
         width: resWidth,
@@ -537,7 +538,7 @@
 
           <div class="actions">
             <button class="generate-btn" onclick={handleGenerate}
-                    disabled={generating || !prompt.trim() || (isTwoImageModel && (!figure1Id || !figure2Id))}>
+                    disabled={generating || (!prompt.trim() && !isTwoImageModel) || (isTwoImageModel && (!figure1Id || !figure2Id))}>
               <Sparkles size={16} />
               {generating ? 'Generating...' : 'Generate'}
             </button>
