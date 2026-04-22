@@ -298,6 +298,13 @@
     }
   }
 
+  function handleWindowKeydown(e) {
+    if (e.key === ' ' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+      e.preventDefault();
+      if (hasPreview && !generating) handleNewSeed();
+    }
+  }
+
   function handleKeydown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -392,7 +399,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <svelte:window onmousemove={handleSliderMove} onmouseup={stopSliderDrag}
-               ontouchmove={handleSliderMove} ontouchend={stopSliderDrag} />
+               ontouchmove={handleSliderMove} ontouchend={stopSliderDrag}
+               onkeydown={handleWindowKeydown} />
 
 {#if fullscreen && previewUrl}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
