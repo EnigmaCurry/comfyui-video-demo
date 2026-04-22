@@ -5,8 +5,6 @@
   let { project = $bindable(null), onstatus, ongallery, editImage = $bindable(null) } = $props();
 
   let filter = $state('stitch_2x');
-  let width = $state(0);
-  let height = $state(0);
   let processing = $state(false);
   let saving = $state(false);
 
@@ -38,8 +36,6 @@
           project = data.project;
           sourceId = data.image.id;
           sourceUrl = data.image.image_url;
-          width = (data.image.width || 1024) * 2;
-          height = (data.image.height || 1024) * 2;
           onstatus?.({ detail: 'Image pasted.' });
         } catch (err) {
           onstatus?.({ detail: `Upload failed: ${err.message}` });
@@ -62,8 +58,6 @@
   function pickImage(img) {
     sourceId = img.id;
     sourceUrl = img.image_url;
-    width = (img.width || 1024) * 2;
-    height = (img.height || 1024) * 2;
     showGalleryPicker = false;
   }
 
@@ -74,7 +68,7 @@
     resultUrl = null;
     resultError = '';
     try {
-      const data = await galleryFilter({ source_id: sourceId, filter, width, height });
+      const data = await galleryFilter({ source_id: sourceId, filter });
       project = data.project;
       resultId = data.image_id;
       pollResult();
@@ -113,8 +107,6 @@
       editImage = null;
       sourceId = img.id;
       sourceUrl = img.image_url;
-      width = (img.width || 1024) * 2;
-      height = (img.height || 1024) * 2;
     }
   });
 
@@ -213,14 +205,6 @@
                 <option value={f.id}>{f.label}</option>
               {/each}
             </select>
-          </div>
-          <div class="control-group">
-            <label for="ie-width">Width</label>
-            <input id="ie-width" type="number" bind:value={width} disabled={processing} class="size-input" />
-          </div>
-          <div class="control-group">
-            <label for="ie-height">Height</label>
-            <input id="ie-height" type="number" bind:value={height} disabled={processing} class="size-input" />
           </div>
         </div>
 
@@ -413,13 +397,6 @@
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 8px 12px;
-  }
-
-  .size-input {
-    width: 100px;
-    font-size: 14px;
-    font-family: monospace;
     padding: 8px 12px;
   }
 

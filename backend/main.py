@@ -1995,8 +1995,6 @@ async def api_gallery_filter(body: dict):
 
     source_id = body.get("source_id")
     filter_id = body.get("filter", "stitch_2x")
-    width = body.get("width", 2048)
-    height = body.get("height", 2048)
 
     if not source_id:
         raise HTTPException(400, "source_id is required")
@@ -2013,6 +2011,13 @@ async def api_gallery_filter(body: dict):
     src_path = os.path.join(images_dir(proj.id), src_img.image_filename)
     if not os.path.isfile(src_path):
         raise HTTPException(404, "Source image file not found")
+
+    # Detect actual source dimensions from file
+    from PIL import Image as PILImage
+    with PILImage.open(src_path) as pil_img:
+        src_w, src_h = pil_img.size
+    width = src_w * 2
+    height = src_h * 2
 
     # Clear any previous filter preview
     for img in list(proj.images):
