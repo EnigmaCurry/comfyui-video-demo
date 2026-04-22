@@ -38,8 +38,8 @@
           project = data.project;
           sourceId = data.image.id;
           sourceUrl = data.image.image_url;
-          if (data.image.width) width = data.image.width * 2;
-          if (data.image.height) height = data.image.height * 2;
+          width = (data.image.width || 1024) * 2;
+          height = (data.image.height || 1024) * 2;
           onstatus?.({ detail: 'Image pasted.' });
         } catch (err) {
           onstatus?.({ detail: `Upload failed: ${err.message}` });
@@ -62,8 +62,8 @@
   function pickImage(img) {
     sourceId = img.id;
     sourceUrl = img.image_url;
-    if (img.width) width = img.width * 2;
-    if (img.height) height = img.height * 2;
+    width = (img.width || 1024) * 2;
+    height = (img.height || 1024) * 2;
     showGalleryPicker = false;
   }
 
@@ -111,8 +111,8 @@
     if (editImage) {
       sourceId = editImage.id;
       sourceUrl = editImage.image_url;
-      if (editImage.width) width = editImage.width * 2;
-      if (editImage.height) height = editImage.height * 2;
+      width = (editImage.width || 1024) * 2;
+      height = (editImage.height || 1024) * 2;
       editImage = null;
     }
   });
