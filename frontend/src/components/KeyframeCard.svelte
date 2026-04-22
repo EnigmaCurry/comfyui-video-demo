@@ -217,9 +217,21 @@
     node.focus();
   }
 
-  function handleFullscreenKeydown(e) {
+  async function handleFullscreenKeydown(e) {
     if (e.key === 'Escape') {
       fullscreen = false;
+    } else if (e.key === 'c' && (e.ctrlKey || e.metaKey) && imageUrl) {
+      e.preventDefault();
+      try {
+        const resp = await fetch(imageUrl);
+        const blob = await resp.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob })
+        ]);
+        onstatus({ detail: `Keyframe ${index + 1} image copied to clipboard.` });
+      } catch (err) {
+        onstatus({ detail: `Copy failed: ${err.message}` });
+      }
     }
   }
 
@@ -266,6 +278,22 @@
 
   function handleImageAreaLeave() {
     hovered = false;
+  }
+
+  async function handleImageAreaKeydown(e) {
+    if (e.key === 'c' && (e.ctrlKey || e.metaKey) && imageUrl) {
+      e.preventDefault();
+      try {
+        const resp = await fetch(imageUrl);
+        const blob = await resp.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob })
+        ]);
+        onstatus({ detail: `Keyframe ${index + 1} image copied to clipboard.` });
+      } catch (err) {
+        onstatus({ detail: `Copy failed: ${err.message}` });
+      }
+    }
   }
 
   async function handleImageAreaPaste(e) {
@@ -316,6 +344,7 @@
        onclick={() => imageUrl && (fullscreen = true)}
        onmouseenter={handleImageAreaEnter}
        onmouseleave={handleImageAreaLeave}
+       onkeydown={handleImageAreaKeydown}
        onpaste={handleImageAreaPaste}>
     {#if keyframe.status === 'rendering'}
       <div class="spinner-container">
@@ -437,7 +466,7 @@
        onkeydown={handleFullscreenKeydown} onpaste={handleFullscreenPaste}
        tabindex="-1" use:focusOverlay>
     <img src={imageUrl} alt="Keyframe {index + 1} full size" />
-    <div class="fullscreen-hint">Ctrl+V paste / Esc close</div>
+    <div class="fullscreen-hint">Ctrl+C copy / Ctrl+V paste / Esc close</div>
   </div>
 {/if}
 
@@ -536,7 +565,7 @@
   .image-area:focus { outline: none; }
 
   .image-area.hovered::after {
-    content: 'Ctrl+V to paste';
+    content: 'Ctrl+C / Ctrl+V';
     position: absolute;
     bottom: 6px;
     right: 8px;
