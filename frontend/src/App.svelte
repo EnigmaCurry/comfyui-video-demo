@@ -244,14 +244,14 @@
           </button>
         {/each}
       </div>
-      {#if projectName}
-        {#if editingTitle}
-          <input class="title-edit" bind:value={editTitle}
-                 onkeydown={handleTitleKeydown} onblur={saveTitle} autofocus />
-        {:else}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <h1 class="project-title clickable" onclick={startEditTitle} title="Click to rename">{projectName}</h1>
-        {/if}
+      {#if editingTitle}
+        <input class="title-edit" bind:value={editTitle}
+               onkeydown={handleTitleKeydown} onblur={saveTitle} autofocus />
+      {:else}
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <h1 class="project-title" class:clickable={!!projectName} class:no-project={!projectName}
+            onclick={() => projectName && startEditTitle()}
+            title={projectName ? 'Click to rename' : ''}>{projectName || 'No project'}</h1>
       {/if}
     </div>
     <div class="header-actions">
@@ -396,6 +396,8 @@
   }
 
   .project-title.clickable:hover { border-bottom-color: var(--text-muted); }
+
+  .project-title.no-project { color: var(--text-muted); font-style: italic; }
 
   .title-edit {
     font-size: 24px;
