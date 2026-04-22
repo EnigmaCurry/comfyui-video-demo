@@ -131,12 +131,12 @@
   }
 </script>
 
-{#if keyframes.length > 0}
+{#if !locked}
   <div class="toolbar">
-    {#if !locked}
-      <button class="toolbar-btn" onclick={handleAdd}>
-        <Plus size={14} /> Add
-      </button>
+    <button class="toolbar-btn" onclick={handleAdd}>
+      <Plus size={14} /> Add
+    </button>
+    {#if keyframes.length > 0}
       <button class="toolbar-btn" onclick={handleReset}>
         <RotateCcw size={14} /> Reset
       </button>
@@ -145,7 +145,9 @@
       </button>
     {/if}
   </div>
+{/if}
 
+{#if keyframes.length > 0}
   <div class="grid"
        use:dndzone={{ items: keyframes, flipDurationMs, type: 'keyframes', dragDisabled: locked }}
        onconsider={handleDndConsider}
@@ -175,7 +177,7 @@
   {/if}
 {:else}
   <div class="empty">
-    <p>No keyframes yet. Enter a theme above and click Generate.</p>
+    <p>No keyframes yet. Click Add to create one.</p>
   </div>
 {/if}
 
