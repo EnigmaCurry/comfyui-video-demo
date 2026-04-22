@@ -255,6 +255,41 @@
       cancelEdit();
     }
   }
+
+  let imageAreaRef = $state(null);
+  let hovered = $state(false);
+
+  function handleImageAreaEnter() {
+    hovered = true;
+    imageAreaRef?.focus();
+  }
+
+  function handleImageAreaLeave() {
+    hovered = false;
+  }
+
+  async function handleImageAreaPaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+        onstatus({ detail: `Pasting image into keyframe ${index + 1}...` });
+        try {
+          const result = await uploadKeyframeImage(keyframe.id, blob);
+          keyframe.image_filename = result.image_filename;
+          keyframe.seed = result.seed;
+          keyframe.status = result.status;
+          onstatus({ detail: `Keyframe ${index + 1} replaced from clipboard.` });
+        } catch (err) {
+          onstatus({ detail: `Paste failed: ${err.message}` });
+        }
+        return;
+      }
+    }
+  }
 </script>
 
 <div class="card" class:error={keyframe.status === 'error'} class:locked={keyframe.locked}>
@@ -275,7 +310,13 @@
   </div>
 
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="image-area" onclick={() => imageUrl && (fullscreen = true)}>
+  <div class="image-area" class:hovered
+       bind:this={imageAreaRef}
+       tabindex="-1"
+       onclick={() => imageUrl && (fullscreen = true)}
+       onmouseenter={handleImageAreaEnter}
+       onmouseleave={handleImageAreaLeave}
+       onpaste={handleImageAreaPaste}>
     {#if keyframe.status === 'rendering'}
       <div class="spinner-container">
         <div class="spinner"></div>
@@ -482,6 +523,7 @@
   }
 
   .image-area {
+    position: relative;
     aspect-ratio: 16 / 9;
     background: var(--bg);
     display: flex;
@@ -489,6 +531,21 @@
     justify-content: center;
     overflow: hidden;
     cursor: pointer;
+  }
+
+  .image-area:focus { outline: none; }
+
+  .image-area.hovered::after {
+    content: 'Ctrl+V to paste';
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 2px 8px;
+    border-radius: 4px;
+    pointer-events: none;
   }
 
   .image-area img {
