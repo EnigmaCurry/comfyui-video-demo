@@ -1616,8 +1616,8 @@ def _get_gallery_image(image_id: str) -> GalleryImage:
 
 async def _do_render_gallery_image(proj_id: str, img: GalleryImage, seed: int):
     """Render a gallery image in the background."""
-    from comfyui import download_output, run_workflow
-    from workflows import get_t2i_workflow_and_patcher, load_workflow
+    from comfyui import download_output, run_workflow, upload_image
+    from workflows import get_t2i_workflow_and_patcher, load_workflow, TWO_IMAGE_MODELS
 
     print(f"Gallery render task started for {img.id}, waiting for semaphore...", flush=True)
     async with _render_semaphore:
@@ -1625,19 +1625,44 @@ async def _do_render_gallery_image(proj_id: str, img: GalleryImage, seed: int):
         try:
             wf_path, patch_fn = get_t2i_workflow_and_patcher(img.model)
             base_wf = load_workflow(wf_path)
-            from llm import _load_style
-            style = _load_style("transition-story")
-            neg_parts = [style.get("negative_prompt", "")]
-            if img.negative_prompt:
-                neg_parts.append(img.negative_prompt)
-            neg_prompt = ", ".join(p for p in neg_parts if p)
 
-            print(f"Rendering gallery image {img.id} ({img.model}): seed={seed}", flush=True)
-            patched = patch_fn(
-                base_wf, prompt_text=img.prompt, negative_prompt_text=neg_prompt,
-                seed_value=seed, width=img.width, height=img.height,
-                output_prefix=f"v2web/{img.id}",
-            )
+            if img.model in TWO_IMAGE_MODELS:
+                # Upload both figure images to ComfyUI
+                proj = _get_project()
+                fig1 = next((i for i in proj.images if i.id == img.figure1_id), None)
+                fig2 = next((i for i in proj.images if i.id == img.figure2_id), None)
+                if not fig1 or not fig1.image_filename:
+                    raise ValueError("Figure 1 image not found")
+                if not fig2 or not fig2.image_filename:
+                    raise ValueError("Figure 2 image not found")
+                fig1_path = os.path.join(images_dir(proj_id), fig1.image_filename)
+                fig2_path = os.path.join(images_dir(proj_id), fig2.image_filename)
+                fig1_name = await upload_image(fig1_path)
+                fig2_name = await upload_image(fig2_path)
+
+                print(f"Rendering gallery image {img.id} ({img.model}): seed={seed}", flush=True)
+                patched = patch_fn(
+                    base_wf, prompt_text=img.prompt,
+                    figure1_image_name=fig1_name,
+                    figure2_image_name=fig2_name,
+                    seed_value=seed,
+                    output_prefix=f"v2web/{img.id}",
+                )
+            else:
+                from llm import _load_style
+                style = _load_style("transition-story")
+                neg_parts = [style.get("negative_prompt", "")]
+                if img.negative_prompt:
+                    neg_parts.append(img.negative_prompt)
+                neg_prompt = ", ".join(p for p in neg_parts if p)
+
+                print(f"Rendering gallery image {img.id} ({img.model}): seed={seed}", flush=True)
+                patched = patch_fn(
+                    base_wf, prompt_text=img.prompt, negative_prompt_text=neg_prompt,
+                    seed_value=seed, width=img.width, height=img.height,
+                    output_prefix=f"v2web/{img.id}",
+                )
+
             history = await run_workflow(patched, timeout=600)
             filename = f"{img.id}.png"
             dest = os.path.join(images_dir(proj_id), filename)
@@ -1711,6 +1736,8 @@ async def api_gallery_generate(body: dict):
         width=body.get("width", 1024),
         height=body.get("height", 576),
         seed=seed,
+        figure1_id=body.get("figure1_id"),
+        figure2_id=body.get("figure2_id"),
         status=KeyframeStatus.rendering,
     )
     proj.images.insert(0, img)

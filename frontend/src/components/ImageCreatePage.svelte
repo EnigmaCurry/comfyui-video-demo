@@ -1,6 +1,6 @@
 <script>
   import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, Columns2 } from 'lucide-svelte';
-  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
+  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, galleryList, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null) } = $props();
 
@@ -24,6 +24,23 @@
   // History: [{prompt, model, seed, previewUrl}]
   let history = $state([]);
 
+  // Two-image model state
+  let isTwoImageModel = $derived(T2I_MODELS.find(m => m.id === model)?.twoImage ?? false);
+  let galleryImages = $state([]);
+  let figure1Id = $state('');
+  let figure2Id = $state('');
+
+  async function fetchGalleryImages() {
+    try {
+      const data = await galleryList();
+      galleryImages = data.images.filter(i => i.image_url);
+    } catch { galleryImages = []; }
+  }
+
+  $effect(() => {
+    if (isTwoImageModel) fetchGalleryImages();
+  });
+
   // Refinement
   let refinePrompt = $state('');
 
@@ -43,6 +60,8 @@
     saving = false;
     seedInput = '';
     comparing = false;
+    figure1Id = '';
+    figure2Id = '';
   }
 
   async function handleGenerate() {
@@ -63,6 +82,10 @@
       };
       if (seedInput.trim()) {
         opts.seed = parseInt(seedInput.trim(), 10);
+      }
+      if (isTwoImageModel) {
+        opts.figure1_id = figure1Id;
+        opts.figure2_id = figure2Id;
       }
       const modelLabel = T2I_MODELS.find(m => m.id === model)?.label || model;
       // Show the prompt immediately in history while generating
@@ -136,6 +159,7 @@
       history = [{ prompt: first.prompt, model: first.model, seed: null, previewUrl: null }];
       try {
         const modelId = T2I_MODELS.find(m => m.label === first.model)?.id || 'hidream';
+        const modelDef = T2I_MODELS.find(m => m.label === first.model);
         const opts = {
           prompt: first.prompt,
           negative_prompt: negPrompt.trim(),
@@ -143,6 +167,10 @@
           width: resWidth,
           height: resHeight,
         };
+        if (modelDef?.twoImage && figure1Id && figure2Id) {
+          opts.figure1_id = figure1Id;
+          opts.figure2_id = figure2Id;
+        }
         const data = await galleryGenerate(opts);
         project = data.project;
         await pollPreview();
@@ -397,6 +425,7 @@
                 {/each}
               </select>
             </div>
+            {#if !isTwoImageModel}
             <div class="control-group">
               <label for="ig-resolution">Resolution</label>
               <select id="ig-resolution" disabled={generating}
@@ -409,6 +438,7 @@
                 {/each}
               </select>
             </div>
+            {/if}
             <div class="control-group">
               <label for="ig-seed">Seed <span class="optional">(blank = random)</span></label>
               <input id="ig-seed" type="text" inputmode="numeric"
@@ -430,6 +460,7 @@
             ></textarea>
           </div>
 
+          {#if !isTwoImageModel}
           <div class="prompt-section">
             <label for="ig-neg">Negative prompt <span class="optional">(optional)</span></label>
             <textarea id="ig-neg"
@@ -439,10 +470,54 @@
               rows="2"
             ></textarea>
           </div>
+          {/if}
+
+          {#if isTwoImageModel}
+          <div class="figure-pickers">
+            <div class="figure-picker">
+              <label>Figure 1</label>
+              {#if galleryImages.length === 0}
+                <p class="figure-empty">No gallery images. Save some images first.</p>
+              {:else}
+                <select bind:value={figure1Id} disabled={generating}>
+                  <option value="">-- Select image --</option>
+                  {#each galleryImages as gi}
+                    <option value={gi.id}>{gi.prompt ? gi.prompt.slice(0, 60) : gi.id} ({gi.width}x{gi.height})</option>
+                  {/each}
+                </select>
+                {#if figure1Id}
+                  {@const fig1 = galleryImages.find(i => i.id === figure1Id)}
+                  {#if fig1}
+                    <img class="figure-thumb" src={fig1.image_url} alt="Figure 1" />
+                  {/if}
+                {/if}
+              {/if}
+            </div>
+            <div class="figure-picker">
+              <label>Figure 2</label>
+              {#if galleryImages.length === 0}
+                <p class="figure-empty">No gallery images. Save some images first.</p>
+              {:else}
+                <select bind:value={figure2Id} disabled={generating}>
+                  <option value="">-- Select image --</option>
+                  {#each galleryImages as gi}
+                    <option value={gi.id}>{gi.prompt ? gi.prompt.slice(0, 60) : gi.id} ({gi.width}x{gi.height})</option>
+                  {/each}
+                </select>
+                {#if figure2Id}
+                  {@const fig2 = galleryImages.find(i => i.id === figure2Id)}
+                  {#if fig2}
+                    <img class="figure-thumb" src={fig2.image_url} alt="Figure 2" />
+                  {/if}
+                {/if}
+              {/if}
+            </div>
+          </div>
+          {/if}
 
           <div class="actions">
             <button class="generate-btn" onclick={handleGenerate}
-                    disabled={generating || !prompt.trim()}>
+                    disabled={generating || !prompt.trim() || (isTwoImageModel && (!figure1Id || !figure2Id))}>
               <Sparkles size={16} />
               {generating ? 'Generating...' : 'Generate'}
             </button>
@@ -1003,5 +1078,50 @@
     max-width: 95vw;
     max-height: 95vh;
     object-fit: contain;
+  }
+
+  /* Figure pickers for two-image models */
+  .figure-pickers {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .figure-picker {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .figure-picker label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+
+  .figure-picker select {
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 8px;
+    width: 100%;
+  }
+
+  .figure-thumb {
+    max-width: 100%;
+    max-height: 100px;
+    object-fit: contain;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    margin-top: 4px;
+  }
+
+  .figure-empty {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 </style>

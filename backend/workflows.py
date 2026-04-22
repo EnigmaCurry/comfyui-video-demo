@@ -100,6 +100,18 @@ UPSCALE_OUTPUT_FIELD = "filename_prefix"
 
 UPSCALE_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "upscale.json")
 
+# ── Flux 2 Klein (two-image combiner) node IDs ──────────────────────
+FLUX2K_FIGURE1_NODE = "76"
+FLUX2K_FIGURE2_NODE = "81"
+FLUX2K_PROMPT_NODE = "135"
+FLUX2K_PROMPT_FIELD = "text"
+FLUX2K_SEED_NODE = "125"
+FLUX2K_SEED_FIELD = "noise_seed"
+FLUX2K_OUTPUT_NODE = "94"
+FLUX2K_OUTPUT_FIELD = "filename_prefix"
+
+FLUX2K_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "flux2_klein.json")
+
 
 # ── Available T2I models ─────────────────────────────────────────────
 T2I_MODELS = {
@@ -167,7 +179,29 @@ def get_t2i_workflow_and_patcher(model: str = "hidream"):
         return QWEN_WORKFLOW_PATH, patch_qwen_workflow
     if model == "z_image":
         return ZIMG_WORKFLOW_PATH, patch_zimg_workflow
+    if model == "flux2_klein":
+        return FLUX2K_WORKFLOW_PATH, patch_flux2_klein_workflow
     return T2I_WORKFLOW_PATH, patch_t2i_workflow
+
+
+# Models that require two input images (figure1, figure2)
+TWO_IMAGE_MODELS = {"flux2_klein"}
+
+
+def patch_flux2_klein_workflow(workflow: dict, *, prompt_text: str,
+                               figure1_image_name: str,
+                               figure2_image_name: str,
+                               seed_value: int,
+                               output_prefix: str = "ComfyUI",
+                               **kwargs) -> dict:
+    """Patch Flux 2 Klein workflow: combine two reference images with a prompt."""
+    wf = copy.deepcopy(workflow)
+    wf[FLUX2K_FIGURE1_NODE]["inputs"]["image"] = figure1_image_name
+    wf[FLUX2K_FIGURE2_NODE]["inputs"]["image"] = figure2_image_name
+    wf[FLUX2K_PROMPT_NODE]["inputs"][FLUX2K_PROMPT_FIELD] = prompt_text
+    wf[FLUX2K_SEED_NODE]["inputs"][FLUX2K_SEED_FIELD] = seed_value
+    wf[FLUX2K_OUTPUT_NODE]["inputs"][FLUX2K_OUTPUT_FIELD] = output_prefix
+    return wf
 
 
 def patch_transition_workflow(workflow: dict, *, first_image_name: str,

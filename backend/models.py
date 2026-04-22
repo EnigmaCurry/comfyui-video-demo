@@ -101,6 +101,8 @@ class GalleryImage(BaseModel):
     height: int = 576
     seed: Optional[int] = None
     image_filename: Optional[str] = None
+    figure1_id: Optional[str] = None
+    figure2_id: Optional[str] = None
     status: KeyframeStatus = KeyframeStatus.pending
     error_message: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
