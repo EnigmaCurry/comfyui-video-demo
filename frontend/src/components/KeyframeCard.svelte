@@ -64,6 +64,9 @@
   async function handleRerender() {
     try {
       onstatus({ detail: `Re-rendering keyframe ${index + 1}...` });
+      keyframe.refinement_history = [];
+      keyframe.refinement_index = -1;
+      refining = false;
       const result = await rerenderKeyframe(keyframe.id);
       keyframe.status = result.status;
     } catch (e) {

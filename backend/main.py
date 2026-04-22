@@ -525,7 +525,9 @@ async def api_render_keyframe(keyframe_id: str, req: RenderRequest | None = None
 
 @app.post("/api/keyframes/{keyframe_id}/rerender")
 async def api_rerender_keyframe(keyframe_id: str, req: RenderRequest | None = None):
-    _get_keyframe(keyframe_id)
+    kf = _get_keyframe(keyframe_id)
+    kf.refinement_history = []
+    kf.refinement_index = -1
     seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
     return await api_render_keyframe(keyframe_id, RenderRequest(seed=seed))
 
