@@ -2074,7 +2074,8 @@ async def api_gallery_filter(body: dict):
     proj.images.insert(0, out_img)
     _save()
 
-    image_url = f"/api/projects/{proj.id}/images/{filename}"
+    import time as _time
+    image_url = f"/api/projects/{proj.id}/images/{filename}?t={int(_time.time() * 1000)}"
     return {"image_id": new_id, "image_url": image_url, "project": proj.model_dump()}
 
 
