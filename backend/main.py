@@ -1978,15 +1978,40 @@ async def api_gallery_delete(image_id: str):
     return {"deleted": image_id}
 
 
+def _run_stitch_2x(src_path: str, dest_path: str, mirror_x: bool, mirror_y: bool):
+    """Stitch an image into a 2x2 grid with optional mirroring (pure Pillow)."""
+    from PIL import Image as PILImage, ImageOps
+
+    with PILImage.open(src_path) as src:
+        src = src.convert("RGB")
+        w, h = src.size
+
+        # Build the four quadrants
+        tl = src.copy()
+        tr = ImageOps.mirror(src) if mirror_x else src.copy()
+        bl = ImageOps.flip(src) if mirror_y else src.copy()
+        if mirror_x and mirror_y:
+            br = ImageOps.flip(ImageOps.mirror(src))
+        elif mirror_x:
+            br = ImageOps.mirror(src)
+        elif mirror_y:
+            br = ImageOps.flip(src)
+        else:
+            br = src.copy()
+
+        result = PILImage.new("RGB", (w * 2, h * 2))
+        result.paste(tl, (0, 0))
+        result.paste(tr, (w, 0))
+        result.paste(bl, (0, h))
+        result.paste(br, (w, h))
+        result.save(dest_path, "PNG")
+        return w * 2, h * 2
+
+
 @app.post("/api/gallery/filter")
 async def api_gallery_filter(body: dict):
-    """Apply a filter workflow to an uploaded image."""
+    """Apply an image filter (pure Pillow, no ComfyUI)."""
     global current_project
-    from comfyui import download_output, run_workflow, upload_image
-    from workflows import (
-        STITCH2X_WORKFLOW_PATH, load_workflow,
-        patch_image_stitch_2x_workflow,
-    )
 
     proj = current_project
     if proj is None or proj.activity != "image-generator":
@@ -1995,6 +2020,8 @@ async def api_gallery_filter(body: dict):
 
     source_id = body.get("source_id")
     filter_id = body.get("filter", "stitch_2x")
+    mirror_x = body.get("mirror_x", False)
+    mirror_y = body.get("mirror_y", False)
 
     if not source_id:
         raise HTTPException(400, "source_id is required")
@@ -2012,13 +2039,6 @@ async def api_gallery_filter(body: dict):
     if not os.path.isfile(src_path):
         raise HTTPException(404, "Source image file not found")
 
-    # Detect actual source dimensions from file
-    from PIL import Image as PILImage
-    with PILImage.open(src_path) as pil_img:
-        src_w, src_h = pil_img.size
-    width = src_w * 2
-    height = src_h * 2
-
     # Clear any previous filter preview
     for img in list(proj.images):
         if img.id.startswith("filter_preview"):
@@ -2028,49 +2048,34 @@ async def api_gallery_filter(body: dict):
                     os.unlink(path)
     proj.images = [i for i in proj.images if not i.id.startswith("filter_preview")]
 
-    # Create temporary filter preview entry (not visible in gallery)
     new_id = "filter_preview"
+    filename = f"{new_id}.png"
+    dest = os.path.join(images_dir(proj.id), filename)
+
+    try:
+        if filter_id == "stitch_2x":
+            width, height = _run_stitch_2x(src_path, dest, mirror_x, mirror_y)
+        else:
+            raise ValueError(f"Unknown filter: {filter_id}")
+    except Exception as e:
+        import traceback
+        print(f"ERROR filter: {traceback.format_exc()}", flush=True)
+        raise HTTPException(500, str(e))
+
     out_img = GalleryImage(
         id=new_id,
         prompt=f"(filter: {filter_id})",
         model="filter",
         width=width,
         height=height,
-        status=KeyframeStatus.rendering,
+        image_filename=filename,
+        status=KeyframeStatus.done,
     )
     proj.images.insert(0, out_img)
     _save()
 
-    async def _run_filter():
-        async with _render_semaphore:
-            try:
-                comfy_name = await upload_image(src_path)
-                if filter_id == "stitch_2x":
-                    base_wf = load_workflow(STITCH2X_WORKFLOW_PATH)
-                    patched = patch_image_stitch_2x_workflow(
-                        base_wf, input_image_name=comfy_name,
-                        width=width, height=height,
-                        output_prefix=f"v2web/{new_id}",
-                    )
-                else:
-                    raise ValueError(f"Unknown filter: {filter_id}")
-                history = await run_workflow(patched, timeout=600)
-                filename = f"{new_id}.png"
-                dest = os.path.join(images_dir(proj.id), filename)
-                await download_output(history, dest, output_type="images")
-                out_img.image_filename = filename
-                out_img.status = KeyframeStatus.done
-            except Exception as e:
-                import traceback
-                print(f"ERROR filter {new_id}: {traceback.format_exc()}", flush=True)
-                out_img.status = KeyframeStatus.error
-                out_img.error_message = str(e)
-            if current_project and current_project.id == proj.id:
-                _save()
-
-    task = asyncio.create_task(_run_filter())
-    render_tasks["filter_preview"] = task
-    return {"image_id": new_id, "project": proj.model_dump()}
+    image_url = f"/api/projects/{proj.id}/images/{filename}"
+    return {"image_id": new_id, "image_url": image_url, "project": proj.model_dump()}
 
 
 @app.get("/api/gallery/filter/status")

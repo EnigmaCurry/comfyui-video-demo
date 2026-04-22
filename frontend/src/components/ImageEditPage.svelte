@@ -1,10 +1,12 @@
 <script>
   import { Sparkles, X, ClipboardPaste, Save } from 'lucide-svelte';
-  import { galleryFilter, galleryFilterStatus, galleryFilterSave, galleryUpload, galleryList, IMAGE_FILTERS } from '../lib/api.js';
+  import { galleryFilter, galleryFilterSave, galleryUpload, galleryList, IMAGE_FILTERS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, editImage = $bindable(null) } = $props();
 
   let filter = $state('stitch_2x');
+  let mirrorX = $state(true);
+  let mirrorY = $state(true);
   let processing = $state(false);
   let saving = $state(false);
 
@@ -14,8 +16,6 @@
 
   // Result
   let resultUrl = $state(null);
-  let resultId = $state(null);
-  let resultStatus = $state(null); // null | 'rendering' | 'done' | 'error'
   let resultError = $state('');
 
   // Gallery picker
@@ -64,40 +64,20 @@
   async function handleApply() {
     if (!sourceId) return;
     processing = true;
-    resultStatus = 'rendering';
     resultUrl = null;
     resultError = '';
     try {
-      const data = await galleryFilter({ source_id: sourceId, filter });
+      const data = await galleryFilter({
+        source_id: sourceId, filter,
+        mirror_x: mirrorX, mirror_y: mirrorY,
+      });
       project = data.project;
-      resultId = data.image_id;
-      pollResult();
+      resultUrl = data.image_url;
     } catch (e) {
-      resultStatus = 'error';
       resultError = e.message;
+    } finally {
       processing = false;
     }
-  }
-
-  async function pollResult() {
-    const interval = setInterval(async () => {
-      try {
-        const data = await galleryFilterStatus();
-        if (data.status === 'done') {
-          clearInterval(interval);
-          resultUrl = data.image_url;
-          resultStatus = 'done';
-          processing = false;
-        } else if (data.status === 'error') {
-          clearInterval(interval);
-          resultStatus = 'error';
-          resultError = data.error_message || 'Filter failed';
-          processing = false;
-        }
-      } catch {
-        // keep polling
-      }
-    }, 2000);
   }
 
   // Consume editImage prop from gallery
@@ -114,8 +94,6 @@
     sourceId = null;
     sourceUrl = null;
     resultUrl = null;
-    resultId = null;
-    resultStatus = null;
     resultError = '';
     processing = false;
     saving = false;
@@ -208,38 +186,47 @@
           </div>
         </div>
 
+        <div class="checkbox-row">
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={mirrorX} disabled={processing} />
+            Mirror X
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={mirrorY} disabled={processing} />
+            Mirror Y
+          </label>
+        </div>
+
         <div class="actions">
           <button class="generate-btn" onclick={handleApply} disabled={processing || !sourceId}>
             <Sparkles size={16} />
-            {processing ? 'Processing...' : 'Apply Filter'}
+            {processing ? 'Processing...' : 'Apply'}
           </button>
         </div>
       </div>
     </div>
 
-    {#if resultStatus}
-      <div class="preview-panel">
-        {#if resultStatus === 'rendering'}
-          <div class="preview-placeholder">
-            <div class="spinner"></div>
-            <span>Processing...</span>
-          </div>
-        {:else if resultStatus === 'error'}
-          <div class="preview-placeholder error">
-            <span>Error: {resultError}</span>
-          </div>
-        {:else if resultUrl}
-          <div class="preview-image">
-            <img src={resultUrl} alt="Result" />
-          </div>
-          <div class="preview-actions">
-            <button class="save-btn" onclick={handleSave} disabled={saving}>
-              <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
-            </button>
-          </div>
-        {/if}
-      </div>
-    {/if}
+    <div class="preview-panel">
+      {#if processing}
+        <div class="preview-placeholder">
+          <div class="spinner"></div>
+          <span>Processing...</span>
+        </div>
+      {:else if resultError}
+        <div class="preview-placeholder error">
+          <span>Error: {resultError}</span>
+        </div>
+      {:else if resultUrl}
+        <div class="preview-image">
+          <img src={resultUrl} alt="Result" />
+        </div>
+        <div class="preview-actions">
+          <button class="save-btn" onclick={handleSave} disabled={saving}>
+            <Save size={14} /> {saving ? 'Saving...' : 'Save to Gallery'}
+          </button>
+        </div>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -413,6 +400,25 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 8px 12px;
+  }
+
+  .checkbox-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    cursor: pointer;
   }
 
   .actions {
