@@ -1,5 +1,5 @@
 <script>
-  import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, PanelRight, PanelBottom, Columns2 } from 'lucide-svelte';
+  import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, Columns2 } from 'lucide-svelte';
   import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null) } = $props();
@@ -338,7 +338,7 @@
     }
   });
 
-  let sidePreview = $state(false);
+  let sidePreview = true;
   let fullscreen = $state(false);
 
   // Comparison slider state
@@ -380,18 +380,10 @@
       <button class="clear-btn" onclick={clearAll} disabled={generating}>
         <RotateCcw size={14} /> Clear
       </button>
-      <button class="layout-btn" onclick={() => sidePreview = !sidePreview}
-              title={sidePreview ? 'Preview below' : 'Preview to the right'}>
-        {#if sidePreview}
-          <PanelBottom size={16} />
-        {:else}
-          <PanelRight size={16} />
-        {/if}
-      </button>
     </div>
   </div>
 
-  <div class="layout" class:side={sidePreview}>
+  <div class="layout side">
     <div class="form-panel">
       {#if !history.length}
         <!-- Initial generation form -->
@@ -599,20 +591,6 @@
   }
 
   .clear-btn:hover:not(:disabled) {
-    color: var(--text);
-    border-color: var(--text-muted);
-  }
-
-  .layout-btn {
-    background: transparent;
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    padding: 6px 8px;
-    display: flex;
-    align-items: center;
-  }
-
-  .layout-btn:hover {
     color: var(--text);
     border-color: var(--text-muted);
   }

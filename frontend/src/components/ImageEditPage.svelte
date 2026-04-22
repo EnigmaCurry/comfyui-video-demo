@@ -173,7 +173,7 @@
     </div>
   </div>
 
-  <div class="layout">
+  <div class="layout side">
     <div class="form-panel">
       <!-- Source image -->
       <div class="source-section">
@@ -290,6 +290,21 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .layout.side {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .layout.side .form-panel {
+    width: 340px;
+    flex-shrink: 0;
+  }
+
+  .layout.side .preview-panel {
+    flex: 1;
+    min-width: 0;
   }
 
   /* Source section */
