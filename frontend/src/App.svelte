@@ -12,7 +12,7 @@
   import ImageGalleryPage from './components/ImageGalleryPage.svelte';
   import ImageEditPage from './components/ImageEditPage.svelte';
   import StatusBar from './components/StatusBar.svelte';
-  import { getCurrentProject, renderKeyframe, renderTransition, renameProject, ACTIVITIES } from './lib/api.js';
+  import { getCurrentProject, createProject, renderKeyframe, renderTransition, renameProject, ACTIVITIES } from './lib/api.js';
 
   const ACTIVITY_TABS = {
     'film-director': [
@@ -78,6 +78,10 @@
         project = data.project;
         activity = data.project.activity || 'film-director';
         activeTab = pickTab(data.project);
+      } else {
+        const created = await createProject(activity, 'Untitled');
+        project = created.project;
+        activeTab = defaultTab(activity);
       }
     } catch {}
   }
@@ -168,13 +172,18 @@
     return act === 'image-generator' ? 'create' : 'premise';
   }
 
-  function handleNewProject() {
-    project = null;
-    activeTab = defaultTab(activity);
+  async function handleNewProject() {
     editingTitle = false;
     if (premiseRef) {
       premiseRef.setPremiseText('');
       premiseRef.setNotesText('');
+    }
+    try {
+      const data = await createProject(activity, 'Untitled');
+      project = data.project;
+      activeTab = defaultTab(activity);
+    } catch (e) {
+      statusMessage = `Failed to create project: ${e.message}`;
     }
   }
 
@@ -199,16 +208,27 @@
   }
   function handleUpdated() {}
 
-  function startEditTitle() {
-    editTitle = projectName;
+  async function startEditTitle() {
+    if (!project) {
+      try {
+        const data = await createProject(activity, 'Untitled');
+        project = data.project;
+        activeTab = defaultTab(activity);
+      } catch (e) {
+        statusMessage = `Failed to create project: ${e.message}`;
+        return;
+      }
+    }
+    editTitle = projectName || 'Untitled';
     editingTitle = true;
   }
 
   async function saveTitle() {
-    if (editTitle.trim() && editTitle !== projectName) {
+    const name = (editTitle.trim() || 'Untitled');
+    if (name !== projectName) {
       try {
-        await renameProject(editTitle.trim());
-        project.name = editTitle.trim();
+        await renameProject(name);
+        project.name = name;
       } catch (e) { statusMessage = `Rename failed: ${e.message}`; }
     }
     editingTitle = false;
@@ -249,9 +269,9 @@
                onkeydown={handleTitleKeydown} onblur={saveTitle} autofocus />
       {:else}
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <h1 class="project-title" class:clickable={!!projectName} class:no-project={!projectName}
-            onclick={() => projectName && startEditTitle()}
-            title={projectName ? 'Click to rename' : ''}>{projectName || 'No project'}</h1>
+        <h1 class="project-title clickable" class:no-project={!projectName}
+            onclick={startEditTitle}
+            title="Click to rename">{projectName || 'Untitled'}</h1>
       {/if}
     </div>
     <div class="header-actions">
