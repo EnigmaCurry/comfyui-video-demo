@@ -69,16 +69,27 @@
     showGalleryPicker = false;
   }
 
-  async function handlePreview() {
-    if (!sourceId) return;
+  // Auto-preview when source or settings change
+  $effect(() => {
+    const sid = sourceId;
+    const f = filter;
+    const mx = mirrorX;
+    const my = mirrorY;
+    const d = divisor;
+    const p = position;
+    if (!sid) return;
+    runPreview(sid, f, mx, my, d, p);
+  });
+
+  async function runPreview(sid, f, mx, my, d, p) {
     processing = true;
     resultUrl = null;
     resultError = '';
     try {
       const data = await galleryFilter({
-        source_id: sourceId, filter,
-        mirror_x: mirrorX, mirror_y: mirrorY,
-        divisor, position,
+        source_id: sid, filter: f,
+        mirror_x: mx, mirror_y: my,
+        divisor: d, position: p,
       });
       project = data.project;
       resultUrl = data.image_url;
@@ -124,12 +135,21 @@
     }
   }
 
-  function handleApplyToEditor() {
-    // Feed the current result back as the new source (without saving to gallery)
-    sourceId = 'filter_preview';
-    sourceUrl = resultUrl;
-    resultUrl = null;
-    resultError = '';
+  async function handleApplyToEditor() {
+    // Save the preview to get a permanent ID, then use it as the new source
+    saving = true;
+    try {
+      const data = await galleryFilterSave();
+      project = data.project;
+      sourceId = data.image.id;
+      sourceUrl = data.image.image_url;
+      resultUrl = null;
+      resultError = '';
+    } catch (e) {
+      onstatus?.({ detail: `Apply failed: ${e.message}` });
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
@@ -236,11 +256,6 @@
           </div>
         {/if}
 
-        <div class="actions">
-          <button class="preview-btn" onclick={handlePreview} disabled={processing || !sourceId}>
-            Preview
-          </button>
-        </div>
       </div>
     </div>
 
@@ -498,24 +513,6 @@
     background: var(--accent);
     color: white;
     border-color: var(--accent);
-  }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 12px;
-  }
-
-  .preview-btn {
-    background: var(--accent);
-    color: white;
-    font-weight: 500;
-    padding: 10px 28px;
-    font-size: 15px;
-  }
-
-  .preview-btn:hover:not(:disabled) {
-    background: var(--accent-hover);
   }
 
   /* Preview */
