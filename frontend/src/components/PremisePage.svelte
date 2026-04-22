@@ -1,8 +1,8 @@
 <script>
-  import { Sparkles, ArrowDown, Lock } from 'lucide-svelte';
-  import { suggestPremise, setPremise } from '../lib/api.js';
+  import { Sparkles, ArrowDown, Lock, SkipForward } from 'lucide-svelte';
+  import { suggestPremise, setPremise, skipToKeyframes } from '../lib/api.js';
 
-  let { onstatus, onpremise, locked = false, activity = 'film-director' } = $props();
+  let { onstatus, onpremise, onskip, locked = false, activity = 'film-director' } = $props();
 
   let notes = $state('');
   let premise = $state('');
@@ -44,6 +44,22 @@
       onstatus({ detail: `Failed: ${e.message}` });
     } finally {
       setting = false;
+    }
+  }
+
+  let skipping = $state(false);
+
+  async function handleSkipToKeyframes() {
+    skipping = true;
+    onstatus({ detail: 'Creating freeform keyframes project...' });
+    try {
+      const data = await skipToKeyframes();
+      onskip({ detail: data.project });
+      onstatus({ detail: 'Starting from blank keyframes.' });
+    } catch (e) {
+      onstatus({ detail: `Failed: ${e.message}` });
+    } finally {
+      skipping = false;
     }
   }
 </script>
@@ -103,6 +119,21 @@
       </button>
     {/if}
   </div>
+
+  {#if !locked && activity === 'film-director'}
+    <div class="skip-section">
+      <div class="skip-divider"><span>or</span></div>
+      <button
+        class="skip-btn"
+        onclick={handleSkipToKeyframes}
+        disabled={skipping}
+      >
+        <SkipForward size={16} />
+        {skipping ? 'Creating...' : 'Skip to Keyframes'}
+      </button>
+      <p class="skip-hint">Start with a blank keyframe — no premise or story needed.</p>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -189,5 +220,49 @@
 
   .proceed-btn:hover:not(:disabled) {
     background: var(--accent-hover);
+  }
+
+  .skip-section {
+    margin-top: 28px;
+    text-align: center;
+  }
+
+  .skip-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .skip-divider::before,
+  .skip-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .skip-btn {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    padding: 8px 18px;
+  }
+
+  .skip-btn:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+
+  .skip-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
   }
 </style>

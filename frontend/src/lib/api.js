@@ -35,6 +35,9 @@ export const renameProject = (name) => request('PUT', '/projects/current/name', 
 export const suggestPremise = (notes) => request('POST', '/premise/suggest', { notes });
 export const setPremise = (premise, activity = 'film-director') => request('POST', '/premise/set', { premise, activity });
 
+// ── Skip to Keyframes ──
+export const skipToKeyframes = (name) => request('POST', '/skip-to-keyframes', name ? { name } : null);
+
 // ── Story ──
 export const generateStory = (scene_count, scene_duration, width, height, style = 'transition-story') =>
   request('POST', '/story/generate', { scene_count, scene_duration, width, height, style });

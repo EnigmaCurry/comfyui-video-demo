@@ -100,6 +100,11 @@
     activeTab = 'story';
   }
 
+  function handleSkipToKeyframes(event) {
+    project = event.detail;
+    activeTab = 'keyframes';
+  }
+
   function handleStory(event) {
     project = event.detail;
     activeTab = 'keyframes';
@@ -257,7 +262,8 @@
 <main>
   {#if activeTab === 'premise'}
     <PremisePage bind:this={premiseRef} onstatus={handleStatus}
-                 onpremise={handlePremise} locked={premiseLocked} {activity} />
+                 onpremise={handlePremise} onskip={handleSkipToKeyframes}
+                 locked={premiseLocked} {activity} />
 
   {:else if activeTab === 'story'}
     <StoryPage onstatus={handleStatus} onstory={handleStory}
