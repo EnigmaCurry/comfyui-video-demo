@@ -619,7 +619,7 @@
               </select>
             </div>
 
-            <div class="tl-image">
+            <div class="tl-image" style="aspect-ratio: {projectWidth} / {projectHeight};">
               {#if kf.status === 'rendering'}
                 <div class="spinner-container"><div class="spinner"></div><span>Rendering...</span></div>
               {:else if kfImageUrl(kf)}
@@ -731,7 +731,7 @@
                 </div>
                 <div class="tv-body">
                   <div class="tv-screen-area">
-                    <div class="tv-screen">
+                    <div class="tv-screen" style="aspect-ratio: {projectWidth} / {projectHeight};">
                       <div class="tv-screen-inner">
                         {#if tr.status === 'done' && trVideoUrl(tr)}
                           <!-- svelte-ignore a11y_media_has_caption -->
@@ -1093,13 +1093,12 @@
 
   /* ── Image / Video areas ── */
   .tl-image {
-    flex: 1;
-    min-height: 60px;
     background: var(--bg);
     display: flex; align-items: center; justify-content: center;
     overflow: hidden;
+    /* aspect-ratio set via inline style from project resolution */
   }
-  .tl-image img { width: 100%; height: 100%; object-fit: cover; }
+  .tl-image img { width: 100%; height: 100%; object-fit: contain; }
 
   /* ── TV Set ── */
   .tv-set {
@@ -1148,9 +1147,8 @@
 
   .tv-screen {
     position: relative;
-    width: 100%;
-    height: 100%;
     background: #111;
+    /* aspect-ratio set via inline style from project resolution */
     border-radius: 10px;
     overflow: hidden;
     border: 3px solid #222;
