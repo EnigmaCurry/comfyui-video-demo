@@ -142,6 +142,35 @@ export const galleryFilterStatus = () => request('GET', '/gallery/filter/status'
 export const galleryFilterSave = () => request('POST', '/gallery/filter/save');
 export const galleryList = () => request('GET', '/gallery');
 export const galleryDelete = (id) => request('DELETE', `/gallery/${id}`);
+// ── Sequences ──
+export const listSequences = () => request('GET', '/sequences');
+export const createSequence = (name) => request('POST', '/sequences', name ? { name } : null);
+export const updateSequence = (id, updates) => request('PUT', `/sequences/${id}`, updates);
+export const deleteSequence = (id) => request('DELETE', `/sequences/${id}`);
+export const activateSequence = (id) => request('POST', `/sequences/${id}/activate`);
+
+export const seqAddKeyframe = (seqId, prompt = '') => request('POST', `/sequences/${seqId}/keyframes/add`, { prompt });
+export const seqUpdateKeyframe = (seqId, kfId, updates) => request('PUT', `/sequences/${seqId}/keyframes/${kfId}`, updates);
+export const seqDeleteKeyframe = (seqId, kfId) => request('DELETE', `/sequences/${seqId}/keyframes/${kfId}`);
+export const seqReorderKeyframes = (seqId, ids) => request('POST', `/sequences/${seqId}/keyframes/reorder`, ids);
+export const seqKeyframeStatus = (seqId, kfId) => request('GET', `/sequences/${seqId}/keyframes/${kfId}/status`);
+export const seqRenderKeyframe = (seqId, kfId, opts = {}) => request('POST', `/sequences/${seqId}/keyframes/${kfId}/render`, opts);
+export const seqRerenderKeyframe = (seqId, kfId, opts = {}) => request('POST', `/sequences/${seqId}/keyframes/${kfId}/rerender`, opts);
+export const seqRewriteKeyframe = (seqId, kfId, instruction) => request('POST', `/sequences/${seqId}/keyframes/${kfId}/rewrite`, { instruction });
+export async function seqUploadKeyframe(seqId, kfId, file) {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(`/api/sequences/${seqId}/keyframes/${kfId}/upload`, { method: 'POST', body: form });
+  if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
+  return resp.json();
+}
+
+export const seqSyncTransitions = (seqId) => request('POST', `/sequences/${seqId}/transitions/sync`);
+export const seqTransitionStatus = (seqId, trId) => request('GET', `/sequences/${seqId}/transitions/${trId}/status`);
+export const seqUpdateTransition = (seqId, trId, updates) => request('PUT', `/sequences/${seqId}/transitions/${trId}`, updates);
+export const seqRenderTransition = (seqId, trId, opts = {}) => request('POST', `/sequences/${seqId}/transitions/${trId}/render`, opts);
+export const seqRerenderTransition = (seqId, trId, opts = {}) => request('POST', `/sequences/${seqId}/transitions/${trId}/rerender`, opts);
+
 export async function galleryUpload(file) {
   const form = new FormData();
   form.append('file', file);

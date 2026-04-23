@@ -16,6 +16,7 @@ from models import (
     RefinementEntry,
     Project,
     RenderRequest,
+    Sequence,
     SetPremiseRequest,
     SoundtrackSection,
     SuggestPremiseRequest,
@@ -2355,6 +2356,402 @@ async def api_gallery_upload(file: bytes = fastapi_File(...)):
     _save()
     image_url = f"/api/projects/{proj.id}/images/{filename}"
     return {"image": {**img.model_dump(), "image_url": image_url}, "project": proj.model_dump()}
+
+
+# ── Sequence endpoints ───────────────────────────────────────────────
+
+def _get_sequence(sequence_id: str) -> Sequence:
+    proj = _get_project()
+    for seq in proj.sequences:
+        if seq.id == sequence_id:
+            return seq
+    raise HTTPException(404, "Sequence not found")
+
+
+def _get_seq_keyframe(seq: Sequence, keyframe_id: str) -> Keyframe:
+    for kf in seq.keyframes:
+        if kf.id == keyframe_id:
+            return kf
+    raise HTTPException(404, "Keyframe not found in sequence")
+
+
+def _get_seq_transition(seq: Sequence, transition_id: str) -> Transition:
+    for tr in seq.transitions:
+        if tr.id == transition_id:
+            return tr
+    raise HTTPException(404, "Transition not found in sequence")
+
+
+@app.get("/api/sequences")
+async def api_list_sequences():
+    proj = _get_project()
+    return {"sequences": [s.model_dump() for s in proj.sequences],
+            "active_sequence_id": proj.active_sequence_id}
+
+
+@app.post("/api/sequences")
+async def api_create_sequence(body: dict | None = None):
+    proj = _get_project()
+    name = (body or {}).get("name", "Untitled Sequence")
+    seq = Sequence(name=name)
+    proj.sequences.append(seq)
+    proj.active_sequence_id = seq.id
+    _save()
+    return {"sequence": seq.model_dump(), "project": proj.model_dump()}
+
+
+@app.put("/api/sequences/{sequence_id}")
+async def api_update_sequence(sequence_id: str, body: dict):
+    seq = _get_sequence(sequence_id)
+    if "name" in body:
+        seq.name = body["name"]
+    if "duration" in body:
+        seq.duration = body["duration"]
+    _save()
+    return {"sequence": seq.model_dump()}
+
+
+@app.delete("/api/sequences/{sequence_id}")
+async def api_delete_sequence(sequence_id: str):
+    proj = _get_project()
+    proj.sequences = [s for s in proj.sequences if s.id != sequence_id]
+    if proj.active_sequence_id == sequence_id:
+        proj.active_sequence_id = proj.sequences[0].id if proj.sequences else None
+    _save()
+    return {"project": proj.model_dump()}
+
+
+@app.post("/api/sequences/{sequence_id}/activate")
+async def api_activate_sequence(sequence_id: str):
+    proj = _get_project()
+    _get_sequence(sequence_id)  # validate exists
+    proj.active_sequence_id = sequence_id
+    _save()
+    return {"active_sequence_id": sequence_id}
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/add")
+async def api_seq_add_keyframe(sequence_id: str, body: dict | None = None):
+    seq = _get_sequence(sequence_id)
+    prompt = (body or {}).get("prompt", "")
+    position = len(seq.keyframes)
+    kf = Keyframe(position=position, prompt=prompt)
+    seq.keyframes.append(kf)
+    _sync_seq_transitions(seq)
+    _save()
+    return {"keyframe": kf.model_dump(), "sequence": seq.model_dump()}
+
+
+@app.put("/api/sequences/{sequence_id}/keyframes/{keyframe_id}")
+async def api_seq_update_keyframe(sequence_id: str, keyframe_id: str, body: dict):
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    if "prompt" in body:
+        kf.prompt = body["prompt"]
+    if "negative_prompt" in body:
+        kf.negative_prompt = body["negative_prompt"]
+    if "model" in body:
+        kf.model = body["model"]
+    _save()
+    return {"keyframe": kf.model_dump()}
+
+
+@app.delete("/api/sequences/{sequence_id}/keyframes/{keyframe_id}")
+async def api_seq_delete_keyframe(sequence_id: str, keyframe_id: str):
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    seq.keyframes = [kf for kf in seq.keyframes if kf.id != keyframe_id]
+    for i, kf in enumerate(seq.keyframes):
+        kf.position = i
+    _sync_seq_transitions(seq)
+    _save()
+    return {"sequence": seq.model_dump()}
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/reorder")
+async def api_seq_reorder_keyframes(sequence_id: str, ids: list[str]):
+    seq = _get_sequence(sequence_id)
+    by_id = {kf.id: kf for kf in seq.keyframes}
+    reordered = []
+    for kid in ids:
+        if kid in by_id:
+            reordered.append(by_id[kid])
+    for i, kf in enumerate(reordered):
+        kf.position = i
+    seq.keyframes = reordered
+    _sync_seq_transitions(seq)
+    _save()
+    return {"sequence": seq.model_dump()}
+
+
+@app.get("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/status")
+async def api_seq_keyframe_status(sequence_id: str, keyframe_id: str):
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    proj = _get_project()
+    result = {"status": kf.status, "error_message": kf.error_message, "seed": kf.seed}
+    if kf.image_filename:
+        result["image_url"] = f"/api/projects/{proj.id}/images/{kf.image_filename}"
+    if kf.refinement_history:
+        result["refinement_history"] = [e.model_dump() for e in kf.refinement_history]
+        result["refinement_index"] = kf.refinement_index
+    return result
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/render")
+async def api_seq_render_keyframe(sequence_id: str, keyframe_id: str, req: RenderRequest | None = None):
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    if req and req.prompt is not None:
+        kf.prompt = req.prompt
+    seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
+    old = render_tasks.pop(keyframe_id, None)
+    if old and not old.done():
+        old.cancel()
+    kf.status = KeyframeStatus.rendering
+    kf.error_message = None
+    task = asyncio.create_task(_do_render_keyframe(proj.id, kf, seed, proj.width, proj.height))
+    render_tasks[keyframe_id] = task
+    return {"id": kf.id, "status": kf.status, "seed": seed}
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/rerender")
+async def api_seq_rerender_keyframe(sequence_id: str, keyframe_id: str, req: RenderRequest | None = None):
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    kf.refinement_history = []
+    kf.refinement_index = -1
+    seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
+    return await api_seq_render_keyframe(sequence_id, keyframe_id, RenderRequest(seed=seed))
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/upload")
+async def api_seq_upload_keyframe(sequence_id: str, keyframe_id: str, file: bytes = fastapi_File(...)):
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    filename = f"seq_{kf.id}.png"
+    dest = os.path.join(images_dir(proj.id), filename)
+    with open(dest, "wb") as f:
+        f.write(file)
+    kf.image_filename = filename
+    kf.seed = random.randint(0, 2**32 - 1)
+    kf.status = KeyframeStatus.done
+    _save()
+    return kf.model_dump()
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/rewrite")
+async def api_seq_rewrite_keyframe(sequence_id: str, keyframe_id: str, body: dict):
+    from llm import call_llm_text
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    instruction = body.get("instruction", "").strip()
+    if not instruction:
+        raise HTTPException(400, "Instruction required")
+    system_prompt = (
+        "You are a prompt engineer. Rewrite the image generation prompt below "
+        "according to the user's instruction. Reply with ONLY the new prompt."
+    )
+    user_msg = f"Current prompt:\n{kf.prompt}\n\nInstruction:\n{instruction}"
+    new_prompt = await call_llm_text(system_prompt, user_msg, temperature=0.7)
+    kf.prompt = new_prompt.strip()
+    kf.status = KeyframeStatus.rendering
+    _save()
+    proj = _get_project()
+    seed = random.randint(0, 2**32 - 1)
+    task = asyncio.create_task(_do_render_keyframe(proj.id, kf, seed, proj.width, proj.height))
+    render_tasks[kf.id] = task
+    return {"prompt": kf.prompt, "status": kf.status}
+
+
+def _sync_seq_transitions(seq: Sequence):
+    """Rebuild transitions for adjacent keyframe pairs in a sequence."""
+    ordered = sorted(seq.keyframes, key=lambda k: k.position)
+    existing = {(tr.from_keyframe_id, tr.to_keyframe_id): tr for tr in seq.transitions}
+    new_transitions = []
+    for i in range(len(ordered) - 1):
+        pair = (ordered[i].id, ordered[i + 1].id)
+        if pair in existing:
+            tr = existing[pair]
+            tr.position = i
+            new_transitions.append(tr)
+        else:
+            new_transitions.append(Transition(
+                position=i,
+                from_keyframe_id=ordered[i].id,
+                to_keyframe_id=ordered[i + 1].id,
+                prompt="",
+            ))
+    seq.transitions = new_transitions
+
+
+@app.post("/api/sequences/{sequence_id}/transitions/sync")
+async def api_seq_sync_transitions(sequence_id: str):
+    """Sync transitions and generate descriptions for new ones."""
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    ordered = sorted(seq.keyframes, key=lambda k: k.position)
+
+    existing = {(tr.from_keyframe_id, tr.to_keyframe_id): tr for tr in seq.transitions}
+    new_transitions = []
+    needs_description = []
+
+    for i in range(len(ordered) - 1):
+        if ordered[i].status != KeyframeStatus.done or ordered[i + 1].status != KeyframeStatus.done:
+            continue
+        pair = (ordered[i].id, ordered[i + 1].id)
+        if pair in existing:
+            tr = existing[pair]
+            tr.position = len(new_transitions)
+            new_transitions.append(tr)
+        else:
+            tr = Transition(
+                position=len(new_transitions),
+                from_keyframe_id=ordered[i].id,
+                to_keyframe_id=ordered[i + 1].id,
+                prompt="",
+            )
+            new_transitions.append(tr)
+            needs_description.append((len(new_transitions) - 1, ordered[i], ordered[i + 1]))
+
+    if needs_description:
+        from llm import call_llm_text
+        for pos, from_kf, to_kf in needs_description:
+            try:
+                system_prompt = (
+                    "You are a visual director writing a MOTION DESCRIPTION for a smooth "
+                    "video transition between two keyframe images. Write 1-3 sentences "
+                    "describing camera movement, subject motion, and visual transformation. "
+                    "Reply with ONLY the description, no quotes."
+                )
+                user_msg = (f"From: {from_kf.prompt}\n\nTo: {to_kf.prompt}\n\n"
+                            f"Duration: {seq.duration} seconds")
+                desc = await call_llm_text(system_prompt, user_msg, temperature=0.9)
+                new_transitions[pos].prompt = desc
+            except Exception as e:
+                print(f"Warning: seq transition desc failed: {e}", flush=True)
+
+    seq.transitions = new_transitions
+    _save()
+    return {"sequence": seq.model_dump()}
+
+
+@app.get("/api/sequences/{sequence_id}/transitions/{transition_id}/status")
+async def api_seq_transition_status(sequence_id: str, transition_id: str):
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    tr = _get_seq_transition(seq, transition_id)
+    result = {"status": tr.status, "error_message": tr.error_message, "seed": tr.seed}
+    if tr.video_filename:
+        result["video_url"] = f"/api/projects/{proj.id}/videos/{tr.video_filename}"
+    return result
+
+
+@app.put("/api/sequences/{sequence_id}/transitions/{transition_id}")
+async def api_seq_update_transition(sequence_id: str, transition_id: str, body: dict):
+    seq = _get_sequence(sequence_id)
+    tr = _get_seq_transition(seq, transition_id)
+    if "prompt" in body:
+        tr.prompt = body["prompt"]
+    if "negative_prompt" in body:
+        tr.negative_prompt = body["negative_prompt"]
+    if "duration" in body:
+        tr.duration = body["duration"]
+    _save()
+    return {"transition": tr.model_dump()}
+
+
+@app.post("/api/sequences/{sequence_id}/transitions/{transition_id}/render")
+async def api_seq_render_transition(sequence_id: str, transition_id: str,
+                                     req: TransitionRenderRequest | None = None):
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    tr = _get_seq_transition(seq, transition_id)
+    seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
+    frame_rate = req.frame_rate if req else 25
+    duration = tr.duration or (req.duration_seconds if req else seq.duration)
+    old = render_tasks.pop(transition_id, None)
+    if old and not old.done():
+        old.cancel()
+    tr.status = KeyframeStatus.rendering
+    tr.error_message = None
+    task = asyncio.create_task(
+        _do_render_seq_transition(proj.id, seq, tr, seed, proj.width, proj.height, frame_rate, duration)
+    )
+    render_tasks[transition_id] = task
+    return {"id": tr.id, "status": tr.status, "seed": seed}
+
+
+@app.post("/api/sequences/{sequence_id}/transitions/{transition_id}/rerender")
+async def api_seq_rerender_transition(sequence_id: str, transition_id: str,
+                                       req: TransitionRenderRequest | None = None):
+    seq = _get_sequence(sequence_id)
+    _get_seq_transition(seq, transition_id)
+    seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
+    return await api_seq_render_transition(sequence_id, transition_id, TransitionRenderRequest(seed=seed))
+
+
+async def _do_render_seq_transition(proj_id: str, seq: Sequence, tr: Transition, seed: int,
+                                     width: int, height: int, frame_rate: int,
+                                     duration_seconds: int):
+    """Render a sequence transition video via ComfyUI."""
+    from comfyui import download_output, run_workflow, upload_image
+    from workflows import TRANSITION_WORKFLOW_PATH, load_workflow, patch_transition_workflow
+
+    async with _render_semaphore:
+        try:
+            from_kf = next((kf for kf in seq.keyframes if kf.id == tr.from_keyframe_id), None)
+            to_kf = next((kf for kf in seq.keyframes if kf.id == tr.to_keyframe_id), None)
+            if not from_kf or not to_kf:
+                raise RuntimeError("Keyframes not found for transition")
+            if not from_kf.image_filename or not to_kf.image_filename:
+                raise RuntimeError("Keyframe images not rendered yet")
+
+            from_path = os.path.join(images_dir(proj_id), from_kf.image_filename)
+            to_path = os.path.join(images_dir(proj_id), to_kf.image_filename)
+            first_name = await upload_image(from_path)
+            last_name = await upload_image(to_path)
+
+            from llm import _load_style
+            style = _load_style("transition-story")
+            neg_parts = [style.get("negative_prompt", "")]
+            if tr.negative_prompt:
+                neg_parts.append(tr.negative_prompt)
+            neg_prompt = ", ".join(p for p in neg_parts if p)
+
+            print(f"Rendering seq transition {tr.id}: seed={seed}", flush=True)
+            base_wf = load_workflow(TRANSITION_WORKFLOW_PATH)
+            patched = patch_transition_workflow(
+                base_wf,
+                first_image_name=first_name,
+                last_image_name=last_name,
+                prompt_text=tr.prompt,
+                negative_prompt_text=neg_prompt,
+                seed_value=seed,
+                width=width,
+                height=height,
+                frame_rate=frame_rate,
+                duration_seconds=duration_seconds,
+                output_prefix=f"v2web/seq_trans_{tr.id}",
+            )
+
+            history = await run_workflow(patched, timeout=1200)
+            filename = f"seq_{tr.id}.mp4"
+            dest = os.path.join(images_dir(proj_id), filename)
+            await download_output(history, dest, output_type="video")
+            tr.video_filename = filename
+            tr.seed = seed
+            tr.status = KeyframeStatus.done
+            if current_project and current_project.id == proj_id:
+                _save()
+        except asyncio.CancelledError:
+            tr.status = KeyframeStatus.pending
+        except Exception as e:
+            tr.status = KeyframeStatus.error
+            tr.error_message = str(e)
+            print(f"Seq transition render error: {e}", flush=True)
 
 
 # ── Favicon ─────────────────────────────────────────────────────────

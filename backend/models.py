@@ -88,6 +88,8 @@ class Project(BaseModel):
     transitions: list[Transition] = Field(default_factory=list)
     soundtrack_sections: list["SoundtrackSection"] = Field(default_factory=list)
     images: list[GalleryImage] = Field(default_factory=list)
+    sequences: list[Sequence] = Field(default_factory=list)
+    active_sequence_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -122,6 +124,15 @@ class SoundtrackSection(BaseModel):
     audio_filename: Optional[str] = None
     preview_filename: Optional[str] = None
     error_message: Optional[str] = None
+
+
+class Sequence(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    name: str = "Untitled Sequence"
+    duration: int = 10
+    keyframes: list[Keyframe] = Field(default_factory=list)
+    transitions: list[Transition] = Field(default_factory=list)
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class GenerateRequest(BaseModel):

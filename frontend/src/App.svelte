@@ -11,6 +11,7 @@
   import ImageCreatePage from './components/ImageCreatePage.svelte';
   import ImageGalleryPage from './components/ImageGalleryPage.svelte';
   import ImageEditPage from './components/ImageEditPage.svelte';
+  import SequencesPage from './components/SequencesPage.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import { getCurrentProject, createProject, renderKeyframe, renderTransition, renameProject, ACTIVITIES } from './lib/api.js';
 
@@ -27,6 +28,7 @@
     'image-generator': [
       { id: 'create', label: 'Create' },
       { id: 'edit', label: 'Edit' },
+      { id: 'sequences', label: 'Sequences' },
       { id: 'gallery', label: 'Gallery' },
     ],
   };
@@ -346,6 +348,9 @@
     <ImageEditPage bind:project onstatus={handleStatus}
                    ongallery={() => activeTab = 'gallery'}
                    bind:editImage />
+
+  {:else if activeTab === 'sequences'}
+    <SequencesPage bind:project onstatus={handleStatus} />
 
   {:else if activeTab === 'gallery'}
     <ImageGalleryPage {projectId} onstatus={handleStatus}
