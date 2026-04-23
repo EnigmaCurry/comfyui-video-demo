@@ -35,6 +35,7 @@
   let tabs = $derived(ACTIVITY_TABS[activity] || ACTIVITY_TABS['film-director']);
 
   let activeTab = $state('premise');
+  let lastTab = $state({ 'film-director': 'premise', 'image-generator': 'create' });
   let project = $state(null);
   let statusMessage = $state('');
   let premiseRef = $state(null);
@@ -190,7 +191,8 @@
 
   function handleActivityChange(event) {
     const newActivity = event.detail;
-    activeTab = defaultTab(newActivity);
+    lastTab[activity] = activeTab;
+    activeTab = lastTab[newActivity] || defaultTab(newActivity);
   }
 
   let statusTimer = null;
