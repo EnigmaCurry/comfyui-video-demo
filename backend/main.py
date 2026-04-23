@@ -2578,6 +2578,10 @@ async def api_seq_update_keyframe(sequence_id: str, keyframe_id: str, body: dict
         kf.negative_prompt = body["negative_prompt"]
     if "model" in body:
         kf.model = body["model"]
+    if "figure1_kf_id" in body:
+        kf.figure1_kf_id = body["figure1_kf_id"]
+    if "figure2_kf_id" in body:
+        kf.figure2_kf_id = body["figure2_kf_id"]
     _save()
     return {"keyframe": kf.model_dump()}
 

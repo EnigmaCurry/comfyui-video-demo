@@ -434,6 +434,28 @@
     }
   }
 
+  async function handleDeriveFromPrev(kf, i) {
+    if (!activeSeqId || i === 0) return;
+    const prevKf = keyframes[i - 1];
+    if (!prevKf?.image_filename) {
+      onstatus?.({ detail: 'Previous keyframe must have a rendered image.' });
+      return;
+    }
+    try {
+      await seqUpdateKeyframe(activeSeqId, kf.id, {
+        model: 'flux2_klein',
+        figure1_kf_id: prevKf.id,
+        figure2_kf_id: prevKf.id,
+      });
+      kf.model = 'flux2_klein';
+      kf.figure1_kf_id = prevKf.id;
+      kf.figure2_kf_id = prevKf.id;
+      onstatus?.({ detail: 'Set to Klein model with previous keyframe as input. Enter a prompt and render.' });
+    } catch (e) {
+      onstatus?.({ detail: `Failed: ${e.message}` });
+    }
+  }
+
   // ── Transition operations ──
   async function handleSyncTransitions() {
     if (!activeSeqId) return;
@@ -705,9 +727,17 @@
               {:else if kf.status === 'error'}
                 <div class="error-container"><span>Error</span><small>{kf.error_message || 'Unknown'}</small></div>
               {:else if !kf.locked}
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div class="gallery-placeholder" onclick={() => openGalleryPicker(kf.id)} title="Load from gallery">
-                  <Plus size={28} />
+                <div class="blank-kf-options">
+                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                  <div class="gallery-placeholder" onclick={() => openGalleryPicker(kf.id)} title="Load from gallery">
+                    <Plus size={24} />
+                  </div>
+                  {#if i > 0 && keyframes[i - 1]?.image_filename}
+                    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                    <div class="derive-placeholder" onclick={() => handleDeriveFromPrev(kf, i)} title="Derive from previous keyframe (Klein)">
+                      <Blend size={24} />
+                    </div>
+                  {/if}
                 </div>
               {:else}
                 <div class="placeholder-box">Locked</div>
@@ -1530,14 +1560,21 @@
   }
   .empty-state p { font-size: 16px; }
 
-  /* ── Gallery placeholder in keyframe ── */
-  .gallery-placeholder {
+  /* ── Blank keyframe options ── */
+  .blank-kf-options {
     width: 100%; height: 100%;
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; color: var(--text-muted);
-    transition: color 0.15s;
+    gap: 24px;
   }
-  .gallery-placeholder:hover { color: var(--accent); }
+
+  .gallery-placeholder, .derive-placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 4px; cursor: pointer; color: var(--text-muted);
+    transition: color 0.15s; padding: 12px;
+    border-radius: var(--radius); border: 1px dashed var(--border);
+  }
+  .gallery-placeholder:hover { color: var(--accent); border-color: var(--accent); }
+  .derive-placeholder:hover { color: var(--accent); border-color: var(--accent); }
 
   /* ── Gallery picker modal ── */
   .picker-overlay {
