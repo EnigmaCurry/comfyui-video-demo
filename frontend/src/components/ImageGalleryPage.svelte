@@ -88,7 +88,7 @@
         onstatus?.({ detail: 'Uploading pasted image...' });
         try {
           const data = await galleryUpload(blob);
-          images = [...images, data.image];
+          images = [data.image, ...images];
           onstatus?.({ detail: 'Image uploaded to gallery.' });
         } catch (err) {
           onstatus?.({ detail: `Upload failed: ${err.message}` });

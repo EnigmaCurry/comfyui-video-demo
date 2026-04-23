@@ -1885,7 +1885,7 @@ async def api_gallery_refine(body: dict):
         seed=seed,
         status=KeyframeStatus.rendering,
     )
-    proj.images.append(img)
+    proj.images.insert(0, img)
 
     task = asyncio.create_task(_do_refine_gallery_image(proj.id, img, source_path, seed))
     render_tasks["gallery_preview"] = task
@@ -2351,7 +2351,7 @@ async def api_gallery_upload(file: bytes = fastapi_File(...)):
         image_filename=filename,
         status=KeyframeStatus.done,
     )
-    proj.images.append(img)
+    proj.images.insert(0, img)
     _save()
     image_url = f"/api/projects/{proj.id}/images/{filename}"
     return {"image": {**img.model_dump(), "image_url": image_url}, "project": proj.model_dump()}
