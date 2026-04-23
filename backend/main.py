@@ -2379,6 +2379,25 @@ async def api_gallery_upload(file: bytes = fastapi_File(...)):
     return {"image": {**img.model_dump(), "image_url": image_url}, "project": proj.model_dump()}
 
 
+def _letterbox_image(src_path: str, dest_path: str, width: int, height: int):
+    """Resize an image to fit within width x height, padding with black bars."""
+    from PIL import Image as PILImage
+
+    with PILImage.open(src_path) as img:
+        img = img.convert("RGB")
+        # Calculate scale to fit within target while preserving aspect ratio
+        scale = min(width / img.width, height / img.height)
+        new_w = round(img.width * scale)
+        new_h = round(img.height * scale)
+        resized = img.resize((new_w, new_h), PILImage.LANCZOS)
+        # Create black canvas and paste centered
+        canvas = PILImage.new("RGB", (width, height), (0, 0, 0))
+        x = (width - new_w) // 2
+        y = (height - new_h) // 2
+        canvas.paste(resized, (x, y))
+        canvas.save(dest_path, "PNG")
+
+
 # ── Sequence endpoints ───────────────────────────────────────────────
 
 def _get_sequence(sequence_id: str) -> Sequence:
@@ -2464,14 +2483,15 @@ async def api_seq_add_keyframe(sequence_id: str, body: dict | None = None):
     kf = Keyframe(position=position, prompt=prompt)
     seq.keyframes.append(kf)
 
-    # If a gallery image was specified, copy it in
+    # If a gallery image was specified, copy and letterbox it
     if gallery_image_id:
         img = next((i for i in proj.images if i.id == gallery_image_id), None)
         if img and img.image_filename:
             src = os.path.join(images_dir(proj.id), img.image_filename)
             if os.path.isfile(src):
                 dest_filename = f"seq_{kf.id}.png"
-                shutil.copy2(src, os.path.join(images_dir(proj.id), dest_filename))
+                dest = os.path.join(images_dir(proj.id), dest_filename)
+                _letterbox_image(src, dest, proj.width, proj.height)
                 kf.image_filename = dest_filename
                 kf.seed = random.randint(0, 2**32 - 1)
                 kf.status = KeyframeStatus.done
@@ -2485,6 +2505,7 @@ async def api_seq_add_keyframe(sequence_id: str, body: dict | None = None):
 @app.post("/api/sequences/{sequence_id}/keyframes/add-image")
 async def api_seq_add_keyframe_image(sequence_id: str, file: bytes = fastapi_File(...)):
     """Add a new keyframe from an uploaded/pasted image."""
+    import tempfile
     proj = _get_project()
     seq = _get_sequence(sequence_id)
     position = len(seq.keyframes)
@@ -2492,8 +2513,14 @@ async def api_seq_add_keyframe_image(sequence_id: str, file: bytes = fastapi_Fil
     seq.keyframes.append(kf)
     filename = f"seq_{kf.id}.png"
     dest = os.path.join(images_dir(proj.id), filename)
-    with open(dest, "wb") as f:
-        f.write(file)
+    # Write to temp file, then letterbox to dest
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp.write(file)
+        tmp_path = tmp.name
+    try:
+        _letterbox_image(tmp_path, dest, proj.width, proj.height)
+    finally:
+        os.unlink(tmp_path)
     kf.image_filename = filename
     kf.seed = random.randint(0, 2**32 - 1)
     kf.status = KeyframeStatus.done
@@ -2522,12 +2549,13 @@ async def api_seq_merge(sequence_id: str, body: dict):
             negative_prompt=src_kf.negative_prompt,
             model=src_kf.model,
         )
-        # Copy the image if it exists
+        # Copy and letterbox the image if it exists
         if src_kf.image_filename:
             src_path = os.path.join(images_dir(proj.id), src_kf.image_filename)
             if os.path.isfile(src_path):
                 dest_filename = f"seq_{new_kf.id}.png"
-                shutil.copy2(src_path, os.path.join(images_dir(proj.id), dest_filename))
+                _letterbox_image(src_path, os.path.join(images_dir(proj.id), dest_filename),
+                                 proj.width, proj.height)
                 new_kf.image_filename = dest_filename
                 new_kf.seed = random.randint(0, 2**32 - 1)
                 new_kf.status = KeyframeStatus.done
@@ -2650,6 +2678,7 @@ async def api_seq_rerender_keyframe(sequence_id: str, keyframe_id: str, req: Ren
 
 @app.post("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/upload")
 async def api_seq_upload_keyframe(sequence_id: str, keyframe_id: str, file: bytes = fastapi_File(...)):
+    import tempfile
     proj = _get_project()
     seq = _get_sequence(sequence_id)
     kf = _get_seq_keyframe(seq, keyframe_id)
@@ -2657,8 +2686,13 @@ async def api_seq_upload_keyframe(sequence_id: str, keyframe_id: str, file: byte
         raise HTTPException(400, "Keyframe is locked")
     filename = f"seq_{kf.id}.png"
     dest = os.path.join(images_dir(proj.id), filename)
-    with open(dest, "wb") as f:
-        f.write(file)
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp.write(file)
+        tmp_path = tmp.name
+    try:
+        _letterbox_image(tmp_path, dest, proj.width, proj.height)
+    finally:
+        os.unlink(tmp_path)
     kf.image_filename = filename
     kf.seed = random.randint(0, 2**32 - 1)
     kf.status = KeyframeStatus.done
