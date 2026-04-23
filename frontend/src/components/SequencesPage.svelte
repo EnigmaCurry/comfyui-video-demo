@@ -1104,7 +1104,7 @@
   .tv-set {
     justify-self: center;
     width: 100%;
-    max-width: 380px;
+    max-width: 646px;
     display: flex;
     flex-direction: column;
   }
