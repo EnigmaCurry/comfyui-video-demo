@@ -401,6 +401,16 @@
   }
   function cancelTrNegEdit(tr) { trEditingNeg[tr.id] = false; }
 
+  async function handleTrDurationChange(tr, e) {
+    const val = parseInt(e.target.value, 10);
+    if (isNaN(val) || val < 1) return;
+    tr.duration = val;
+    try {
+      await seqUpdateTransition(activeSeqId, tr.id, { duration: val });
+      onstatus?.({ detail: `Duration set to ${val}s. Re-render to apply.` });
+    } catch (err) { onstatus?.({ detail: `Failed: ${err.message}` }); }
+  }
+
   async function handleRenderTr(tr) {
     onstatus?.({ detail: `Rendering transition...` });
     tr.status = 'rendering';
@@ -565,7 +575,7 @@
 {#if activeSeq}
   {#if keyframes.length > 0}
     <div class="timeline-scroll">
-      <div class="timeline-grid" style="grid-template-columns: repeat({keyframes.length}, 260px) 60px;">
+      <div class="timeline-grid" style="grid-template-columns: repeat({keyframes.length}, 280px) 60px;">
         <!-- Row 1: Keyframes -->
         {#each keyframes as kf, i (kf.id)}
           <div class="tl-card tl-keyframe" style="grid-column: {i + 1}; grid-row: 1;">
@@ -720,8 +730,14 @@
                           class:error={tr.status === 'error'}>
                       {tr.status}
                     </span>
+                    <div class="tv-duration">
+                      <input type="number" min="1" max="120"
+                             value={tr.duration || 10}
+                             onchange={(e) => handleTrDurationChange(tr, e)}
+                             class="tv-duration-input" />
+                      <span class="tv-duration-label">sec</span>
+                    </div>
                     <div class="tv-knob"></div>
-                    <div class="tv-knob small"></div>
                   </div>
                 </div>
                 <div class="tv-footer">
@@ -967,7 +983,8 @@
 
   .timeline-grid {
     display: grid;
-    gap: 12px;
+    column-gap: 24px;
+    row-gap: 16px;
     min-width: min-content;
     align-items: start;
   }
@@ -1027,7 +1044,7 @@
   .tv-set {
     justify-self: center;
     width: 100%;
-    max-width: 340px;
+    max-width: 380px;
   }
 
   .tv-antennas {
@@ -1158,7 +1175,31 @@
       0 2px 4px rgba(0, 0, 0, 0.4),
       inset 0 1px 2px rgba(255, 255, 255, 0.1);
   }
-  .tv-knob.small { width: 16px; height: 16px; }
+  .tv-duration {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .tv-duration-input {
+    width: 38px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 2px;
+    color: #cba;
+    background: #1a1510;
+    border: 1px solid #555;
+    border-radius: 4px;
+  }
+
+  .tv-duration-label {
+    font-size: 8px;
+    color: #776655;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 
   .tv-footer {
     background: var(--bg-card);
