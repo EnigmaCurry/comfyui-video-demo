@@ -533,6 +533,8 @@
 
   .card-preview video {
     width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
     display: block;
   }
 
