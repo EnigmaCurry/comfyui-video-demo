@@ -528,6 +528,17 @@
 
   function getKeyframe(id) { return keyframes.find(kf => kf.id === id); }
 
+  function horizontalScroll(node) {
+    function onWheel(e) {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        node.scrollLeft += e.deltaY;
+      }
+    }
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return { destroy() { node.removeEventListener('wheel', onWheel); } };
+  }
+
   function autoFocus(node) {
     node.focus();
     node.setSelectionRange(node.value.length, node.value.length);
@@ -652,7 +663,7 @@
 <!-- Horizontal timeline -->
 {#if activeSeq}
   {#if keyframes.length > 0}
-    <div class="timeline-scroll">
+    <div class="timeline-scroll" use:horizontalScroll>
       <!-- Row 1: Keyframes (draggable) + add button -->
       <div class="kf-row-wrap">
       <div class="kf-row"
