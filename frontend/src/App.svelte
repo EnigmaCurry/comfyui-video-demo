@@ -33,10 +33,23 @@
     ],
   };
 
-  let activity = $state('film-director');
+  // ── Read initial state from URL hash ──
+  function parseHash() {
+    const hash = location.hash.replace(/^#\/?/, '');
+    if (!hash) return null;
+    const [act, tab] = hash.split('/');
+    if (act && ACTIVITY_TABS[act]) {
+      const validTab = tab && ACTIVITY_TABS[act].some(t => t.id === tab);
+      return { activity: act, tab: validTab ? tab : ACTIVITY_TABS[act][0].id };
+    }
+    return null;
+  }
+
+  const hashState = parseHash();
+  let activity = $state(hashState?.activity || 'film-director');
   let tabs = $derived(ACTIVITY_TABS[activity] || ACTIVITY_TABS['film-director']);
 
-  let activeTab = $state('premise');
+  let activeTab = $state(hashState?.tab || 'premise');
   let lastTab = $state({ 'film-director': 'premise', 'image-generator': 'create' });
   let project = $state(null);
   let statusMessage = $state('');
@@ -80,12 +93,20 @@
       const data = await getCurrentProject();
       if (data.project) {
         project = data.project;
-        activity = data.project.activity || 'film-director';
-        activeTab = pickTab(data.project);
+        const projActivity = data.project.activity || 'film-director';
+        if (!hashState) {
+          // No hash in URL — auto-pick based on project state
+          activity = projActivity;
+          activeTab = pickTab(data.project);
+        } else {
+          // Hash provided — use it, but still load project data
+          activity = hashState.activity;
+          activeTab = hashState.tab;
+        }
       } else {
         const created = await createProject(activity, 'Untitled');
         project = created.project;
-        activeTab = defaultTab(activity);
+        if (!hashState) activeTab = defaultTab(activity);
       }
     } catch {}
   }
@@ -236,6 +257,33 @@
   }
 
   $effect(() => { activeTab; window.scrollTo(0, 0); });
+
+  // ── Sync hash with current activity/tab ──
+  let suppressHashUpdate = false;
+  $effect(() => {
+    const hash = `#${activity}/${activeTab}`;
+    if (!suppressHashUpdate && location.hash !== hash) {
+      history.pushState(null, '', hash);
+    }
+    suppressHashUpdate = false;
+  });
+
+  function handlePopState() {
+    const state = parseHash();
+    if (state) {
+      suppressHashUpdate = true;
+      if (state.activity !== activity) {
+        const old = activity;
+        activity = state.activity;
+        lastTab[old] = activeTab;
+      }
+      activeTab = state.tab;
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('popstate', handlePopState);
+  }
 
   let mutableKeyframes = $state([]);
   $effect.pre(() => { if (project?.keyframes) mutableKeyframes = project.keyframes; });
