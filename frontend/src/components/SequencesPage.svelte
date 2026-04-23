@@ -58,25 +58,13 @@
 
   const flipDurationMs = 200;
 
-  // Build interleaved timeline: [kf, tr, kf, tr, kf, ...]
-  let timeline = $derived.by(() => {
-    const items = [];
-    for (let i = 0; i < keyframes.length; i++) {
-      items.push({ type: 'keyframe', kf: keyframes[i], index: i });
-      // Find transition from this keyframe to next
-      if (i < keyframes.length - 1) {
-        const tr = transitions.find(t =>
-          t.from_keyframe_id === keyframes[i].id && t.to_keyframe_id === keyframes[i + 1].id
-        );
-        if (tr) {
-          items.push({ type: 'transition', tr, index: i });
-        } else {
-          items.push({ type: 'transition-placeholder', fromIndex: i });
-        }
-      }
-    }
-    return items;
-  });
+  // Build transition lookup: for each adjacent keyframe pair, find the transition
+  function getTransitionBetween(i) {
+    if (i >= keyframes.length - 1) return null;
+    return transitions.find(t =>
+      t.from_keyframe_id === keyframes[i].id && t.to_keyframe_id === keyframes[i + 1].id
+    ) || null;
+  }
 
   // ── Init ──
   async function init() {
@@ -577,230 +565,216 @@
 {#if activeSeq}
   {#if keyframes.length > 0}
     <div class="timeline-scroll">
-      <div class="timeline">
-        {#each timeline as item}
-          {#if item.type === 'keyframe'}
-            {@const kf = item.kf}
-            {@const i = item.index}
-            <div class="tl-card tl-keyframe">
-              <div class="tl-header">
-                <span class="tl-position">{i + 1}</span>
-                <span class="status-badge" class:pending={kf.status === 'pending'}
-                      class:rendering={kf.status === 'rendering'}
-                      class:done={kf.status === 'done'}
-                      class:error={kf.status === 'error'}>
-                  {kf.status}
-                </span>
-                <select class="model-select" value={kf.model || 'hidream'}
-                        onchange={(e) => handleModelChange(kf, e)}>
-                  {#each T2I_MODELS as m}
-                    <option value={m.id}>{m.label}</option>
-                  {/each}
-                </select>
-              </div>
+      <div class="timeline-grid" style="grid-template-columns: repeat({keyframes.length}, 260px) 60px;">
+        <!-- Row 1: Keyframes -->
+        {#each keyframes as kf, i (kf.id)}
+          <div class="tl-card tl-keyframe" style="grid-column: {i + 1}; grid-row: 1;">
+            <div class="tl-header">
+              <span class="tl-position">{i + 1}</span>
+              <span class="status-badge" class:pending={kf.status === 'pending'}
+                    class:rendering={kf.status === 'rendering'}
+                    class:done={kf.status === 'done'}
+                    class:error={kf.status === 'error'}>
+                {kf.status}
+              </span>
+              <select class="model-select" value={kf.model || 'hidream'}
+                      onchange={(e) => handleModelChange(kf, e)}>
+                {#each T2I_MODELS as m}
+                  <option value={m.id}>{m.label}</option>
+                {/each}
+              </select>
+            </div>
 
-              <div class="tl-image">
-                {#if kf.status === 'rendering'}
-                  <div class="spinner-container"><div class="spinner"></div><span>Rendering...</span></div>
-                {:else if kfImageUrl(kf)}
-                  <img src={kfImageUrl(kf)} alt="Keyframe {i + 1}" />
-                {:else if kf.status === 'error'}
-                  <div class="error-container"><span>Error</span><small>{kf.error_message || 'Unknown'}</small></div>
-                {:else}
-                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                  <div class="gallery-placeholder" onclick={() => openGalleryPicker(kf.id)} title="Load from gallery">
-                    <Plus size={28} />
-                  </div>
-                {/if}
-              </div>
+            <div class="tl-image">
+              {#if kf.status === 'rendering'}
+                <div class="spinner-container"><div class="spinner"></div><span>Rendering...</span></div>
+              {:else if kfImageUrl(kf)}
+                <img src={kfImageUrl(kf)} alt="Keyframe {i + 1}" />
+              {:else if kf.status === 'error'}
+                <div class="error-container"><span>Error</span><small>{kf.error_message || 'Unknown'}</small></div>
+              {:else}
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <div class="gallery-placeholder" onclick={() => openGalleryPicker(kf.id)} title="Load from gallery">
+                  <Plus size={28} />
+                </div>
+              {/if}
+            </div>
 
-              <div class="tl-body">
-                {#if editing[kf.id]}
-                  <textarea bind:value={editPrompts[kf.id]}
-                            onkeydown={(e) => editKeydown(e, kf, saveEditKf, cancelEditKf)}
-                            rows="3" class="edit-textarea" use:autoFocus></textarea>
+            <div class="tl-body">
+              {#if editing[kf.id]}
+                <textarea bind:value={editPrompts[kf.id]}
+                          onkeydown={(e) => editKeydown(e, kf, saveEditKf, cancelEditKf)}
+                          rows="3" class="edit-textarea" use:autoFocus></textarea>
+                <div class="edit-actions">
+                  <button class="btn-save" onclick={() => saveEditKf(kf)}><Check size={14} /> Save</button>
+                  <button class="btn-cancel" onclick={() => cancelEditKf(kf)}><X size={14} /> Cancel</button>
+                </div>
+              {:else}
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <p class="prompt-text clickable" class:empty={!kf.prompt} onclick={() => startEditKf(kf)}>
+                  {kf.prompt || 'Click to enter prompt...'}
+                </p>
+              {/if}
+
+              {#if editingNeg[kf.id]}
+                <div class="neg-edit">
+                  <label class="neg-label">Negative prompt</label>
+                  <textarea bind:value={editNegPrompts[kf.id]}
+                            onkeydown={(e) => editKeydown(e, kf, saveNegEdit, cancelNegEdit)}
+                            rows="2" class="edit-textarea" placeholder="Things to avoid..."
+                            use:autoFocus></textarea>
                   <div class="edit-actions">
-                    <button class="btn-save" onclick={() => saveEditKf(kf)}><Check size={14} /> Save</button>
-                    <button class="btn-cancel" onclick={() => cancelEditKf(kf)}><X size={14} /> Cancel</button>
+                    <button class="btn-save" onclick={() => saveNegEdit(kf)}><Check size={14} /> Save</button>
+                    <button class="btn-cancel" onclick={() => cancelNegEdit(kf)}><X size={14} /> Cancel</button>
                   </div>
-                {:else}
-                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                  <p class="prompt-text clickable" class:empty={!kf.prompt} onclick={() => startEditKf(kf)}>
-                    {kf.prompt || 'Click to enter prompt...'}
-                  </p>
-                {/if}
+                </div>
+              {:else if kf.negative_prompt}
+                <p class="neg-display"><span class="neg-label-inline">Neg:</span> {kf.negative_prompt}</p>
+              {/if}
 
-                {#if editingNeg[kf.id]}
-                  <div class="neg-edit">
-                    <label class="neg-label">Negative prompt</label>
-                    <textarea bind:value={editNegPrompts[kf.id]}
-                              onkeydown={(e) => editKeydown(e, kf, saveNegEdit, cancelNegEdit)}
-                              rows="2" class="edit-textarea" placeholder="Things to avoid..."
-                              use:autoFocus></textarea>
-                    <div class="edit-actions">
-                      <button class="btn-save" onclick={() => saveNegEdit(kf)}><Check size={14} /> Save</button>
-                      <button class="btn-cancel" onclick={() => cancelNegEdit(kf)}><X size={14} /> Cancel</button>
-                    </div>
+              {#if rewriting[kf.id]}
+                <div class="rewrite-edit">
+                  <label class="rewrite-label">Rewrite instruction</label>
+                  <textarea bind:value={rewriteInstructions[kf.id]}
+                            onkeydown={(e) => editKeydown(e, kf, submitRewrite, cancelRewrite)}
+                            rows="2" class="edit-textarea"
+                            placeholder="e.g. Make it nighttime..."
+                            disabled={rewriteLoading[kf.id]}
+                            use:autoFocus></textarea>
+                  <div class="edit-actions">
+                    <button class="btn-save" onclick={() => submitRewrite(kf)}
+                            disabled={rewriteLoading[kf.id] || !(rewriteInstructions[kf.id] || '').trim()}>
+                      <Wand2 size={14} /> {rewriteLoading[kf.id] ? 'Rewriting...' : 'Rewrite'}
+                    </button>
+                    <button class="btn-cancel" onclick={() => cancelRewrite(kf)} disabled={rewriteLoading[kf.id]}>
+                      <X size={14} />
+                    </button>
                   </div>
-                {:else if kf.negative_prompt}
-                  <p class="neg-display"><span class="neg-label-inline">Neg:</span> {kf.negative_prompt}</p>
-                {/if}
-
-                {#if rewriting[kf.id]}
-                  <div class="rewrite-edit">
-                    <label class="rewrite-label">Rewrite instruction</label>
-                    <textarea bind:value={rewriteInstructions[kf.id]}
-                              onkeydown={(e) => editKeydown(e, kf, submitRewrite, cancelRewrite)}
-                              rows="2" class="edit-textarea"
-                              placeholder="e.g. Make it nighttime..."
-                              disabled={rewriteLoading[kf.id]}
-                              use:autoFocus></textarea>
-                    <div class="edit-actions">
-                      <button class="btn-save" onclick={() => submitRewrite(kf)}
-                              disabled={rewriteLoading[kf.id] || !(rewriteInstructions[kf.id] || '').trim()}>
-                        <Wand2 size={14} /> {rewriteLoading[kf.id] ? 'Rewriting...' : 'Rewrite'}
-                      </button>
-                      <button class="btn-cancel" onclick={() => cancelRewrite(kf)} disabled={rewriteLoading[kf.id]}>
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                {/if}
-              </div>
-
-              <div class="tl-actions">
-                {#if kf.prompt && kf.status !== 'rendering'}
-                  <button class="btn-icon" onclick={() => handleRerenderKf(kf)} title="Re-render">
-                    <RefreshCw size={14} />
-                  </button>
-                {/if}
-                <button class="btn-icon" onclick={() => { document.getElementById(`file-${kf.id}`)?.click(); }} title="Upload">
-                  <Upload size={14} />
-                </button>
-                <input id="file-{kf.id}" type="file" accept="image/*"
-                       onchange={(e) => handleUpload(kf, e)} class="hidden-input" />
-                <button class="btn-icon" onclick={() => startRewrite(kf)} title="Rewrite with AI">
-                  <Wand2 size={14} />
-                </button>
-                <button class="btn-icon" class:btn-active={!!kf.negative_prompt}
-                        onclick={() => startEditNeg(kf)} title="Negative prompt">
-                  <ThumbsDown size={14} />
-                </button>
-                <button class="btn-icon btn-danger" onclick={() => handleDeleteKeyframe(kf.id)} title="Delete">
-                  <Trash2 size={14} />
-                </button>
-              </div>
+                </div>
+              {/if}
             </div>
 
-          {:else if item.type === 'transition'}
-            {@const tr = item.tr}
-            <div class="tv-set">
-              <!-- Antennas -->
-              <div class="tv-antennas">
-                <div class="tv-antenna left"></div>
-                <div class="tv-antenna right"></div>
-              </div>
-              <div class="tv-body">
-                <div class="tv-screen-area">
-                  <!-- CRT screen -->
-                  <div class="tv-screen">
-                    <div class="tv-screen-inner">
-                      {#if tr.status === 'done' && trVideoUrl(tr)}
-                        <!-- svelte-ignore a11y_media_has_caption -->
-                        <video src={trVideoUrl(tr)} controls loop muted autoplay></video>
-                      {:else if tr.status === 'rendering'}
-                        <div class="tv-static">
-                          <div class="spinner"></div>
-                          <span>Rendering...</span>
-                        </div>
-                      {:else if tr.status === 'error'}
-                        <div class="tv-static error"><span>ERROR</span><small>{tr.error_message || 'No signal'}</small></div>
-                      {:else}
-                        <div class="tv-static">
-                          <span class="tv-no-signal">NO SIGNAL</span>
-                        </div>
-                      {/if}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Control panel (right side of TV) -->
-                <div class="tv-controls">
-                  <div class="tv-label">{item.index + 1}→{item.index + 2}</div>
-                  <span class="status-badge" class:pending={tr.status === 'pending'}
-                        class:rendering={tr.status === 'rendering'}
-                        class:done={tr.status === 'done'}
-                        class:error={tr.status === 'error'}>
-                    {tr.status}
-                  </span>
-                  <div class="tv-knob"></div>
-                  <div class="tv-knob small"></div>
-                </div>
-              </div>
-
-              <!-- Bottom: prompt + actions -->
-              <div class="tv-footer">
-                <div class="tl-body">
-                  {#if trEditing[tr.id]}
-                    <textarea bind:value={trEditPrompts[tr.id]}
-                              onkeydown={(e) => editKeydown(e, tr, saveEditTr, cancelEditTr)}
-                              rows="2" class="edit-textarea" use:autoFocus></textarea>
-                    <div class="edit-actions">
-                      <button class="btn-save" onclick={() => saveEditTr(tr)}><Check size={14} /> Save</button>
-                      <button class="btn-cancel" onclick={() => cancelEditTr(tr)}><X size={14} /> Cancel</button>
-                    </div>
-                  {:else}
-                    <p class="prompt-text">{tr.prompt || '(no description)'}</p>
-                  {/if}
-
-                  {#if trEditingNeg[tr.id]}
-                    <div class="neg-edit">
-                      <label class="neg-label">Negative prompt</label>
-                      <textarea bind:value={trEditNegPrompts[tr.id]}
-                                onkeydown={(e) => editKeydown(e, tr, saveTrNegEdit, cancelTrNegEdit)}
-                                rows="2" class="edit-textarea" placeholder="Things to avoid..."
-                                use:autoFocus></textarea>
-                      <div class="edit-actions">
-                        <button class="btn-save" onclick={() => saveTrNegEdit(tr)}><Check size={14} /> Save</button>
-                        <button class="btn-cancel" onclick={() => cancelTrNegEdit(tr)}><X size={14} /> Cancel</button>
-                      </div>
-                    </div>
-                  {:else if tr.negative_prompt}
-                    <p class="neg-display"><span class="neg-label-inline">Neg:</span> {tr.negative_prompt}</p>
-                  {/if}
-                </div>
-
-                <div class="tl-actions">
-                  <button class="btn-icon" onclick={() => handleRerenderTr(tr)} title="Re-render"
-                          disabled={tr.status === 'rendering'}>
-                    <RefreshCw size={14} />
-                  </button>
-                  <button class="btn-icon" onclick={() => startEditTr(tr)} title="Edit prompt">
-                    <Pencil size={14} />
-                  </button>
-                  <button class="btn-icon" class:btn-active={!!tr.negative_prompt}
-                          onclick={() => startEditTrNeg(tr)} title="Negative prompt">
-                    <ThumbsDown size={14} />
-                  </button>
-                  {#if tr.status === 'pending'}
-                    <button class="btn-render" onclick={() => handleRenderTr(tr)}>Render</button>
-                  {/if}
-                </div>
-              </div>
+            <div class="tl-actions">
+              {#if kf.prompt && kf.status !== 'rendering'}
+                <button class="btn-icon" onclick={() => handleRerenderKf(kf)} title="Re-render">
+                  <RefreshCw size={14} />
+                </button>
+              {/if}
+              <button class="btn-icon" onclick={() => { document.getElementById(`file-${kf.id}`)?.click(); }} title="Upload">
+                <Upload size={14} />
+              </button>
+              <input id="file-{kf.id}" type="file" accept="image/*"
+                     onchange={(e) => handleUpload(kf, e)} class="hidden-input" />
+              <button class="btn-icon" onclick={() => startRewrite(kf)} title="Rewrite with AI">
+                <Wand2 size={14} />
+              </button>
+              <button class="btn-icon" class:btn-active={!!kf.negative_prompt}
+                      onclick={() => startEditNeg(kf)} title="Negative prompt">
+                <ThumbsDown size={14} />
+              </button>
+              <button class="btn-icon btn-danger" onclick={() => handleDeleteKeyframe(kf.id)} title="Delete">
+                <Trash2 size={14} />
+              </button>
             </div>
-
-          {:else}
-            <!-- transition-placeholder: no transition synced yet -->
-            <div class="tl-connector">
-              <span class="connector-arrow">→</span>
-            </div>
-          {/if}
+          </div>
         {/each}
 
-        <!-- Add button at end -->
-        <button class="tl-add-btn" onclick={handleAddKeyframe} title="Add keyframe">
+        <!-- Add button -->
+        <button class="tl-add-btn" onclick={handleAddKeyframe} title="Add keyframe"
+                style="grid-column: {keyframes.length + 1}; grid-row: 1;">
           <Plus size={20} />
         </button>
+
+        <!-- Row 2: TV transitions (staggered between keyframes) -->
+        {#each keyframes as _, i}
+          {#if i < keyframes.length - 1}
+            {@const tr = getTransitionBetween(i)}
+            {#if tr}
+              <div class="tv-set" style="grid-column: {i + 1} / span 2; grid-row: 2;">
+                <div class="tv-antennas">
+                  <div class="tv-antenna left"></div>
+                  <div class="tv-antenna right"></div>
+                </div>
+                <div class="tv-body">
+                  <div class="tv-screen-area">
+                    <div class="tv-screen">
+                      <div class="tv-screen-inner">
+                        {#if tr.status === 'done' && trVideoUrl(tr)}
+                          <!-- svelte-ignore a11y_media_has_caption -->
+                          <video src={trVideoUrl(tr)} controls loop muted autoplay></video>
+                        {:else if tr.status === 'rendering'}
+                          <div class="tv-static"><div class="spinner"></div><span>Rendering...</span></div>
+                        {:else if tr.status === 'error'}
+                          <div class="tv-static error"><span>ERROR</span><small>{tr.error_message || 'No signal'}</small></div>
+                        {:else}
+                          <div class="tv-static"><span class="tv-no-signal">NO SIGNAL</span></div>
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="tv-controls">
+                    <div class="tv-label">{i + 1}→{i + 2}</div>
+                    <span class="status-badge" class:pending={tr.status === 'pending'}
+                          class:rendering={tr.status === 'rendering'}
+                          class:done={tr.status === 'done'}
+                          class:error={tr.status === 'error'}>
+                      {tr.status}
+                    </span>
+                    <div class="tv-knob"></div>
+                    <div class="tv-knob small"></div>
+                  </div>
+                </div>
+                <div class="tv-footer">
+                  <div class="tl-body">
+                    {#if trEditing[tr.id]}
+                      <textarea bind:value={trEditPrompts[tr.id]}
+                                onkeydown={(e) => editKeydown(e, tr, saveEditTr, cancelEditTr)}
+                                rows="2" class="edit-textarea" use:autoFocus></textarea>
+                      <div class="edit-actions">
+                        <button class="btn-save" onclick={() => saveEditTr(tr)}><Check size={14} /> Save</button>
+                        <button class="btn-cancel" onclick={() => cancelEditTr(tr)}><X size={14} /> Cancel</button>
+                      </div>
+                    {:else}
+                      <p class="prompt-text">{tr.prompt || '(no description)'}</p>
+                    {/if}
+
+                    {#if trEditingNeg[tr.id]}
+                      <div class="neg-edit">
+                        <label class="neg-label">Negative prompt</label>
+                        <textarea bind:value={trEditNegPrompts[tr.id]}
+                                  onkeydown={(e) => editKeydown(e, tr, saveTrNegEdit, cancelTrNegEdit)}
+                                  rows="2" class="edit-textarea" placeholder="Things to avoid..."
+                                  use:autoFocus></textarea>
+                        <div class="edit-actions">
+                          <button class="btn-save" onclick={() => saveTrNegEdit(tr)}><Check size={14} /> Save</button>
+                          <button class="btn-cancel" onclick={() => cancelTrNegEdit(tr)}><X size={14} /> Cancel</button>
+                        </div>
+                      </div>
+                    {:else if tr.negative_prompt}
+                      <p class="neg-display"><span class="neg-label-inline">Neg:</span> {tr.negative_prompt}</p>
+                    {/if}
+                  </div>
+                  <div class="tl-actions">
+                    <button class="btn-icon" onclick={() => handleRerenderTr(tr)} title="Re-render"
+                            disabled={tr.status === 'rendering'}>
+                      <RefreshCw size={14} />
+                    </button>
+                    <button class="btn-icon" onclick={() => startEditTr(tr)} title="Edit prompt">
+                      <Pencil size={14} />
+                    </button>
+                    <button class="btn-icon" class:btn-active={!!tr.negative_prompt}
+                            onclick={() => startEditTrNeg(tr)} title="Negative prompt">
+                      <ThumbsDown size={14} />
+                    </button>
+                    {#if tr.status === 'pending'}
+                      <button class="btn-render" onclick={() => handleRenderTr(tr)}>Render</button>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            {/if}
+          {/if}
+        {/each}
       </div>
     </div>
   {:else}
@@ -991,16 +965,14 @@
   .timeline-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
   .timeline-scroll { scrollbar-width: auto; scrollbar-color: var(--border) var(--bg); }
 
-  .timeline {
-    display: flex;
-    align-items: flex-start;
+  .timeline-grid {
+    display: grid;
     gap: 12px;
     min-width: min-content;
+    align-items: start;
   }
 
   .tl-card {
-    width: 260px;
-    flex-shrink: 0;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -1009,7 +981,6 @@
   }
   .tl-card:hover { border-color: var(--text-muted); }
 
-  .tl-transition { width: 280px; }
 
   .tl-header {
     display: flex;
@@ -1054,9 +1025,9 @@
 
   /* ── TV Set ── */
   .tv-set {
-    width: 300px;
-    flex-shrink: 0;
-    align-self: center;
+    justify-self: center;
+    width: 100%;
+    max-width: 340px;
   }
 
   .tv-antennas {
@@ -1270,15 +1241,6 @@
     padding: 3px 10px; margin-left: auto;
   }
   .btn-render:hover { background: var(--accent-hover); }
-
-  /* ── Connector arrow (no transition yet) ── */
-  .tl-connector {
-    display: flex; align-items: center; justify-content: center;
-    width: 36px; flex-shrink: 0; align-self: center;
-  }
-  .connector-arrow {
-    color: var(--text-muted); font-size: 20px;
-  }
 
   /* ── Add button at end ── */
   .tl-add-btn {
