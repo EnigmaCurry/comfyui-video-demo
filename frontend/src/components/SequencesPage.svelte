@@ -10,6 +10,7 @@
     seqUploadKeyframe, seqAddKeyframeImage, seqMergeSequence,
     seqSyncTransitions, seqTransitionStatus, seqUpdateTransition,
     seqRenderTransition, seqRerenderTransition, T2I_MODELS, galleryList,
+    RESOLUTIONS, setResolution,
   } from '../lib/api.js';
 
   let { project = $bindable(), onstatus } = $props();
@@ -151,6 +152,19 @@
   }
 
   function cancelSeqNeg() { editingSeqNeg = false; }
+
+  let projectWidth = $derived(project?.width || 1024);
+  let projectHeight = $derived(project?.height || 576);
+
+  async function handleResolutionChange(e) {
+    const r = RESOLUTIONS[e.target.selectedIndex];
+    try {
+      await setResolution(r.w, r.h);
+      project.width = r.w;
+      project.height = r.h;
+      onstatus?.({ detail: `Resolution set to ${r.w}x${r.h}. New renders will use this size.` });
+    } catch (err) { onstatus?.({ detail: `Failed: ${err.message}` }); }
+  }
 
   // ── Keyframe operations ──
   async function handleAddKeyframe() {
@@ -548,26 +562,36 @@
 
 <!-- Sequence negative prompt -->
 {#if activeSeq}
-  <div class="seq-neg-bar">
-    {#if editingSeqNeg}
-      <label class="seq-neg-label">Sequence negative prompt</label>
-      <div class="seq-neg-edit">
-        <textarea bind:value={seqNegValue}
-                  onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveSeqNeg(); } else if (e.key === 'Escape') cancelSeqNeg(); }}
-                  rows="2" class="edit-textarea" placeholder="Applies to all keyframes and transitions in this sequence..."
-                  use:autoFocus></textarea>
-        <div class="edit-actions">
-          <button class="btn-save" onclick={saveSeqNeg}><Check size={14} /> Save</button>
-          <button class="btn-cancel" onclick={cancelSeqNeg}><X size={14} /> Cancel</button>
+  <div class="seq-settings-bar">
+    <div class="seq-neg-section">
+      {#if editingSeqNeg}
+        <label class="seq-neg-label">Sequence negative prompt</label>
+        <div class="seq-neg-edit">
+          <textarea bind:value={seqNegValue}
+                    onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveSeqNeg(); } else if (e.key === 'Escape') cancelSeqNeg(); }}
+                    rows="2" class="edit-textarea" placeholder="Applies to all keyframes and transitions in this sequence..."
+                    use:autoFocus></textarea>
+          <div class="edit-actions">
+            <button class="btn-save" onclick={saveSeqNeg}><Check size={14} /> Save</button>
+            <button class="btn-cancel" onclick={cancelSeqNeg}><X size={14} /> Cancel</button>
+          </div>
         </div>
-      </div>
-    {:else}
-      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-      <div class="seq-neg-display" onclick={startEditSeqNeg}>
-        <span class="seq-neg-label">Negative:</span>
-        <span class="seq-neg-text">{activeSeq.negative_prompt || 'none (click to set)'}</span>
-      </div>
-    {/if}
+      {:else}
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="seq-neg-display" onclick={startEditSeqNeg}>
+          <span class="seq-neg-label">Negative:</span>
+          <span class="seq-neg-text">{activeSeq.negative_prompt || 'none (click to set)'}</span>
+        </div>
+      {/if}
+    </div>
+    <div class="seq-res-section">
+      <span class="seq-res-label">Resolution:</span>
+      <select class="seq-res-select" onchange={handleResolutionChange}>
+        {#each RESOLUTIONS as r}
+          <option selected={r.w === projectWidth && r.h === projectHeight}>{r.label}</option>
+        {/each}
+      </select>
+    </div>
   </div>
 {/if}
 
@@ -929,14 +953,19 @@
   }
   .create-seq-input { flex: 1; font-size: 14px; padding: 6px 12px; }
 
-  /* ── Sequence negative prompt bar ── */
-  .seq-neg-bar {
+  /* ── Sequence settings bar ── */
+  .seq-settings-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
     margin-bottom: 12px;
     padding: 8px 14px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
   }
+
+  .seq-neg-section { flex: 1; min-width: 0; }
 
   .seq-neg-display {
     display: flex;
@@ -962,6 +991,31 @@
   }
 
   .seq-neg-edit { margin-top: 4px; }
+
+  .seq-res-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .seq-res-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .seq-res-select {
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text-dim);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px 8px;
+  }
 
   /* ── Horizontal timeline ── */
   .timeline-scroll {
