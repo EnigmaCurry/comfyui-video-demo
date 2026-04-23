@@ -37,6 +37,8 @@ class Keyframe(BaseModel):
     error_message: Optional[str] = None
     refinement_history: list[RefinementEntry] = Field(default_factory=list)
     refinement_index: int = -1
+    figure1_kf_id: Optional[str] = None
+    figure2_kf_id: Optional[str] = None
 
 
 class Transition(BaseModel):

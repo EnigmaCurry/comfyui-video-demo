@@ -175,6 +175,8 @@ export async function seqAddKeyframeImage(seqId, file) {
 }
 export const seqMergeSequence = (seqId, sourceSeqId) => request('POST', `/sequences/${seqId}/merge`, { source_sequence_id: sourceSeqId });
 
+export const seqCombineKeyframe = (seqId, kfId, prompt = '') => request('POST', `/sequences/${seqId}/keyframes/${kfId}/combine`, { prompt });
+
 export const seqSyncTransitions = (seqId) => request('POST', `/sequences/${seqId}/transitions/sync`);
 export const seqTransitionStatus = (seqId, trId) => request('GET', `/sequences/${seqId}/transitions/${trId}/status`);
 export const seqUpdateTransition = (seqId, trId, updates) => request('PUT', `/sequences/${seqId}/transitions/${trId}`, updates);

@@ -471,30 +471,48 @@ async def api_set_active_index(body: dict):
 # ── Keyframe Render ─────────────────────────────────────────────────
 
 async def _do_render_keyframe(proj_id: str, kf: Keyframe, seed: int, width: int, height: int,
-                              extra_negative: str = ""):
-    """Render a keyframe synchronously (for use in background tasks or auto-create)."""
+                              extra_negative: str = "",
+                              figure_images: tuple[str, str] | None = None):
+    """Render a keyframe synchronously (for use in background tasks or auto-create).
+
+    figure_images: optional (path1, path2) for two-image models like Klein.
+    """
     from comfyui import download_output, run_workflow
-    from workflows import get_t2i_workflow_and_patcher, load_workflow
+    from workflows import get_t2i_workflow_and_patcher, load_workflow, TWO_IMAGE_MODELS
 
     async with _render_semaphore:
         try:
             wf_path, patch_fn = get_t2i_workflow_and_patcher(kf.model)
             base_wf = load_workflow(wf_path)
-            from llm import _load_style
-            style = _load_style("transition-story")
-            neg_parts = [style.get("negative_prompt", "")]
-            if extra_negative:
-                neg_parts.append(extra_negative)
-            if kf.negative_prompt:
-                neg_parts.append(kf.negative_prompt)
-            neg_prompt = ", ".join(p for p in neg_parts if p)
 
             print(f"Rendering kf {kf.id} ({kf.model}): seed={seed}", flush=True)
-            patched = patch_fn(
-                base_wf, prompt_text=kf.prompt, negative_prompt_text=neg_prompt,
-                seed_value=seed, width=width, height=height,
-                output_prefix=f"v2web/{kf.id}",
-            )
+
+            if kf.model in TWO_IMAGE_MODELS and figure_images:
+                from comfyui import upload_image
+                fig1_name = await upload_image(figure_images[0])
+                fig2_name = await upload_image(figure_images[1])
+                patched = patch_fn(
+                    base_wf, prompt_text=kf.prompt,
+                    figure1_image_name=fig1_name,
+                    figure2_image_name=fig2_name,
+                    seed_value=seed,
+                    output_prefix=f"v2web/{kf.id}",
+                )
+            else:
+                from llm import _load_style
+                style = _load_style("transition-story")
+                neg_parts = [style.get("negative_prompt", "")]
+                if extra_negative:
+                    neg_parts.append(extra_negative)
+                if kf.negative_prompt:
+                    neg_parts.append(kf.negative_prompt)
+                neg_prompt = ", ".join(p for p in neg_parts if p)
+
+                patched = patch_fn(
+                    base_wf, prompt_text=kf.prompt, negative_prompt_text=neg_prompt,
+                    seed_value=seed, width=width, height=height,
+                    output_prefix=f"v2web/{kf.id}",
+                )
             history = await run_workflow(patched, timeout=600)
             filename = f"{kf.id}.png"
             dest = os.path.join(images_dir(proj_id), filename)
@@ -2603,8 +2621,19 @@ async def api_seq_render_keyframe(sequence_id: str, keyframe_id: str, req: Rende
         old.cancel()
     kf.status = KeyframeStatus.rendering
     kf.error_message = None
+    # Resolve figure images for Klein model
+    figure_images = None
+    if kf.figure1_kf_id and kf.figure2_kf_id:
+        fig1 = next((k for k in seq.keyframes if k.id == kf.figure1_kf_id), None)
+        fig2 = next((k for k in seq.keyframes if k.id == kf.figure2_kf_id), None)
+        if fig1 and fig1.image_filename and fig2 and fig2.image_filename:
+            figure_images = (
+                os.path.join(images_dir(proj.id), fig1.image_filename),
+                os.path.join(images_dir(proj.id), fig2.image_filename),
+            )
     task = asyncio.create_task(_do_render_keyframe(
-        proj.id, kf, seed, proj.width, proj.height, extra_negative=seq.negative_prompt))
+        proj.id, kf, seed, proj.width, proj.height,
+        extra_negative=seq.negative_prompt, figure_images=figure_images))
     render_tasks[keyframe_id] = task
     return {"id": kf.id, "status": kf.status, "seed": seed}
 
@@ -2663,6 +2692,36 @@ async def api_seq_rewrite_keyframe(sequence_id: str, keyframe_id: str, body: dic
     task = asyncio.create_task(_do_render_keyframe(proj.id, kf, seed, proj.width, proj.height))
     render_tasks[kf.id] = task
     return {"prompt": kf.prompt, "status": kf.status}
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/combine")
+async def api_seq_combine_keyframe(sequence_id: str, keyframe_id: str, body: dict | None = None):
+    """Insert a Klein combine keyframe between this keyframe and the one before it."""
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    kf_index = next(i for i, k in enumerate(seq.keyframes) if k.id == keyframe_id)
+    if kf_index == 0:
+        raise HTTPException(400, "No previous keyframe to combine with")
+    prev_kf = seq.keyframes[kf_index - 1]
+    if not prev_kf.image_filename or not kf.image_filename:
+        raise HTTPException(400, "Both keyframes must have rendered images")
+
+    prompt = (body or {}).get("prompt", f"A blend of the two images")
+    # Insert new keyframe between prev and current
+    new_kf = Keyframe(
+        position=kf_index,
+        prompt=prompt,
+        model="flux2_klein",
+        figure1_kf_id=prev_kf.id,
+        figure2_kf_id=kf.id,
+    )
+    seq.keyframes.insert(kf_index, new_kf)
+    # Re-number positions
+    for i, k in enumerate(seq.keyframes):
+        k.position = i
+    _sync_seq_transitions(seq)
+    _save()
+    return {"keyframe": new_kf.model_dump(), "sequence": seq.model_dump()}
 
 
 def _sync_seq_transitions(seq: Sequence):

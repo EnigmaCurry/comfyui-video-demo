@@ -2,12 +2,12 @@
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, Wand2, Upload, Plus,
-           ChevronDown, RotateCcw, GitMerge, Lock, Unlock } from 'lucide-svelte';
+           ChevronDown, RotateCcw, GitMerge, Lock, Unlock, Blend } from 'lucide-svelte';
   import {
     listSequences, createSequence, updateSequence, deleteSequence, activateSequence,
     seqAddKeyframe, seqUpdateKeyframe, seqDeleteKeyframe, seqReorderKeyframes,
     seqKeyframeStatus, seqRenderKeyframe, seqRerenderKeyframe, seqRewriteKeyframe,
-    seqUploadKeyframe, seqAddKeyframeImage, seqMergeSequence,
+    seqUploadKeyframe, seqAddKeyframeImage, seqMergeSequence, seqCombineKeyframe,
     seqSyncTransitions, seqTransitionStatus, seqUpdateTransition,
     seqRenderTransition, seqRerenderTransition, seqLockTransition, seqUnlockTransition,
     T2I_MODELS, galleryList, RESOLUTIONS, setResolution,
@@ -412,6 +412,23 @@
     e.target.value = '';
   }
 
+  // ── Combine keyframes ──
+  async function handleCombine(kf, i) {
+    if (!activeSeqId || i === 0) return;
+    const prevKf = keyframes[i - 1];
+    if (!prevKf?.image_filename || !kf?.image_filename) {
+      onstatus?.({ detail: 'Both keyframes must have rendered images to combine.' });
+      return;
+    }
+    try {
+      const data = await seqCombineKeyframe(activeSeqId, kf.id);
+      replaceSeq(data.sequence);
+      onstatus?.({ detail: 'Combine keyframe inserted. Enter a prompt and render.' });
+    } catch (e) {
+      onstatus?.({ detail: `Combine failed: ${e.message}` });
+    }
+  }
+
   // ── Transition operations ──
   async function handleSyncTransitions() {
     if (!activeSeqId) return;
@@ -645,6 +662,9 @@
               {#if kf.locked}
                 <Lock size={12} class="lock-indicator" />
               {/if}
+              {#if kf.figure1_kf_id}
+                <Blend size={12} class="combine-indicator" />
+              {/if}
               <span class="status-badge" class:pending={kf.status === 'pending'}
                     class:rendering={kf.status === 'rendering'}
                     class:done={kf.status === 'done'}
@@ -752,6 +772,11 @@
                         onclick={() => startEditNeg(kf)} title="Negative prompt">
                   <ThumbsDown size={14} />
                 </button>
+                {#if i > 0 && keyframes[i - 1]?.image_filename && kf.image_filename}
+                  <button class="btn-icon btn-combine" onclick={() => handleCombine(kf, i)} title="Combine with previous keyframe (Klein)">
+                    <Blend size={14} />
+                  </button>
+                {/if}
                 <button class="btn-icon btn-danger" onclick={() => handleDeleteKeyframe(kf.id)} title="Delete">
                   <Trash2 size={14} />
                 </button>
@@ -1378,6 +1403,9 @@
   .tl-card.locked .tl-header { background: var(--locked-bg); }
 
   :global(.lock-indicator) { color: var(--locked); }
+  :global(.combine-indicator) { color: var(--accent); }
+  .btn-combine { color: var(--accent) !important; }
+  .btn-combine:hover:not(:disabled) { background: var(--accent-bg) !important; }
 
   .spinner-container, .error-container, .placeholder-box {
     display: flex; flex-direction: column; align-items: center;
