@@ -2433,7 +2433,7 @@ async def api_list_sequences():
 async def api_create_sequence(body: dict | None = None):
     proj = _get_project()
     name = (body or {}).get("name", "Untitled Sequence")
-    seq = Sequence(name=name)
+    seq = Sequence(name=name, keyframes=[Keyframe(position=0, prompt="")])
     proj.sequences.append(seq)
     proj.active_sequence_id = seq.id
     _save()
