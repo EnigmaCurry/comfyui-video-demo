@@ -174,9 +174,11 @@
     cropRect = null;
     isDragging = true;
     drawCropOverlay();
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
   }
 
-  function handleCropMouseMove(e) {
+  function handleWindowMouseMove(e) {
     if (!isDragging || !cropCenterPx || !cropCanvas) return;
     e.preventDefault();
     const rect = cropCanvas.getBoundingClientRect();
@@ -210,9 +212,11 @@
     drawCropOverlay();
   }
 
-  function handleCropMouseUp() {
+  function handleWindowMouseUp() {
     if (!isDragging) return;
     isDragging = false;
+    window.removeEventListener('mousemove', handleWindowMouseMove);
+    window.removeEventListener('mouseup', handleWindowMouseUp);
 
     if (!cropRect || !cropCanvas || cropRect.w < 5 || cropRect.h < 5) {
       cropRect = null;
@@ -447,10 +451,7 @@
                onload={handleCropImgLoad}
                draggable="false" />
           <canvas bind:this={cropCanvas}
-                  onmousedown={handleCropMouseDown}
-                  onmousemove={handleCropMouseMove}
-                  onmouseup={handleCropMouseUp}
-                  onmouseleave={handleCropMouseUp}></canvas>
+                  onmousedown={handleCropMouseDown}></canvas>
         </div>
       {:else if processing}
         <div class="preview-placeholder">

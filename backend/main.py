@@ -2035,7 +2035,8 @@ async def api_gallery_delete(image_id: str):
 
 
 def _run_aspect_crop(src_path: str, dest_path: str, center_x: float, center_y: float, crop_w: float, crop_h: float):
-    """Crop image centered on (center_x, center_y) with size (crop_w, crop_h) as fractions of image dimensions."""
+    """Crop image centered on (center_x, center_y) with size (crop_w, crop_h) as fractions of image dimensions.
+    Pads with black bars if the crop extends beyond image bounds to preserve aspect ratio."""
     from PIL import Image as PILImage
 
     with PILImage.open(src_path) as src:
@@ -2047,33 +2048,29 @@ def _run_aspect_crop(src_path: str, dest_path: str, center_x: float, center_y: f
         cx = int(center_x * w)
         cy = int(center_y * h)
 
-        x0 = cx - cw // 2
-        y0 = cy - ch // 2
-        x1 = x0 + cw
-        y1 = y0 + ch
+        # Crop region in source coordinates (can be out of bounds)
+        src_x0 = cx - cw // 2
+        src_y0 = cy - ch // 2
+        src_x1 = src_x0 + cw
+        src_y1 = src_y0 + ch
 
-        # Shift into bounds if needed
-        if x0 < 0:
-            x1 -= x0
-            x0 = 0
-        if y0 < 0:
-            y1 -= y0
-            y0 = 0
-        if x1 > w:
-            x0 -= (x1 - w)
-            x1 = w
-        if y1 > h:
-            y0 -= (y1 - h)
-            y1 = h
+        # Create output at exact requested size with black background
+        result = PILImage.new("RGB", (cw, ch), (0, 0, 0))
 
-        x0 = max(0, x0)
-        y0 = max(0, y0)
-        x1 = min(w, x1)
-        y1 = min(h, y1)
+        # Compute overlap between crop region and source image
+        overlap_x0 = max(src_x0, 0)
+        overlap_y0 = max(src_y0, 0)
+        overlap_x1 = min(src_x1, w)
+        overlap_y1 = min(src_y1, h)
 
-        cropped = src.crop((x0, y0, x1, y1))
-        cropped.save(dest_path, "PNG")
-        return x1 - x0, y1 - y0
+        if overlap_x0 < overlap_x1 and overlap_y0 < overlap_y1:
+            cropped = src.crop((overlap_x0, overlap_y0, overlap_x1, overlap_y1))
+            paste_x = overlap_x0 - src_x0
+            paste_y = overlap_y0 - src_y0
+            result.paste(cropped, (paste_x, paste_y))
+
+        result.save(dest_path, "PNG")
+        return cw, ch
 
 
 def _run_integer_crop(src_path: str, dest_path: str, divisor: int, position: str):
