@@ -439,5 +439,5 @@
 
   .new-btn:hover { color: var(--text); border-color: var(--text-muted); }
 
-  main { min-height: 300px; }
+  main { min-height: 300px; padding-bottom: 60px; }
 </style>
