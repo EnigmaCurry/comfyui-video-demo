@@ -470,7 +470,8 @@ async def api_set_active_index(body: dict):
 
 # ── Keyframe Render ─────────────────────────────────────────────────
 
-async def _do_render_keyframe(proj_id: str, kf: Keyframe, seed: int, width: int, height: int):
+async def _do_render_keyframe(proj_id: str, kf: Keyframe, seed: int, width: int, height: int,
+                              extra_negative: str = ""):
     """Render a keyframe synchronously (for use in background tasks or auto-create)."""
     from comfyui import download_output, run_workflow
     from workflows import get_t2i_workflow_and_patcher, load_workflow
@@ -482,6 +483,8 @@ async def _do_render_keyframe(proj_id: str, kf: Keyframe, seed: int, width: int,
             from llm import _load_style
             style = _load_style("transition-story")
             neg_parts = [style.get("negative_prompt", "")]
+            if extra_negative:
+                neg_parts.append(extra_negative)
             if kf.negative_prompt:
                 neg_parts.append(kf.negative_prompt)
             neg_prompt = ", ".join(p for p in neg_parts if p)
@@ -2407,6 +2410,8 @@ async def api_update_sequence(sequence_id: str, body: dict):
         seq.name = body["name"]
     if "duration" in body:
         seq.duration = body["duration"]
+    if "negative_prompt" in body:
+        seq.negative_prompt = body["negative_prompt"]
     _save()
     return {"sequence": seq.model_dump()}
 
@@ -2584,7 +2589,8 @@ async def api_seq_render_keyframe(sequence_id: str, keyframe_id: str, req: Rende
         old.cancel()
     kf.status = KeyframeStatus.rendering
     kf.error_message = None
-    task = asyncio.create_task(_do_render_keyframe(proj.id, kf, seed, proj.width, proj.height))
+    task = asyncio.create_task(_do_render_keyframe(
+        proj.id, kf, seed, proj.width, proj.height, extra_negative=seq.negative_prompt))
     render_tasks[keyframe_id] = task
     return {"id": kf.id, "status": kf.status, "seed": seed}
 
@@ -2790,6 +2796,8 @@ async def _do_render_seq_transition(proj_id: str, seq: Sequence, tr: Transition,
             from llm import _load_style
             style = _load_style("transition-story")
             neg_parts = [style.get("negative_prompt", "")]
+            if seq.negative_prompt:
+                neg_parts.append(seq.negative_prompt)
             if tr.negative_prompt:
                 neg_parts.append(tr.negative_prompt)
             neg_prompt = ", ".join(p for p in neg_parts if p)

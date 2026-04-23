@@ -28,6 +28,10 @@
   let creatingSeq = $state(false);
   let createName = $state('');
 
+  // ── Sequence-level negative prompt ──
+  let editingSeqNeg = $state(false);
+  let seqNegValue = $state('');
+
   // ── Per-keyframe edit state ──
   let editing = $state({});
   let editPrompts = $state({});
@@ -142,6 +146,23 @@
       onstatus?.({ detail: `Delete failed: ${e.message}` });
     }
   }
+
+  function startEditSeqNeg() {
+    seqNegValue = activeSeq?.negative_prompt || '';
+    editingSeqNeg = true;
+  }
+
+  async function saveSeqNeg() {
+    if (!activeSeq) return;
+    try {
+      await updateSequence(activeSeqId, { negative_prompt: seqNegValue });
+      activeSeq.negative_prompt = seqNegValue;
+      editingSeqNeg = false;
+      onstatus?.({ detail: 'Sequence negative prompt updated.' });
+    } catch (e) { onstatus?.({ detail: `Update failed: ${e.message}` }); }
+  }
+
+  function cancelSeqNeg() { editingSeqNeg = false; }
 
   // ── Keyframe operations ──
   async function handleAddKeyframe() {
@@ -527,6 +548,31 @@
   </div>
 {/if}
 
+<!-- Sequence negative prompt -->
+{#if activeSeq}
+  <div class="seq-neg-bar">
+    {#if editingSeqNeg}
+      <label class="seq-neg-label">Sequence negative prompt</label>
+      <div class="seq-neg-edit">
+        <textarea bind:value={seqNegValue}
+                  onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveSeqNeg(); } else if (e.key === 'Escape') cancelSeqNeg(); }}
+                  rows="2" class="edit-textarea" placeholder="Applies to all keyframes and transitions in this sequence..."
+                  use:autoFocus></textarea>
+        <div class="edit-actions">
+          <button class="btn-save" onclick={saveSeqNeg}><Check size={14} /> Save</button>
+          <button class="btn-cancel" onclick={cancelSeqNeg}><X size={14} /> Cancel</button>
+        </div>
+      </div>
+    {:else}
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <div class="seq-neg-display" onclick={startEditSeqNeg}>
+        <span class="seq-neg-label">Negative:</span>
+        <span class="seq-neg-text">{activeSeq.negative_prompt || 'none (click to set)'}</span>
+      </div>
+    {/if}
+  </div>
+{/if}
+
 <!-- Horizontal timeline -->
 {#if activeSeq}
   {#if keyframes.length > 0}
@@ -894,6 +940,40 @@
     border: 1px solid var(--border); border-radius: var(--radius-lg);
   }
   .create-seq-input { flex: 1; font-size: 14px; padding: 6px 12px; }
+
+  /* ── Sequence negative prompt bar ── */
+  .seq-neg-bar {
+    margin-bottom: 12px;
+    padding: 8px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .seq-neg-display {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .seq-neg-display:hover { color: var(--text); }
+
+  .seq-neg-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--error);
+    flex-shrink: 0;
+  }
+
+  .seq-neg-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .seq-neg-edit { margin-top: 4px; }
 
   /* ── Horizontal timeline ── */
   .timeline-scroll {

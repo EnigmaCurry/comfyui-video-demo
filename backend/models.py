@@ -130,6 +130,7 @@ class Sequence(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     name: str = "Untitled Sequence"
     duration: int = 10
+    negative_prompt: str = "fade, crossfade, smoke, clouds"
     keyframes: list[Keyframe] = Field(default_factory=list)
     transitions: list[Transition] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
