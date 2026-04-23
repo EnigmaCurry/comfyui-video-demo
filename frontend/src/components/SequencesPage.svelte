@@ -2,7 +2,7 @@
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, Wand2, Upload, Plus,
-           ChevronDown, RotateCcw, Image, ClipboardPaste, GitMerge } from 'lucide-svelte';
+           ChevronDown, RotateCcw, GitMerge } from 'lucide-svelte';
   import {
     listSequences, createSequence, updateSequence, deleteSequence, activateSequence,
     seqAddKeyframe, seqUpdateKeyframe, seqDeleteKeyframe, seqReorderKeyframes,
@@ -43,10 +43,10 @@
   let trEditPrompts = $state({});
   let trPolling = $state({});
 
-  // ── Add keyframe menu state ──
-  let showAddMenu = $state(false);
+  // ── Add keyframe state ──
   let showGalleryPicker = $state(false);
   let galleryImages = $state([]);
+  let galleryPickerKfId = $state(null);  // null = add new, string = load into existing
   let showMergePicker = $state(false);
   let otherSequences = $derived(sequences.filter(s => s.id !== activeSeqId));
 
@@ -154,8 +154,8 @@
     }
   }
 
-  async function openGalleryPicker() {
-    showAddMenu = false;
+  async function openGalleryPicker(kfId = null) {
+    galleryPickerKfId = kfId;
     try {
       const data = await galleryList();
       galleryImages = (data.images || []).filter(i => i.image_url);
@@ -169,48 +169,71 @@
     }
   }
 
-  async function handleAddFromGallery(img) {
+  async function handlePickGalleryImage(img) {
     showGalleryPicker = false;
     if (!activeSeqId) return;
-    try {
-      const data = await seqAddKeyframe(activeSeqId, img.id);
-      replaceSeq(data.sequence);
-      onstatus?.({ detail: 'Added keyframe from gallery.' });
-    } catch (e) {
-      onstatus?.({ detail: `Add failed: ${e.message}` });
+    if (galleryPickerKfId) {
+      // Load into existing keyframe
+      const kf = keyframes.find(k => k.id === galleryPickerKfId);
+      if (!kf) return;
+      try {
+        // Upload the gallery image to this keyframe
+        const resp = await fetch(img.image_url);
+        const blob = await resp.blob();
+        const result = await seqUploadKeyframe(activeSeqId, kf.id, blob);
+        kf.image_filename = result.image_filename;
+        kf.seed = result.seed;
+        kf.status = result.status;
+        if (img.prompt && !kf.prompt) kf.prompt = img.prompt;
+        onstatus?.({ detail: 'Loaded image from gallery.' });
+      } catch (e) {
+        onstatus?.({ detail: `Failed: ${e.message}` });
+      }
+    } else {
+      // Add as new keyframe
+      try {
+        const data = await seqAddKeyframe(activeSeqId, img.id);
+        replaceSeq(data.sequence);
+        onstatus?.({ detail: 'Added keyframe from gallery.' });
+      } catch (e) {
+        onstatus?.({ detail: `Add failed: ${e.message}` });
+      }
     }
   }
 
-  function handleAddByPaste() {
-    showAddMenu = false;
-    onstatus?.({ detail: 'Press Ctrl+V to paste an image...' });
-    const handler = async (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          e.preventDefault();
-          document.removeEventListener('paste', handler);
-          const blob = item.getAsFile();
-          if (!blob) return;
-          try {
-            const data = await seqAddKeyframeImage(activeSeqId, blob);
-            replaceSeq(data.sequence);
-            onstatus?.({ detail: 'Added keyframe from clipboard.' });
-          } catch (err) {
-            onstatus?.({ detail: `Paste failed: ${err.message}` });
-          }
-          return;
+  // Global paste listener: Ctrl+V adds a new keyframe from clipboard
+  async function handleGlobalPaste(e) {
+    if (!activeSeqId) return;
+    // Don't intercept paste into text fields
+    const tag = e.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) return;
+        try {
+          const data = await seqAddKeyframeImage(activeSeqId, blob);
+          replaceSeq(data.sequence);
+          onstatus?.({ detail: 'Added keyframe from clipboard.' });
+        } catch (err) {
+          onstatus?.({ detail: `Paste failed: ${err.message}` });
         }
+        return;
       }
-    };
-    document.addEventListener('paste', handler, { once: true });
-    // Auto-cancel after 10s
-    setTimeout(() => document.removeEventListener('paste', handler), 10000);
+    }
   }
 
+  $effect(() => {
+    if (activeSeqId) {
+      document.addEventListener('paste', handleGlobalPaste);
+      return () => document.removeEventListener('paste', handleGlobalPaste);
+    }
+  });
+
   function openMergePicker() {
-    showAddMenu = false;
     if (otherSequences.length === 0) {
       onstatus?.({ detail: 'No other sequences to merge.' });
       return;
@@ -463,35 +486,14 @@
   </div>
   {#if activeSeq}
     <div class="seq-toolbar">
-      <div class="add-menu-wrap">
-        <button class="toolbar-btn add-btn" onclick={() => showAddMenu = !showAddMenu}>
-          <Plus size={14} /> Add Keyframe <ChevronDown size={12} />
+      <button class="toolbar-btn" onclick={handleAddKeyframe}>
+        <Plus size={14} /> Add Keyframe
+      </button>
+      {#if otherSequences.length > 0}
+        <button class="toolbar-btn" onclick={openMergePicker} title="Append another sequence">
+          <GitMerge size={14} /> Merge
         </button>
-        {#if showAddMenu}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="add-menu-overlay" onclick={() => showAddMenu = false}></div>
-          <div class="add-menu">
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="add-menu-item" onclick={handleAddKeyframe}>
-              <Plus size={14} /> <span>Blank (enter prompt)</span>
-            </div>
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="add-menu-item" onclick={openGalleryPicker}>
-              <Image size={14} /> <span>From gallery</span>
-            </div>
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="add-menu-item" onclick={handleAddByPaste}>
-              <ClipboardPaste size={14} /> <span>Paste image</span>
-            </div>
-            {#if otherSequences.length > 0}
-              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <div class="add-menu-item" onclick={openMergePicker}>
-                <GitMerge size={14} /> <span>Merge sequence</span>
-              </div>
-            {/if}
-          </div>
-        {/if}
-      </div>
+      {/if}
       {#if keyframes.some(kf => kf.status === 'done')}
         <button class="toolbar-btn" onclick={handleSyncTransitions}>
           <RotateCcw size={14} /> Sync Transitions
@@ -546,7 +548,10 @@
                 {:else if kf.status === 'error'}
                   <div class="error-container"><span>Error</span><small>{kf.error_message || 'Unknown'}</small></div>
                 {:else}
-                  <div class="placeholder-box">No image</div>
+                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                  <div class="gallery-placeholder" onclick={() => openGalleryPicker(kf.id)} title="Load from gallery">
+                    <Plus size={28} />
+                  </div>
                 {/if}
               </div>
 
@@ -714,7 +719,7 @@
         {/each}
 
         <!-- Add button at end -->
-        <button class="tl-add-btn" onclick={() => showAddMenu = !showAddMenu} title="Add keyframe">
+        <button class="tl-add-btn" onclick={handleAddKeyframe} title="Add keyframe">
           <Plus size={20} />
         </button>
       </div>
@@ -739,11 +744,11 @@
   <div class="picker-overlay" onclick={() => showGalleryPicker = false}>
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div class="picker-modal" onclick={(e) => e.stopPropagation()}>
-      <h3>Add keyframe from gallery</h3>
+      <h3>{galleryPickerKfId ? 'Load image from gallery' : 'Add keyframe from gallery'}</h3>
       <div class="picker-grid">
         {#each galleryImages as img (img.id)}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="picker-item" onclick={() => handleAddFromGallery(img)}>
+          <div class="picker-item" onclick={() => handlePickGalleryImage(img)}>
             <img src={img.image_url} alt={img.prompt} />
             {#if img.prompt}
               <p class="picker-prompt">{img.prompt}</p>
@@ -1184,22 +1189,14 @@
   }
   .empty-state p { font-size: 16px; }
 
-  /* ── Add keyframe dropdown ── */
-  .add-menu-wrap { position: relative; }
-  .add-btn { gap: 4px; }
-  .add-menu-overlay { position: fixed; inset: 0; z-index: 99; }
-  .add-menu {
-    position: absolute; top: 100%; right: 0; margin-top: 4px;
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: var(--radius); min-width: 200px; z-index: 100;
-    box-shadow: var(--shadow); overflow: hidden;
+  /* ── Gallery placeholder in keyframe ── */
+  .gallery-placeholder {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text-muted);
+    transition: color 0.15s;
   }
-  .add-menu-item {
-    padding: 8px 14px; font-size: 13px; cursor: pointer;
-    color: var(--text-dim); display: flex; align-items: center; gap: 8px;
-    white-space: nowrap;
-  }
-  .add-menu-item:hover { background: var(--bg-card-hover); color: var(--text); }
+  .gallery-placeholder:hover { color: var(--accent); }
 
   /* ── Gallery picker modal ── */
   .picker-overlay {
