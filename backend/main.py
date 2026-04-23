@@ -2034,6 +2034,48 @@ async def api_gallery_delete(image_id: str):
     return {"deleted": image_id}
 
 
+def _run_aspect_crop(src_path: str, dest_path: str, center_x: float, center_y: float, crop_w: float, crop_h: float):
+    """Crop image centered on (center_x, center_y) with size (crop_w, crop_h) as fractions of image dimensions."""
+    from PIL import Image as PILImage
+
+    with PILImage.open(src_path) as src:
+        src = src.convert("RGB")
+        w, h = src.size
+
+        cw = max(int(crop_w * w), 1)
+        ch = max(int(crop_h * h), 1)
+        cx = int(center_x * w)
+        cy = int(center_y * h)
+
+        x0 = cx - cw // 2
+        y0 = cy - ch // 2
+        x1 = x0 + cw
+        y1 = y0 + ch
+
+        # Shift into bounds if needed
+        if x0 < 0:
+            x1 -= x0
+            x0 = 0
+        if y0 < 0:
+            y1 -= y0
+            y0 = 0
+        if x1 > w:
+            x0 -= (x1 - w)
+            x1 = w
+        if y1 > h:
+            y0 -= (y1 - h)
+            y1 = h
+
+        x0 = max(0, x0)
+        y0 = max(0, y0)
+        x1 = min(w, x1)
+        y1 = min(h, y1)
+
+        cropped = src.crop((x0, y0, x1, y1))
+        cropped.save(dest_path, "PNG")
+        return x1 - x0, y1 - y0
+
+
 def _run_integer_crop(src_path: str, dest_path: str, divisor: int, position: str):
     """Crop an image to 1/divisor of its size at the given position."""
     from PIL import Image as PILImage
@@ -2150,6 +2192,10 @@ async def api_gallery_filter(body: dict):
 
     divisor = body.get("divisor", 2)
     position = body.get("position", "C")
+    center_x = body.get("center_x", 0.5)
+    center_y = body.get("center_y", 0.5)
+    crop_w = body.get("crop_w", 1.0)
+    crop_h = body.get("crop_h", 1.0)
 
     # Async filters (ComfyUI) — return immediately, poll for status
     if filter_id == "upscale":
@@ -2203,7 +2249,9 @@ async def api_gallery_filter(body: dict):
 
     # Sync filters (Pillow) — return result immediately
     try:
-        if filter_id == "stitch_2x":
+        if filter_id == "aspect_crop":
+            width, height = _run_aspect_crop(src_path, dest, center_x, center_y, crop_w, crop_h)
+        elif filter_id == "stitch_2x":
             width, height = _run_stitch_2x(src_path, dest, mirror_x, mirror_y)
         elif filter_id == "integer_crop":
             width, height = _run_integer_crop(src_path, dest, divisor, position)

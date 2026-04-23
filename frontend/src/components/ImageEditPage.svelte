@@ -4,7 +4,7 @@
 
   let { project = $bindable(null), onstatus, ongallery, editImage = $bindable(null) } = $props();
 
-  let filter = $state('stitch_2x');
+  let filter = $state('aspect_crop');
   let mirrorX = $state(true);
   let mirrorY = $state(true);
   let divisor = $state(2);
@@ -17,6 +17,18 @@
     ['W',  'C',  'E'],
     ['SW', 'S', 'SE'],
   ];
+
+  // Aspect Crop state
+  const ASPECT_RATIOS = ['16:9', '4:3', '1:1', '3:2', '9:16', 'Free'];
+  let aspectRatio = $state('16:9');
+  let cropCenterPx = $state(null);
+  let cropRect = $state(null);
+  let isDragging = $state(false);
+  let cropCanvas = $state(null);
+  let cropImg = $state(null);
+
+  let isInteractive = $derived(IMAGE_FILTERS.find(f => f.id === filter)?.interactive || false);
+  let showCropUI = $derived(filter === 'aspect_crop' && sourceUrl && !resultUrl && !processing);
 
   // Source image (pasted or picked from gallery)
   let sourceId = $state(null);
@@ -79,8 +91,8 @@
     const my = mirrorY;
     const d = divisor;
     const p = position;
-    const slow = IMAGE_FILTERS.find(x => x.id === f)?.slow;
-    if (!sid || slow) return;
+    const filterDef = IMAGE_FILTERS.find(x => x.id === f);
+    if (!sid || filterDef?.slow || filterDef?.interactive) return;
     runFilter(sid, f, mx, my, d, p);
   });
 
@@ -89,7 +101,7 @@
     runFilter(sourceId, filter, mirrorX, mirrorY, divisor, position);
   }
 
-  async function runFilter(sid, f, mx, my, d, p) {
+  async function runFilter(sid, f, mx, my, d, p, extra = {}) {
     processing = true;
     resultUrl = null;
     resultError = '';
@@ -98,6 +110,7 @@
         source_id: sid, filter: f,
         mirror_x: mx, mirror_y: my,
         divisor: d, position: p,
+        ...extra,
       });
       project = data.project;
       if (data.async) {
@@ -141,6 +154,119 @@
       sourceUrl = img.image_url;
     }
   });
+
+  // --- Aspect Crop interactive handlers ---
+
+  function handleCropImgLoad() {
+    if (!cropImg || !cropCanvas) return;
+    cropCanvas.width = cropImg.clientWidth;
+    cropCanvas.height = cropImg.clientHeight;
+    cropCenterPx = null;
+    cropRect = null;
+    drawCropOverlay();
+  }
+
+  function handleCropMouseDown(e) {
+    if (!cropCanvas) return;
+    e.preventDefault();
+    const rect = cropCanvas.getBoundingClientRect();
+    cropCenterPx = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    cropRect = null;
+    isDragging = true;
+    drawCropOverlay();
+  }
+
+  function handleCropMouseMove(e) {
+    if (!isDragging || !cropCenterPx || !cropCanvas) return;
+    e.preventDefault();
+    const rect = cropCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const dx = Math.abs(x - cropCenterPx.x);
+    const dy = Math.abs(y - cropCenterPx.y);
+
+    let halfW, halfH;
+    if (aspectRatio === 'Free') {
+      halfW = dx;
+      halfH = dy;
+    } else {
+      const [arW, arH] = aspectRatio.split(':').map(Number);
+      if (dx >= dy) {
+        halfW = dx;
+        halfH = dx * (arH / arW);
+      } else {
+        halfH = dy;
+        halfW = dy * (arW / arH);
+      }
+    }
+
+    cropRect = {
+      x: cropCenterPx.x - halfW,
+      y: cropCenterPx.y - halfH,
+      w: halfW * 2,
+      h: halfH * 2,
+    };
+    drawCropOverlay();
+  }
+
+  function handleCropMouseUp() {
+    if (!isDragging) return;
+    isDragging = false;
+
+    if (!cropRect || !cropCanvas || cropRect.w < 5 || cropRect.h < 5) {
+      cropRect = null;
+      drawCropOverlay();
+      return;
+    }
+
+    const cw = cropCanvas.width;
+    const ch = cropCanvas.height;
+    runFilter(sourceId, filter, mirrorX, mirrorY, divisor, position, {
+      center_x: cropCenterPx.x / cw,
+      center_y: cropCenterPx.y / ch,
+      crop_w: cropRect.w / cw,
+      crop_h: cropRect.h / ch,
+    });
+  }
+
+  function drawCropOverlay() {
+    if (!cropCanvas) return;
+    const ctx = cropCanvas.getContext('2d');
+    const w = cropCanvas.width;
+    const h = cropCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (cropRect) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(0, 0, w, cropRect.y);
+      ctx.fillRect(0, cropRect.y + cropRect.h, w, h - cropRect.y - cropRect.h);
+      ctx.fillRect(0, cropRect.y, cropRect.x, cropRect.h);
+      ctx.fillRect(cropRect.x + cropRect.w, cropRect.y, w - cropRect.x - cropRect.w, cropRect.h);
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+    }
+
+    if (cropCenterPx) {
+      ctx.strokeStyle = 'rgba(255, 100, 100, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cropCenterPx.x - 12, cropCenterPx.y);
+      ctx.lineTo(cropCenterPx.x + 12, cropCenterPx.y);
+      ctx.moveTo(cropCenterPx.x, cropCenterPx.y - 12);
+      ctx.lineTo(cropCenterPx.x, cropCenterPx.y + 12);
+      ctx.stroke();
+    }
+  }
+
+  function handleRecrop() {
+    resultUrl = null;
+    resultError = '';
+    cropCenterPx = null;
+    cropRect = null;
+  }
 
   function clearAll() {
     sourceId = null;
@@ -255,7 +381,21 @@
           </div>
         </div>
 
-        {#if filter === 'stitch_2x'}
+        {#if filter === 'aspect_crop'}
+          <div class="control-group" style="margin-bottom: 12px;">
+            <label for="ie-aspect">Aspect Ratio</label>
+            <select id="ie-aspect" bind:value={aspectRatio} disabled={processing}>
+              {#each ASPECT_RATIOS as ar}
+                <option value={ar}>{ar}</option>
+              {/each}
+            </select>
+          </div>
+          {#if resultUrl}
+            <button class="recrop-btn" onclick={handleRecrop} disabled={processing}>Re-crop</button>
+          {:else}
+            <p class="crop-hint">Click to set center, drag to set size</p>
+          {/if}
+        {:else if filter === 'stitch_2x'}
           <div class="checkbox-row">
             <label class="checkbox-label">
               <input type="checkbox" bind:checked={mirrorX} disabled={processing} />
@@ -300,7 +440,19 @@
     </div>
 
     <div class="preview-panel">
-      {#if processing}
+      {#if showCropUI}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="crop-container">
+          <img bind:this={cropImg} src={sourceUrl} alt="Crop source"
+               onload={handleCropImgLoad}
+               draggable="false" />
+          <canvas bind:this={cropCanvas}
+                  onmousedown={handleCropMouseDown}
+                  onmousemove={handleCropMouseMove}
+                  onmouseup={handleCropMouseUp}
+                  onmouseleave={handleCropMouseUp}></canvas>
+        </div>
+      {:else if processing}
         <div class="preview-placeholder">
           <div class="spinner"></div>
           <span>Processing...</span>
@@ -725,5 +877,50 @@
   .cancel-btn:hover {
     color: var(--text);
     border-color: var(--text-muted);
+  }
+
+  /* Aspect Crop interactive UI */
+  .crop-container {
+    position: relative;
+    display: inline-block;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg-input);
+  }
+
+  .crop-container img {
+    display: block;
+    max-width: 100%;
+    max-height: 600px;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .crop-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: crosshair;
+  }
+
+  .crop-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 4px 0 0;
+  }
+
+  .recrop-btn {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    font-size: 13px;
+    padding: 6px 16px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+
+  .recrop-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: white;
   }
 </style>

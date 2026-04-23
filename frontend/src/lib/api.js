@@ -125,6 +125,7 @@ export const RESOLUTIONS = [
   { label: '3000x3000 (1:1 XL)', w: 3000, h: 3000 },
 ];
 export const IMAGE_FILTERS = [
+  { id: 'aspect_crop', label: 'Aspect Crop', interactive: true },
   { id: 'stitch_2x', label: '2x Grid' },
   { id: 'integer_crop', label: 'Integer Crop' },
   { id: 'upscale', label: 'Upscale', slow: true },
