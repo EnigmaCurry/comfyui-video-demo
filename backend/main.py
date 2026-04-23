@@ -2524,6 +2524,8 @@ async def api_seq_merge(sequence_id: str, body: dict):
 async def api_seq_update_keyframe(sequence_id: str, keyframe_id: str, body: dict):
     seq = _get_sequence(sequence_id)
     kf = _get_seq_keyframe(seq, keyframe_id)
+    if kf.locked:
+        raise HTTPException(400, "Keyframe is locked")
     if "prompt" in body:
         kf.prompt = body["prompt"]
     if "negative_prompt" in body:
@@ -2538,6 +2540,9 @@ async def api_seq_update_keyframe(sequence_id: str, keyframe_id: str, body: dict
 async def api_seq_delete_keyframe(sequence_id: str, keyframe_id: str):
     proj = _get_project()
     seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    if kf.locked:
+        raise HTTPException(400, "Keyframe is locked")
     seq.keyframes = [kf for kf in seq.keyframes if kf.id != keyframe_id]
     for i, kf in enumerate(seq.keyframes):
         kf.position = i
@@ -2549,7 +2554,14 @@ async def api_seq_delete_keyframe(sequence_id: str, keyframe_id: str):
 @app.post("/api/sequences/{sequence_id}/keyframes/reorder")
 async def api_seq_reorder_keyframes(sequence_id: str, ids: list[str]):
     seq = _get_sequence(sequence_id)
+    # Reject if any locked keyframe would move
     by_id = {kf.id: kf for kf in seq.keyframes}
+    locked_ids = {kf.id for kf in seq.keyframes if kf.locked}
+    for new_pos, kid in enumerate(ids):
+        if kid in locked_ids:
+            old_kf = by_id[kid]
+            if old_kf.position != new_pos:
+                raise HTTPException(400, "Cannot move locked keyframes")
     reordered = []
     for kid in ids:
         if kid in by_id:
@@ -2581,6 +2593,8 @@ async def api_seq_render_keyframe(sequence_id: str, keyframe_id: str, req: Rende
     proj = _get_project()
     seq = _get_sequence(sequence_id)
     kf = _get_seq_keyframe(seq, keyframe_id)
+    if kf.locked:
+        raise HTTPException(400, "Keyframe is locked")
     if req and req.prompt is not None:
         kf.prompt = req.prompt
     seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
@@ -2610,6 +2624,8 @@ async def api_seq_upload_keyframe(sequence_id: str, keyframe_id: str, file: byte
     proj = _get_project()
     seq = _get_sequence(sequence_id)
     kf = _get_seq_keyframe(seq, keyframe_id)
+    if kf.locked:
+        raise HTTPException(400, "Keyframe is locked")
     filename = f"seq_{kf.id}.png"
     dest = os.path.join(images_dir(proj.id), filename)
     with open(dest, "wb") as f:
@@ -2623,6 +2639,10 @@ async def api_seq_upload_keyframe(sequence_id: str, keyframe_id: str, file: byte
 
 @app.post("/api/sequences/{sequence_id}/keyframes/{keyframe_id}/rewrite")
 async def api_seq_rewrite_keyframe(sequence_id: str, keyframe_id: str, body: dict):
+    seq = _get_sequence(sequence_id)
+    kf = _get_seq_keyframe(seq, keyframe_id)
+    if kf.locked:
+        raise HTTPException(400, "Keyframe is locked")
     from llm import call_llm_text
     seq = _get_sequence(sequence_id)
     kf = _get_seq_keyframe(seq, keyframe_id)
@@ -2732,6 +2752,8 @@ async def api_seq_transition_status(sequence_id: str, transition_id: str):
 async def api_seq_update_transition(sequence_id: str, transition_id: str, body: dict):
     seq = _get_sequence(sequence_id)
     tr = _get_seq_transition(seq, transition_id)
+    if tr.locked:
+        raise HTTPException(400, "Transition is locked")
     if "prompt" in body:
         tr.prompt = body["prompt"]
     if "negative_prompt" in body:
@@ -2742,12 +2764,47 @@ async def api_seq_update_transition(sequence_id: str, transition_id: str, body: 
     return {"transition": tr.model_dump()}
 
 
+@app.post("/api/sequences/{sequence_id}/transitions/{transition_id}/lock")
+async def api_seq_lock_transition(sequence_id: str, transition_id: str):
+    """Lock a transition and its adjacent keyframes."""
+    seq = _get_sequence(sequence_id)
+    tr = _get_seq_transition(seq, transition_id)
+    tr.locked = True
+    # Lock the adjacent keyframes
+    for kf in seq.keyframes:
+        if kf.id == tr.from_keyframe_id or kf.id == tr.to_keyframe_id:
+            kf.locked = True
+    _save()
+    return {"sequence": seq.model_dump()}
+
+
+@app.post("/api/sequences/{sequence_id}/transitions/{transition_id}/unlock")
+async def api_seq_unlock_transition(sequence_id: str, transition_id: str):
+    """Unlock a transition and conditionally unlock its keyframes."""
+    seq = _get_sequence(sequence_id)
+    tr = _get_seq_transition(seq, transition_id)
+    tr.locked = False
+    # Unlock keyframes only if no other locked transition references them
+    other_locked = [t for t in seq.transitions if t.locked and t.id != tr.id]
+    locked_kf_ids = set()
+    for t in other_locked:
+        locked_kf_ids.add(t.from_keyframe_id)
+        locked_kf_ids.add(t.to_keyframe_id)
+    for kf in seq.keyframes:
+        if kf.id in (tr.from_keyframe_id, tr.to_keyframe_id) and kf.id not in locked_kf_ids:
+            kf.locked = False
+    _save()
+    return {"sequence": seq.model_dump()}
+
+
 @app.post("/api/sequences/{sequence_id}/transitions/{transition_id}/render")
 async def api_seq_render_transition(sequence_id: str, transition_id: str,
                                      req: TransitionRenderRequest | None = None):
     proj = _get_project()
     seq = _get_sequence(sequence_id)
     tr = _get_seq_transition(seq, transition_id)
+    if tr.locked:
+        raise HTTPException(400, "Transition is locked")
     seed = (req.seed if req and req.seed is not None else None) or random.randint(0, 2**32 - 1)
     frame_rate = req.frame_rate if req else 25
     duration = tr.duration or (req.duration_seconds if req else seq.duration)

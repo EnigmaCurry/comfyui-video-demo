@@ -2,15 +2,15 @@
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { RefreshCw, Pencil, Trash2, Check, X, ThumbsDown, Wand2, Upload, Plus,
-           ChevronDown, RotateCcw, GitMerge } from 'lucide-svelte';
+           ChevronDown, RotateCcw, GitMerge, Lock, Unlock } from 'lucide-svelte';
   import {
     listSequences, createSequence, updateSequence, deleteSequence, activateSequence,
     seqAddKeyframe, seqUpdateKeyframe, seqDeleteKeyframe, seqReorderKeyframes,
     seqKeyframeStatus, seqRenderKeyframe, seqRerenderKeyframe, seqRewriteKeyframe,
     seqUploadKeyframe, seqAddKeyframeImage, seqMergeSequence,
     seqSyncTransitions, seqTransitionStatus, seqUpdateTransition,
-    seqRenderTransition, seqRerenderTransition, T2I_MODELS, galleryList,
-    RESOLUTIONS, setResolution,
+    seqRenderTransition, seqRerenderTransition, seqLockTransition, seqUnlockTransition,
+    T2I_MODELS, galleryList, RESOLUTIONS, setResolution,
   } from '../lib/api.js';
 
   let { project = $bindable(), onstatus } = $props();
@@ -65,6 +65,38 @@
     return transitions.find(t =>
       t.from_keyframe_id === keyframes[i].id && t.to_keyframe_id === keyframes[i + 1].id
     ) || null;
+  }
+
+  // ── Drag and drop ──
+  function handleDndConsider(e) {
+    if (activeSeq) activeSeq.keyframes = e.detail.items;
+  }
+
+  async function handleDndFinalize(e) {
+    if (!activeSeq) return;
+    activeSeq.keyframes = e.detail.items;
+    try {
+      const ids = activeSeq.keyframes.map(kf => kf.id);
+      const data = await seqReorderKeyframes(activeSeqId, ids);
+      replaceSeq(data.sequence);
+    } catch (e) {
+      onstatus?.({ detail: `Reorder failed: ${e.message}` });
+      // Reload to restore correct order
+      init();
+    }
+  }
+
+  // ── Lock/unlock transitions ──
+  async function handleToggleLock(tr) {
+    try {
+      const data = tr.locked
+        ? await seqUnlockTransition(activeSeqId, tr.id)
+        : await seqLockTransition(activeSeqId, tr.id);
+      replaceSeq(data.sequence);
+      onstatus?.({ detail: tr.locked ? 'Unlocked.' : 'Locked.' });
+    } catch (e) {
+      onstatus?.({ detail: `Lock failed: ${e.message}` });
+    }
   }
 
   // ── Init ──
@@ -599,24 +631,34 @@
 {#if activeSeq}
   {#if keyframes.length > 0}
     <div class="timeline-scroll">
-      <div class="timeline-grid" style="grid-template-columns: repeat({keyframes.length}, 640px) 60px;">
-        <!-- Row 1: Keyframes -->
+      <!-- Row 1: Keyframes (draggable) + add button -->
+      <div class="kf-row-wrap">
+      <div class="kf-row"
+           use:dndzone={{ items: keyframes, flipDurationMs, type: 'seq-keyframes' }}
+           onconsider={handleDndConsider}
+           onfinalize={handleDndFinalize}>
         {#each keyframes as kf, i (kf.id)}
-          <div class="tl-card tl-keyframe" style="grid-column: {i + 1}; grid-row: 1;">
+          <div class="tl-card tl-keyframe" class:locked={kf.locked}
+               animate:flip={{ duration: flipDurationMs }}>
             <div class="tl-header">
               <span class="tl-position">{i + 1}</span>
+              {#if kf.locked}
+                <Lock size={12} class="lock-indicator" />
+              {/if}
               <span class="status-badge" class:pending={kf.status === 'pending'}
                     class:rendering={kf.status === 'rendering'}
                     class:done={kf.status === 'done'}
                     class:error={kf.status === 'error'}>
                 {kf.status}
               </span>
-              <select class="model-select" value={kf.model || 'hidream'}
-                      onchange={(e) => handleModelChange(kf, e)}>
-                {#each T2I_MODELS as m}
-                  <option value={m.id}>{m.label}</option>
-                {/each}
-              </select>
+              {#if !kf.locked}
+                <select class="model-select" value={kf.model || 'hidream'}
+                        onchange={(e) => handleModelChange(kf, e)}>
+                  {#each T2I_MODELS as m}
+                    <option value={m.id}>{m.label}</option>
+                  {/each}
+                </select>
+              {/if}
             </div>
 
             <div class="tl-image" style="aspect-ratio: {projectWidth} / {projectHeight};">
@@ -626,16 +668,18 @@
                 <img src={kfImageUrl(kf)} alt="Keyframe {i + 1}" />
               {:else if kf.status === 'error'}
                 <div class="error-container"><span>Error</span><small>{kf.error_message || 'Unknown'}</small></div>
-              {:else}
+              {:else if !kf.locked}
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                 <div class="gallery-placeholder" onclick={() => openGalleryPicker(kf.id)} title="Load from gallery">
                   <Plus size={28} />
                 </div>
+              {:else}
+                <div class="placeholder-box">Locked</div>
               {/if}
             </div>
 
             <div class="tl-body">
-              {#if editing[kf.id]}
+              {#if !kf.locked && editing[kf.id]}
                 <textarea bind:value={editPrompts[kf.id]}
                           onkeydown={(e) => editKeydown(e, kf, saveEditKf, cancelEditKf)}
                           rows="3" class="edit-textarea" use:autoFocus></textarea>
@@ -645,12 +689,13 @@
                 </div>
               {:else}
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <p class="prompt-text clickable" class:empty={!kf.prompt} onclick={() => startEditKf(kf)}>
-                  {kf.prompt || 'Click to enter prompt...'}
+                <p class="prompt-text" class:clickable={!kf.locked} class:empty={!kf.prompt}
+                   onclick={() => !kf.locked && startEditKf(kf)}>
+                  {kf.prompt || (kf.locked ? '(locked)' : 'Click to enter prompt...')}
                 </p>
               {/if}
 
-              {#if editingNeg[kf.id]}
+              {#if !kf.locked && editingNeg[kf.id]}
                 <div class="neg-edit">
                   <label class="neg-label">Negative prompt</label>
                   <textarea bind:value={editNegPrompts[kf.id]}
@@ -666,7 +711,7 @@
                 <p class="neg-display"><span class="neg-label-inline">Neg:</span> {kf.negative_prompt}</p>
               {/if}
 
-              {#if rewriting[kf.id]}
+              {#if !kf.locked && rewriting[kf.id]}
                 <div class="rewrite-edit">
                   <label class="rewrite-label">Rewrite instruction</label>
                   <textarea bind:value={rewriteInstructions[kf.id]}
@@ -688,132 +733,158 @@
               {/if}
             </div>
 
-            <div class="tl-actions">
-              {#if kf.prompt && kf.status !== 'rendering'}
-                <button class="btn-icon" onclick={() => handleRerenderKf(kf)} title="Re-render">
-                  <RefreshCw size={14} />
+            {#if !kf.locked}
+              <div class="tl-actions">
+                {#if kf.prompt && kf.status !== 'rendering'}
+                  <button class="btn-icon" onclick={() => handleRerenderKf(kf)} title="Re-render">
+                    <RefreshCw size={14} />
+                  </button>
+                {/if}
+                <button class="btn-icon" onclick={() => { document.getElementById(`file-${kf.id}`)?.click(); }} title="Upload">
+                  <Upload size={14} />
                 </button>
-              {/if}
-              <button class="btn-icon" onclick={() => { document.getElementById(`file-${kf.id}`)?.click(); }} title="Upload">
-                <Upload size={14} />
-              </button>
-              <input id="file-{kf.id}" type="file" accept="image/*"
-                     onchange={(e) => handleUpload(kf, e)} class="hidden-input" />
-              <button class="btn-icon" onclick={() => startRewrite(kf)} title="Rewrite with AI">
-                <Wand2 size={14} />
-              </button>
-              <button class="btn-icon" class:btn-active={!!kf.negative_prompt}
-                      onclick={() => startEditNeg(kf)} title="Negative prompt">
-                <ThumbsDown size={14} />
-              </button>
-              <button class="btn-icon btn-danger" onclick={() => handleDeleteKeyframe(kf.id)} title="Delete">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          </div>
-        {/each}
-
-        <!-- Add button -->
-        <button class="tl-add-btn" onclick={handleAddKeyframe} title="Add keyframe"
-                style="grid-column: {keyframes.length + 1}; grid-row: 1;">
-          <Plus size={20} />
-        </button>
-
-        <!-- Row 2: TV transitions (staggered between keyframes) -->
-        {#each keyframes as _, i}
-          {#if i < keyframes.length - 1}
-            {@const tr = getTransitionBetween(i)}
-            {#if tr}
-              <div class="tv-set" style="grid-column: {i + 1} / span 2; grid-row: 2;">
-                <div class="tv-antennas">
-                  <div class="tv-antenna left"></div>
-                  <div class="tv-antenna right"></div>
-                </div>
-                <div class="tv-body">
-                  <div class="tv-screen-area">
-                    <div class="tv-screen" style="aspect-ratio: {projectWidth} / {projectHeight};">
-                      <div class="tv-screen-inner">
-                        {#if tr.status === 'done' && trVideoUrl(tr)}
-                          <!-- svelte-ignore a11y_media_has_caption -->
-                          <video src={trVideoUrl(tr)} controls loop muted autoplay></video>
-                        {:else if tr.status === 'rendering'}
-                          <div class="tv-static"><div class="spinner"></div><span>Rendering...</span></div>
-                        {:else if tr.status === 'error'}
-                          <div class="tv-static error"><span>ERROR</span><small>{tr.error_message || 'No signal'}</small></div>
-                        {:else}
-                          <div class="tv-static"><span class="tv-no-signal">NO SIGNAL</span></div>
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                  <div class="tv-controls">
-                    <div class="tv-label">{i + 1}→{i + 2}</div>
-                    <span class="status-badge" class:pending={tr.status === 'pending'}
-                          class:rendering={tr.status === 'rendering'}
-                          class:done={tr.status === 'done'}
-                          class:error={tr.status === 'error'}>
-                      {tr.status}
-                    </span>
-                    <div class="tv-duration">
-                      <input type="number" min="1" max="120"
-                             value={tr.duration || 10}
-                             onchange={(e) => handleTrDurationChange(tr, e)}
-                             class="tv-duration-input" />
-                      <span class="tv-duration-label">sec</span>
-                    </div>
-                    <div class="tv-knob"></div>
-                  </div>
-                </div>
-                <div class="tv-footer">
-                  <div class="tl-body">
-                    {#if trEditing[tr.id]}
-                      <textarea bind:value={trEditPrompts[tr.id]}
-                                onkeydown={(e) => editKeydown(e, tr, saveEditTr, cancelEditTr)}
-                                rows="2" class="edit-textarea" use:autoFocus></textarea>
-                      <div class="edit-actions">
-                        <button class="btn-save" onclick={() => saveEditTr(tr)}><Check size={14} /> Save</button>
-                        <button class="btn-cancel" onclick={() => cancelEditTr(tr)}><X size={14} /> Cancel</button>
-                      </div>
-                    {:else}
-                      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                      <p class="prompt-text clickable" onclick={() => startEditTr(tr)}>{tr.prompt || '(click to edit description)'}</p>
-                    {/if}
-
-                    {#if trEditingNeg[tr.id]}
-                      <div class="neg-edit">
-                        <label class="neg-label">Negative prompt</label>
-                        <textarea bind:value={trEditNegPrompts[tr.id]}
-                                  onkeydown={(e) => editKeydown(e, tr, saveTrNegEdit, cancelTrNegEdit)}
-                                  rows="2" class="edit-textarea" placeholder="Things to avoid..."
-                                  use:autoFocus></textarea>
-                        <div class="edit-actions">
-                          <button class="btn-save" onclick={() => saveTrNegEdit(tr)}><Check size={14} /> Save</button>
-                          <button class="btn-cancel" onclick={() => cancelTrNegEdit(tr)}><X size={14} /> Cancel</button>
-                        </div>
-                      </div>
-                    {:else if tr.negative_prompt}
-                      <p class="neg-display"><span class="neg-label-inline">Neg:</span> {tr.negative_prompt}</p>
-                    {/if}
-                  </div>
-                  <div class="tl-actions">
-                    <button class="btn-icon" onclick={() => handleRerenderTr(tr)} title="Re-render"
-                            disabled={tr.status === 'rendering'}>
-                      <RefreshCw size={14} />
-                    </button>
-                    <button class="btn-icon" class:btn-active={!!tr.negative_prompt}
-                            onclick={() => startEditTrNeg(tr)} title="Negative prompt">
-                      <ThumbsDown size={14} />
-                    </button>
-                    {#if tr.status === 'pending'}
-                      <button class="btn-render" onclick={() => handleRenderTr(tr)}>Render</button>
-                    {/if}
-                  </div>
-                </div>
+                <input id="file-{kf.id}" type="file" accept="image/*"
+                       onchange={(e) => handleUpload(kf, e)} class="hidden-input" />
+                <button class="btn-icon" onclick={() => startRewrite(kf)} title="Rewrite with AI">
+                  <Wand2 size={14} />
+                </button>
+                <button class="btn-icon" class:btn-active={!!kf.negative_prompt}
+                        onclick={() => startEditNeg(kf)} title="Negative prompt">
+                  <ThumbsDown size={14} />
+                </button>
+                <button class="btn-icon btn-danger" onclick={() => handleDeleteKeyframe(kf.id)} title="Delete">
+                  <Trash2 size={14} />
+                </button>
               </div>
             {/if}
-          {/if}
+          </div>
         {/each}
       </div>
+
+      <!-- Add button (outside dndzone) -->
+      <button class="tl-add-btn" onclick={handleAddKeyframe} title="Add keyframe">
+        <Plus size={20} />
+      </button>
+      </div>
+
+      <!-- Row 2: TV transitions (staggered) -->
+      {#if keyframes.length > 1}
+        <div class="tr-row" style="padding-left: {(640 + 24) / 2}px;">
+          {#each keyframes as _, i}
+            {#if i < keyframes.length - 1}
+              {@const tr = getTransitionBetween(i)}
+              {#if tr}
+                <div class="tv-set">
+                  <div class="tv-antennas">
+                    <div class="tv-antenna left"></div>
+                    <div class="tv-antenna right"></div>
+                  </div>
+                  <div class="tv-body">
+                    <div class="tv-screen-area">
+                      <div class="tv-screen" style="aspect-ratio: {projectWidth} / {projectHeight};">
+                        <div class="tv-screen-inner">
+                          {#if tr.status === 'done' && trVideoUrl(tr)}
+                            <!-- svelte-ignore a11y_media_has_caption -->
+                            <video src={trVideoUrl(tr)} controls loop muted autoplay></video>
+                          {:else if tr.status === 'rendering'}
+                            <div class="tv-static"><div class="spinner"></div><span>Rendering...</span></div>
+                          {:else if tr.status === 'error'}
+                            <div class="tv-static error"><span>ERROR</span><small>{tr.error_message || 'No signal'}</small></div>
+                          {:else}
+                            <div class="tv-static"><span class="tv-no-signal">NO SIGNAL</span></div>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tv-controls">
+                      <div class="tv-label">{i + 1}→{i + 2}</div>
+                      <span class="status-badge" class:pending={tr.status === 'pending'}
+                            class:rendering={tr.status === 'rendering'}
+                            class:done={tr.status === 'done'}
+                            class:error={tr.status === 'error'}>
+                        {tr.status}
+                      </span>
+                      {#if !tr.locked}
+                        <div class="tv-duration">
+                          <input type="number" min="1" max="120"
+                                 value={tr.duration || 10}
+                                 onchange={(e) => handleTrDurationChange(tr, e)}
+                                 class="tv-duration-input" />
+                          <span class="tv-duration-label">sec</span>
+                        </div>
+                      {:else}
+                        <div class="tv-duration">
+                          <span class="tv-duration-label">{tr.duration || 10}s</span>
+                        </div>
+                      {/if}
+                      <button class="tv-lock-btn" onclick={() => handleToggleLock(tr)}
+                              title={tr.locked ? 'Unlock transition' : 'Lock transition'}>
+                        {#if tr.locked}
+                          <Lock size={14} />
+                        {:else}
+                          <Unlock size={14} />
+                        {/if}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="tv-footer" class:locked={tr.locked}>
+                    <div class="tl-body">
+                      {#if !tr.locked && trEditing[tr.id]}
+                        <textarea bind:value={trEditPrompts[tr.id]}
+                                  onkeydown={(e) => editKeydown(e, tr, saveEditTr, cancelEditTr)}
+                                  rows="2" class="edit-textarea" use:autoFocus></textarea>
+                        <div class="edit-actions">
+                          <button class="btn-save" onclick={() => saveEditTr(tr)}><Check size={14} /> Save</button>
+                          <button class="btn-cancel" onclick={() => cancelEditTr(tr)}><X size={14} /> Cancel</button>
+                        </div>
+                      {:else}
+                        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                        <p class="prompt-text" class:clickable={!tr.locked}
+                           onclick={() => !tr.locked && startEditTr(tr)}>
+                          {tr.prompt || (tr.locked ? '(locked)' : '(click to edit description)')}
+                        </p>
+                      {/if}
+
+                      {#if !tr.locked && trEditingNeg[tr.id]}
+                        <div class="neg-edit">
+                          <label class="neg-label">Negative prompt</label>
+                          <textarea bind:value={trEditNegPrompts[tr.id]}
+                                    onkeydown={(e) => editKeydown(e, tr, saveTrNegEdit, cancelTrNegEdit)}
+                                    rows="2" class="edit-textarea" placeholder="Things to avoid..."
+                                    use:autoFocus></textarea>
+                          <div class="edit-actions">
+                            <button class="btn-save" onclick={() => saveTrNegEdit(tr)}><Check size={14} /> Save</button>
+                            <button class="btn-cancel" onclick={() => cancelTrNegEdit(tr)}><X size={14} /> Cancel</button>
+                          </div>
+                        </div>
+                      {:else if tr.negative_prompt}
+                        <p class="neg-display"><span class="neg-label-inline">Neg:</span> {tr.negative_prompt}</p>
+                      {/if}
+                    </div>
+                    {#if !tr.locked}
+                      <div class="tl-actions">
+                        <button class="btn-icon" onclick={() => handleRerenderTr(tr)} title="Re-render"
+                                disabled={tr.status === 'rendering'}>
+                          <RefreshCw size={14} />
+                        </button>
+                        <button class="btn-icon" class:btn-active={!!tr.negative_prompt}
+                                onclick={() => startEditTrNeg(tr)} title="Negative prompt">
+                          <ThumbsDown size={14} />
+                        </button>
+                        {#if tr.status === 'pending'}
+                          <button class="btn-render" onclick={() => handleRenderTr(tr)}>Render</button>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {:else}
+                <div class="tv-placeholder"></div>
+              {/if}
+            {/if}
+          {/each}
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="empty-panel">
@@ -1037,19 +1108,30 @@
   .timeline-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
   .timeline-scroll { scrollbar-width: auto; scrollbar-color: var(--border) var(--bg); }
 
-  .timeline-grid {
-    display: grid;
-    column-gap: 24px;
-    row-gap: 16px;
-    min-width: min-content;
-    height: 100%;
-    grid-template-rows: 1fr 1fr;
+  .kf-row-wrap {
+    display: flex;
+    gap: 24px;
     align-items: stretch;
+  }
+
+  .kf-row {
+    display: flex;
+    gap: 24px;
+    min-width: min-content;
+  }
+
+  .tr-row {
+    display: flex;
+    gap: 24px;
+    min-width: min-content;
+    margin-top: 16px;
   }
 
   .tl-card {
     display: flex;
     flex-direction: column;
+    width: 640px;
+    flex-shrink: 0;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -1102,11 +1184,15 @@
 
   /* ── TV Set ── */
   .tv-set {
-    justify-self: center;
-    width: 100%;
-    max-width: 646px;
+    width: 640px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
+  }
+
+  .tv-placeholder {
+    width: 640px;
+    flex-shrink: 0;
   }
 
   .tv-antennas {
@@ -1265,12 +1351,33 @@
     letter-spacing: 0.05em;
   }
 
+  .tv-lock-btn {
+    background: transparent;
+    color: #776655;
+    border: none;
+    padding: 4px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .tv-lock-btn:hover { color: var(--warning); }
+
   .tv-footer {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     overflow: hidden;
   }
+  .tv-footer.locked { opacity: 0.7; }
+
+  /* ── Locked state ── */
+  .tl-card.locked {
+    border-color: var(--locked);
+    opacity: 0.85;
+  }
+  .tl-card.locked .tl-header { background: var(--locked-bg); }
+
+  :global(.lock-indicator) { color: var(--locked); }
 
   .spinner-container, .error-container, .placeholder-box {
     display: flex; flex-direction: column; align-items: center;

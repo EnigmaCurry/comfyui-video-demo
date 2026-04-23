@@ -58,6 +58,7 @@ class Transition(BaseModel):
     narrated_video_filename: Optional[str] = None
     narration_error: Optional[str] = None
     error_message: Optional[str] = None
+    locked: bool = False
 
 
 class Project(BaseModel):

@@ -180,6 +180,8 @@ export const seqTransitionStatus = (seqId, trId) => request('GET', `/sequences/$
 export const seqUpdateTransition = (seqId, trId, updates) => request('PUT', `/sequences/${seqId}/transitions/${trId}`, updates);
 export const seqRenderTransition = (seqId, trId, opts = {}) => request('POST', `/sequences/${seqId}/transitions/${trId}/render`, opts);
 export const seqRerenderTransition = (seqId, trId, opts = {}) => request('POST', `/sequences/${seqId}/transitions/${trId}/rerender`, opts);
+export const seqLockTransition = (seqId, trId) => request('POST', `/sequences/${seqId}/transitions/${trId}/lock`);
+export const seqUnlockTransition = (seqId, trId) => request('POST', `/sequences/${seqId}/transitions/${trId}/unlock`);
 
 export async function galleryUpload(file) {
   const form = new FormData();
