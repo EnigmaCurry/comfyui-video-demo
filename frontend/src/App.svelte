@@ -189,9 +189,8 @@
     }
   }
 
-  function handleActivityChange(event) {
-    const newActivity = event.detail;
-    lastTab[activity] = activeTab;
+  function handleActivityChange(oldActivity, newActivity) {
+    lastTab[oldActivity] = activeTab;
     activeTab = lastTab[newActivity] || defaultTab(newActivity);
   }
 
@@ -254,7 +253,7 @@
       <div class="activity-toggle">
         {#each ACTIVITIES as act}
           <button class="toggle-btn" class:active={activity === act.id}
-                  onclick={() => { if (act.id !== activity) { activity = act.id; handleActivityChange({ detail: act.id }); } }}>
+                  onclick={() => { if (act.id !== activity) { const old = activity; activity = act.id; handleActivityChange(old, act.id); } }}>
             {act.label}
           </button>
         {/each}
