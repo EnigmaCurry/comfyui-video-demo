@@ -1020,7 +1020,11 @@
   /* ── Horizontal timeline ── */
   .timeline-scroll {
     overflow-x: auto;
+    overflow-y: hidden;
     padding-bottom: 8px;
+    /* Fill remaining viewport: header ~70px, tabs ~44px, settings bar ~46px, status ~40px, padding ~50px */
+    height: calc(100dvh - 250px);
+    min-height: 300px;
   }
 
   .timeline-scroll::-webkit-scrollbar { height: 14px; }
@@ -1038,10 +1042,14 @@
     column-gap: 24px;
     row-gap: 16px;
     min-width: min-content;
-    align-items: start;
+    height: 100%;
+    grid-template-rows: 1fr 1fr;
+    align-items: stretch;
   }
 
   .tl-card {
+    display: flex;
+    flex-direction: column;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -1085,7 +1093,8 @@
 
   /* ── Image / Video areas ── */
   .tl-image {
-    aspect-ratio: 16 / 9;
+    flex: 1;
+    min-height: 60px;
     background: var(--bg);
     display: flex; align-items: center; justify-content: center;
     overflow: hidden;
@@ -1097,6 +1106,8 @@
     justify-self: center;
     width: 100%;
     max-width: 380px;
+    display: flex;
+    flex-direction: column;
   }
 
   .tv-antennas {
@@ -1118,6 +1129,8 @@
 
   .tv-body {
     display: flex;
+    flex: 1;
+    min-height: 0;
     background: linear-gradient(145deg, #3a3530, #2a2520, #1e1a16);
     border: 3px solid #4a4035;
     border-radius: 16px 16px 12px 12px;
@@ -1135,7 +1148,8 @@
 
   .tv-screen {
     position: relative;
-    aspect-ratio: 4 / 3;
+    width: 100%;
+    height: 100%;
     background: #111;
     border-radius: 10px;
     overflow: hidden;
