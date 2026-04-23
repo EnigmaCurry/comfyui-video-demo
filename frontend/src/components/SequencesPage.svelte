@@ -630,55 +630,82 @@
 
           {:else if item.type === 'transition'}
             {@const tr = item.tr}
-            <div class="tl-card tl-transition">
-              <div class="tl-header">
-                <span class="tl-arrow-label">{item.index + 1} → {item.index + 2}</span>
-                <span class="status-badge" class:pending={tr.status === 'pending'}
-                      class:rendering={tr.status === 'rendering'}
-                      class:done={tr.status === 'done'}
-                      class:error={tr.status === 'error'}>
-                  {tr.status}
-                </span>
+            <div class="tv-set">
+              <!-- Antennas -->
+              <div class="tv-antennas">
+                <div class="tv-antenna left"></div>
+                <div class="tv-antenna right"></div>
               </div>
-
-              <div class="tl-video">
-                {#if tr.status === 'done' && trVideoUrl(tr)}
-                  <!-- svelte-ignore a11y_media_has_caption -->
-                  <video src={trVideoUrl(tr)} controls loop muted autoplay></video>
-                {:else if tr.status === 'rendering'}
-                  <div class="render-placeholder"><div class="spinner"></div><span>Rendering...</span></div>
-                {:else if tr.status === 'error'}
-                  <div class="render-placeholder error"><span>Error</span><small>{tr.error_message || 'Unknown'}</small></div>
-                {:else}
-                  <div class="render-placeholder">Pending</div>
-                {/if}
-              </div>
-
-              <div class="tl-body">
-                {#if trEditing[tr.id]}
-                  <textarea bind:value={trEditPrompts[tr.id]}
-                            onkeydown={(e) => editKeydown(e, tr, saveEditTr, cancelEditTr)}
-                            rows="2" class="edit-textarea" use:autoFocus></textarea>
-                  <div class="edit-actions">
-                    <button class="btn-save" onclick={() => saveEditTr(tr)}><Check size={14} /> Save</button>
-                    <button class="btn-cancel" onclick={() => cancelEditTr(tr)}><X size={14} /> Cancel</button>
+              <div class="tv-body">
+                <div class="tv-screen-area">
+                  <!-- CRT screen -->
+                  <div class="tv-screen">
+                    <div class="tv-screen-inner">
+                      {#if tr.status === 'done' && trVideoUrl(tr)}
+                        <!-- svelte-ignore a11y_media_has_caption -->
+                        <video src={trVideoUrl(tr)} controls loop muted autoplay></video>
+                      {:else if tr.status === 'rendering'}
+                        <div class="tv-static">
+                          <div class="spinner"></div>
+                          <span>Rendering...</span>
+                        </div>
+                      {:else if tr.status === 'error'}
+                        <div class="tv-static error"><span>ERROR</span><small>{tr.error_message || 'No signal'}</small></div>
+                      {:else}
+                        <div class="tv-static">
+                          <span class="tv-no-signal">NO SIGNAL</span>
+                        </div>
+                      {/if}
+                    </div>
+                    <!-- CRT scanline overlay -->
+                    <div class="tv-scanlines"></div>
+                    <!-- Screen glare -->
+                    <div class="tv-glare"></div>
                   </div>
-                {:else}
-                  <p class="prompt-text">{tr.prompt || '(no description)'}</p>
-                {/if}
+                </div>
+
+                <!-- Control panel (right side of TV) -->
+                <div class="tv-controls">
+                  <div class="tv-label">{item.index + 1}→{item.index + 2}</div>
+                  <span class="status-badge" class:pending={tr.status === 'pending'}
+                        class:rendering={tr.status === 'rendering'}
+                        class:done={tr.status === 'done'}
+                        class:error={tr.status === 'error'}>
+                    {tr.status}
+                  </span>
+                  <div class="tv-knob"></div>
+                  <div class="tv-knob small"></div>
+                </div>
               </div>
 
-              <div class="tl-actions">
-                <button class="btn-icon" onclick={() => handleRerenderTr(tr)} title="Re-render"
-                        disabled={tr.status === 'rendering'}>
-                  <RefreshCw size={14} />
-                </button>
-                <button class="btn-icon" onclick={() => startEditTr(tr)} title="Edit prompt">
-                  <Pencil size={14} />
-                </button>
-                {#if tr.status === 'pending'}
-                  <button class="btn-render" onclick={() => handleRenderTr(tr)}>Render</button>
-                {/if}
+              <!-- Bottom: prompt + actions -->
+              <div class="tv-footer">
+                <div class="tl-body">
+                  {#if trEditing[tr.id]}
+                    <textarea bind:value={trEditPrompts[tr.id]}
+                              onkeydown={(e) => editKeydown(e, tr, saveEditTr, cancelEditTr)}
+                              rows="2" class="edit-textarea" use:autoFocus></textarea>
+                    <div class="edit-actions">
+                      <button class="btn-save" onclick={() => saveEditTr(tr)}><Check size={14} /> Save</button>
+                      <button class="btn-cancel" onclick={() => cancelEditTr(tr)}><X size={14} /> Cancel</button>
+                    </div>
+                  {:else}
+                    <p class="prompt-text">{tr.prompt || '(no description)'}</p>
+                  {/if}
+                </div>
+
+                <div class="tl-actions">
+                  <button class="btn-icon" onclick={() => handleRerenderTr(tr)} title="Re-render"
+                          disabled={tr.status === 'rendering'}>
+                    <RefreshCw size={14} />
+                  </button>
+                  <button class="btn-icon" onclick={() => startEditTr(tr)} title="Edit prompt">
+                    <Pencil size={14} />
+                  </button>
+                  {#if tr.status === 'pending'}
+                    <button class="btn-render" onclick={() => handleRenderTr(tr)}>Render</button>
+                  {/if}
+                </div>
               </div>
             </div>
 
@@ -858,9 +885,7 @@
   }
   .tl-card:hover { border-color: var(--text-muted); }
 
-  .tl-transition {
-    width: 280px;
-  }
+  .tl-transition { width: 280px; }
 
   .tl-header {
     display: flex;
@@ -903,13 +928,177 @@
   }
   .tl-image img { width: 100%; height: 100%; object-fit: cover; }
 
-  .tl-video {
-    aspect-ratio: 16 / 9;
-    background: #000;
-    display: flex; align-items: center; justify-content: center;
+  /* ── TV Set ── */
+  .tv-set {
+    width: 300px;
+    flex-shrink: 0;
+    align-self: center;
+  }
+
+  .tv-antennas {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    height: 28px;
+    position: relative;
+  }
+
+  .tv-antenna {
+    width: 3px;
+    height: 28px;
+    background: linear-gradient(to top, #555, #888);
+    border-radius: 2px 2px 0 0;
+  }
+  .tv-antenna.left { transform: rotate(-20deg); transform-origin: bottom center; }
+  .tv-antenna.right { transform: rotate(20deg); transform-origin: bottom center; }
+
+  .tv-body {
+    display: flex;
+    background: linear-gradient(145deg, #3a3530, #2a2520, #1e1a16);
+    border: 3px solid #4a4035;
+    border-radius: 16px 16px 12px 12px;
+    padding: 12px;
+    gap: 10px;
+    box-shadow:
+      0 6px 20px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .tv-screen-area {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tv-screen {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: #111;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 3px solid #222;
+    box-shadow:
+      inset 0 0 30px rgba(0, 0, 0, 0.8),
+      0 0 4px rgba(100, 200, 255, 0.1);
+  }
+
+  .tv-screen-inner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     overflow: hidden;
   }
-  .tl-video video { width: 100%; height: 100%; object-fit: contain; }
+
+  .tv-screen-inner video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+
+  .tv-scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px
+    );
+    pointer-events: none;
+    border-radius: 6px;
+  }
+
+  .tv-glare {
+    position: absolute;
+    top: 8%;
+    left: 10%;
+    width: 35%;
+    height: 25%;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      transparent 100%
+    );
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .tv-static {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    height: 100%;
+    color: #888;
+    font-size: 11px;
+    font-family: monospace;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 1px,
+        rgba(50, 50, 50, 0.3) 1px,
+        rgba(50, 50, 50, 0.3) 2px
+      );
+  }
+  .tv-static.error { color: var(--error); }
+  .tv-static small { font-size: 9px; max-width: 140px; text-align: center; }
+
+  .tv-no-signal {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: #666;
+    animation: flicker 3s infinite;
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+    75% { opacity: 0.9; }
+  }
+
+  .tv-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 44px;
+    flex-shrink: 0;
+    padding-top: 4px;
+  }
+
+  .tv-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #998877;
+    font-family: monospace;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .tv-knob {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #666, #333);
+    border: 2px solid #555;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.4),
+      inset 0 1px 2px rgba(255, 255, 255, 0.1);
+  }
+  .tv-knob.small { width: 16px; height: 16px; }
+
+  .tv-footer {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    overflow: hidden;
+  }
 
   .spinner-container, .error-container, .placeholder-box {
     display: flex; flex-direction: column; align-items: center;
