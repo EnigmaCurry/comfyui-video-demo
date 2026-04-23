@@ -518,12 +518,12 @@
 
   function kfImageUrl(kf) {
     if (!kf?.image_filename || !projectId) return null;
-    return `/api/projects/${projectId}/images/${kf.image_filename}?v=${kf.seed || 0}`;
+    return `/api/projects/${projectId}/images/${kf.image_filename}?v=${kf.seed || Date.now()}`;
   }
 
   function trVideoUrl(tr) {
     if (!tr?.video_filename || !projectId) return null;
-    return `/api/projects/${projectId}/videos/${tr.video_filename}?v=${tr.seed || 0}`;
+    return `/api/projects/${projectId}/videos/${tr.video_filename}?v=${tr.seed || Date.now()}`;
   }
 
   function getKeyframe(id) { return keyframes.find(kf => kf.id === id); }
