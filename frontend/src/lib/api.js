@@ -149,7 +149,8 @@ export const updateSequence = (id, updates) => request('PUT', `/sequences/${id}`
 export const deleteSequence = (id) => request('DELETE', `/sequences/${id}`);
 export const activateSequence = (id) => request('POST', `/sequences/${id}/activate`);
 
-export const seqAddKeyframe = (seqId, prompt = '') => request('POST', `/sequences/${seqId}/keyframes/add`, { prompt });
+export const seqAddKeyframe = (seqId, galleryImageId = null, prompt = '') =>
+  request('POST', `/sequences/${seqId}/keyframes/add`, { prompt, ...(galleryImageId ? { gallery_image_id: galleryImageId } : {}) });
 export const seqUpdateKeyframe = (seqId, kfId, updates) => request('PUT', `/sequences/${seqId}/keyframes/${kfId}`, updates);
 export const seqDeleteKeyframe = (seqId, kfId) => request('DELETE', `/sequences/${seqId}/keyframes/${kfId}`);
 export const seqReorderKeyframes = (seqId, ids) => request('POST', `/sequences/${seqId}/keyframes/reorder`, ids);
@@ -164,6 +165,15 @@ export async function seqUploadKeyframe(seqId, kfId, file) {
   if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
   return resp.json();
 }
+
+export async function seqAddKeyframeImage(seqId, file) {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(`/api/sequences/${seqId}/keyframes/add-image`, { method: 'POST', body: form });
+  if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
+  return resp.json();
+}
+export const seqMergeSequence = (seqId, sourceSeqId) => request('POST', `/sequences/${seqId}/merge`, { source_sequence_id: sourceSeqId });
 
 export const seqSyncTransitions = (seqId) => request('POST', `/sequences/${seqId}/transitions/sync`);
 export const seqTransitionStatus = (seqId, trId) => request('GET', `/sequences/${seqId}/transitions/${trId}/status`);

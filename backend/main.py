@@ -2432,14 +2432,87 @@ async def api_activate_sequence(sequence_id: str):
 
 @app.post("/api/sequences/{sequence_id}/keyframes/add")
 async def api_seq_add_keyframe(sequence_id: str, body: dict | None = None):
+    import shutil
+    proj = _get_project()
     seq = _get_sequence(sequence_id)
     prompt = (body or {}).get("prompt", "")
+    gallery_image_id = (body or {}).get("gallery_image_id")
     position = len(seq.keyframes)
     kf = Keyframe(position=position, prompt=prompt)
     seq.keyframes.append(kf)
+
+    # If a gallery image was specified, copy it in
+    if gallery_image_id:
+        img = next((i for i in proj.images if i.id == gallery_image_id), None)
+        if img and img.image_filename:
+            src = os.path.join(images_dir(proj.id), img.image_filename)
+            if os.path.isfile(src):
+                dest_filename = f"seq_{kf.id}.png"
+                shutil.copy2(src, os.path.join(images_dir(proj.id), dest_filename))
+                kf.image_filename = dest_filename
+                kf.seed = random.randint(0, 2**32 - 1)
+                kf.status = KeyframeStatus.done
+                kf.prompt = img.prompt or prompt
+
     _sync_seq_transitions(seq)
     _save()
     return {"keyframe": kf.model_dump(), "sequence": seq.model_dump()}
+
+
+@app.post("/api/sequences/{sequence_id}/keyframes/add-image")
+async def api_seq_add_keyframe_image(sequence_id: str, file: bytes = fastapi_File(...)):
+    """Add a new keyframe from an uploaded/pasted image."""
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    position = len(seq.keyframes)
+    kf = Keyframe(position=position, prompt="")
+    seq.keyframes.append(kf)
+    filename = f"seq_{kf.id}.png"
+    dest = os.path.join(images_dir(proj.id), filename)
+    with open(dest, "wb") as f:
+        f.write(file)
+    kf.image_filename = filename
+    kf.seed = random.randint(0, 2**32 - 1)
+    kf.status = KeyframeStatus.done
+    _sync_seq_transitions(seq)
+    _save()
+    return {"keyframe": kf.model_dump(), "sequence": seq.model_dump()}
+
+
+@app.post("/api/sequences/{sequence_id}/merge")
+async def api_seq_merge(sequence_id: str, body: dict):
+    """Append all keyframes from another sequence onto this one."""
+    import shutil
+    proj = _get_project()
+    seq = _get_sequence(sequence_id)
+    source_id = body.get("source_sequence_id")
+    if not source_id:
+        raise HTTPException(400, "source_sequence_id is required")
+    source = next((s for s in proj.sequences if s.id == source_id), None)
+    if not source:
+        raise HTTPException(404, "Source sequence not found")
+    offset = len(seq.keyframes)
+    for src_kf in source.keyframes:
+        new_kf = Keyframe(
+            position=offset,
+            prompt=src_kf.prompt,
+            negative_prompt=src_kf.negative_prompt,
+            model=src_kf.model,
+        )
+        # Copy the image if it exists
+        if src_kf.image_filename:
+            src_path = os.path.join(images_dir(proj.id), src_kf.image_filename)
+            if os.path.isfile(src_path):
+                dest_filename = f"seq_{new_kf.id}.png"
+                shutil.copy2(src_path, os.path.join(images_dir(proj.id), dest_filename))
+                new_kf.image_filename = dest_filename
+                new_kf.seed = random.randint(0, 2**32 - 1)
+                new_kf.status = KeyframeStatus.done
+        seq.keyframes.append(new_kf)
+        offset += 1
+    _sync_seq_transitions(seq)
+    _save()
+    return {"sequence": seq.model_dump()}
 
 
 @app.put("/api/sequences/{sequence_id}/keyframes/{keyframe_id}")
