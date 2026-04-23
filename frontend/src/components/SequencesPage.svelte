@@ -901,6 +901,16 @@
     padding-bottom: 8px;
   }
 
+  .timeline-scroll::-webkit-scrollbar { height: 14px; }
+  .timeline-scroll::-webkit-scrollbar-track { background: var(--bg); border-radius: 7px; }
+  .timeline-scroll::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 7px;
+    border: 3px solid var(--bg);
+  }
+  .timeline-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  .timeline-scroll { scrollbar-width: auto; scrollbar-color: var(--border) var(--bg); }
+
   .timeline {
     display: flex;
     align-items: flex-start;
