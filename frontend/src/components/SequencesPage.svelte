@@ -575,7 +575,7 @@
 {#if activeSeq}
   {#if keyframes.length > 0}
     <div class="timeline-scroll">
-      <div class="timeline-grid" style="grid-template-columns: repeat({keyframes.length}, 280px) 60px;">
+      <div class="timeline-grid" style="grid-template-columns: repeat({keyframes.length}, 320px) 60px;">
         <!-- Row 1: Keyframes -->
         {#each keyframes as kf, i (kf.id)}
           <div class="tl-card tl-keyframe" style="grid-column: {i + 1}; grid-row: 1;">
