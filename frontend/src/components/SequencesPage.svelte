@@ -657,10 +657,6 @@
                         </div>
                       {/if}
                     </div>
-                    <!-- CRT scanline overlay -->
-                    <div class="tv-scanlines"></div>
-                    <!-- Screen glare -->
-                    <div class="tv-glare"></div>
                   </div>
                 </div>
 
@@ -995,34 +991,6 @@
     height: 100%;
     object-fit: contain;
     border-radius: 6px;
-  }
-
-  .tv-scanlines {
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      transparent,
-      transparent 2px,
-      rgba(0, 0, 0, 0.15) 2px,
-      rgba(0, 0, 0, 0.15) 4px
-    );
-    pointer-events: none;
-    border-radius: 6px;
-  }
-
-  .tv-glare {
-    position: absolute;
-    top: 8%;
-    left: 10%;
-    width: 35%;
-    height: 25%;
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.08) 0%,
-      transparent 100%
-    );
-    border-radius: 50%;
-    pointer-events: none;
   }
 
   .tv-static {
