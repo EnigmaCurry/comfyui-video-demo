@@ -41,6 +41,8 @@
   // ── Per-transition edit state ──
   let trEditing = $state({});
   let trEditPrompts = $state({});
+  let trEditingNeg = $state({});
+  let trEditNegPrompts = $state({});
   let trPolling = $state({});
 
   // ── Add keyframe state ──
@@ -379,6 +381,18 @@
   }
   function cancelEditTr(tr) { trEditing[tr.id] = false; }
 
+  function startEditTrNeg(tr) { trEditNegPrompts[tr.id] = tr.negative_prompt || ''; trEditingNeg[tr.id] = true; }
+  async function saveTrNegEdit(tr) {
+    try {
+      await seqUpdateTransition(activeSeqId, tr.id, { negative_prompt: trEditNegPrompts[tr.id] });
+      tr.negative_prompt = trEditNegPrompts[tr.id];
+      trEditingNeg[tr.id] = false;
+      onstatus?.({ detail: 'Negative prompt updated. Re-rendering...' });
+      handleRerenderTr(tr);
+    } catch (e) { onstatus?.({ detail: `Update failed: ${e.message}` }); }
+  }
+  function cancelTrNegEdit(tr) { trEditingNeg[tr.id] = false; }
+
   async function handleRenderTr(tr) {
     onstatus?.({ detail: `Rendering transition...` });
     tr.status = 'rendering';
@@ -693,6 +707,22 @@
                   {:else}
                     <p class="prompt-text">{tr.prompt || '(no description)'}</p>
                   {/if}
+
+                  {#if trEditingNeg[tr.id]}
+                    <div class="neg-edit">
+                      <label class="neg-label">Negative prompt</label>
+                      <textarea bind:value={trEditNegPrompts[tr.id]}
+                                onkeydown={(e) => editKeydown(e, tr, saveTrNegEdit, cancelTrNegEdit)}
+                                rows="2" class="edit-textarea" placeholder="Things to avoid..."
+                                use:autoFocus></textarea>
+                      <div class="edit-actions">
+                        <button class="btn-save" onclick={() => saveTrNegEdit(tr)}><Check size={14} /> Save</button>
+                        <button class="btn-cancel" onclick={() => cancelTrNegEdit(tr)}><X size={14} /> Cancel</button>
+                      </div>
+                    </div>
+                  {:else if tr.negative_prompt}
+                    <p class="neg-display"><span class="neg-label-inline">Neg:</span> {tr.negative_prompt}</p>
+                  {/if}
                 </div>
 
                 <div class="tl-actions">
@@ -702,6 +732,10 @@
                   </button>
                   <button class="btn-icon" onclick={() => startEditTr(tr)} title="Edit prompt">
                     <Pencil size={14} />
+                  </button>
+                  <button class="btn-icon" class:btn-active={!!tr.negative_prompt}
+                          onclick={() => startEditTrNeg(tr)} title="Negative prompt">
+                    <ThumbsDown size={14} />
                   </button>
                   {#if tr.status === 'pending'}
                     <button class="btn-render" onclick={() => handleRenderTr(tr)}>Render</button>
