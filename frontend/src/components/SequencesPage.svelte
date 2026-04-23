@@ -751,7 +751,8 @@
                         <button class="btn-cancel" onclick={() => cancelEditTr(tr)}><X size={14} /> Cancel</button>
                       </div>
                     {:else}
-                      <p class="prompt-text">{tr.prompt || '(no description)'}</p>
+                      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                      <p class="prompt-text clickable" onclick={() => startEditTr(tr)}>{tr.prompt || '(click to edit description)'}</p>
                     {/if}
 
                     {#if trEditingNeg[tr.id]}
@@ -774,9 +775,6 @@
                     <button class="btn-icon" onclick={() => handleRerenderTr(tr)} title="Re-render"
                             disabled={tr.status === 'rendering'}>
                       <RefreshCw size={14} />
-                    </button>
-                    <button class="btn-icon" onclick={() => startEditTr(tr)} title="Edit prompt">
-                      <Pencil size={14} />
                     </button>
                     <button class="btn-icon" class:btn-active={!!tr.negative_prompt}
                             onclick={() => startEditTrNeg(tr)} title="Negative prompt">
