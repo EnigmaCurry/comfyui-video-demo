@@ -327,7 +327,12 @@
       await seqUpdateKeyframe(activeSeqId, kf.id, { prompt: editPrompts[kf.id] });
       kf.prompt = editPrompts[kf.id];
       editing[kf.id] = false;
-      onstatus?.({ detail: 'Prompt updated.' });
+      if (kf.prompt.trim()) {
+        onstatus?.({ detail: 'Prompt updated. Rendering...' });
+        handleRerenderKf(kf);
+      } else {
+        onstatus?.({ detail: 'Prompt updated.' });
+      }
     } catch (e) { onstatus?.({ detail: `Update failed: ${e.message}` }); }
   }
   function cancelEditKf(kf) { editing[kf.id] = false; }
