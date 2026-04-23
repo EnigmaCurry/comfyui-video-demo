@@ -146,7 +146,6 @@
   // ── Keyframe operations ──
   async function handleAddKeyframe() {
     if (!activeSeqId) return;
-    showAddMenu = false;
     try {
       const data = await seqAddKeyframe(activeSeqId);
       replaceSeq(data.sequence);
