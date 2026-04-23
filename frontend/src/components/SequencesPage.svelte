@@ -1134,9 +1134,9 @@
     overflow-x: auto;
     overflow-y: hidden;
     padding-bottom: 8px;
-    /* Fill remaining viewport: header ~70px, tabs ~44px, settings bar ~46px, status ~40px, padding ~50px */
-    height: calc(100dvh - 250px);
-    min-height: 300px;
+    /* Fill remaining viewport: header ~70px, tabs ~44px, seq-bar ~40px, settings ~46px, status ~40px, padding ~76px */
+    height: calc(100dvh - 316px);
+    min-height: 200px;
   }
 
   .timeline-scroll::-webkit-scrollbar { height: 14px; }
