@@ -154,6 +154,26 @@ async def call_llm_text(system_prompt: str, user_msg: str,
         return content.strip()
 
 
+async def enhance_prompt(prompt: str) -> str:
+    """Enhance a brief image prompt with imagined visual details."""
+    system_prompt = (
+        "You are a visual prompt engineer for AI image generation. The user will give you "
+        "a brief image description. Your job is to enhance it with rich, concrete visual details "
+        "that will produce a stunning image.\n\n"
+        "Add details like:\n"
+        "- Lighting conditions and quality (golden hour, volumetric fog, rim lighting)\n"
+        "- Camera angle and composition (low angle, close-up, wide establishing shot)\n"
+        "- Textures and materials (weathered stone, polished metal, flowing silk)\n"
+        "- Atmosphere and mood (ominous, serene, electric)\n"
+        "- Color palette and tonal qualities\n"
+        "- Fine details that bring the scene to life\n\n"
+        "Keep the original subject and intent intact. Write 2-4 sentences of vivid, "
+        "concrete visual language. Do NOT add quotation marks, labels, or explanation. "
+        "Reply with ONLY the enhanced prompt."
+    )
+    return await call_llm_text(system_prompt, prompt, temperature=0.8, max_tokens=300)
+
+
 async def suggest_premise(notes: str) -> str:
     """Generate a premise from freeform notes/ideas."""
     system_prompt = (

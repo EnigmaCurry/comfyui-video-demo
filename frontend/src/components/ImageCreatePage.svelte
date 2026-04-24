@@ -1,6 +1,6 @@
 <script>
-  import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, Columns2 } from 'lucide-svelte';
-  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, galleryList, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
+  import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, Columns2, Wand2 } from 'lucide-svelte';
+  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, galleryList, galleryEnhancePrompt, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null), kleinImage = $bindable(null) } = $props();
 
@@ -14,6 +14,7 @@
   let generating = $state(false);
   let saving = $state(false);
   let cancelled = $state(false);
+  let enhancing = $state(false);
 
   // Preview state
   let previewUrl = $state(null);
@@ -29,6 +30,19 @@
   let galleryImages = $state([]);
   let figure1Id = $state('');
   let figure2Id = $state('');
+
+  async function handleEnhance() {
+    if (!prompt.trim() || enhancing) return;
+    enhancing = true;
+    try {
+      const data = await galleryEnhancePrompt(prompt.trim());
+      prompt = data.enhanced_prompt;
+    } catch (err) {
+      if (onstatus) onstatus(`Enhance failed: ${err.message}`);
+    } finally {
+      enhancing = false;
+    }
+  }
 
   async function fetchGalleryImages() {
     try {
@@ -471,7 +485,14 @@
           </div>
 
           <div class="prompt-section">
-            <label for="ig-prompt">Prompt</label>
+            <div class="prompt-label-row">
+              <label for="ig-prompt">Prompt</label>
+              <button class="enhance-btn" onclick={handleEnhance}
+                      disabled={enhancing || generating || !prompt.trim()}>
+                <Wand2 size={14} />
+                {enhancing ? 'Enhancing...' : 'Enhance'}
+              </button>
+            </div>
             <textarea id="ig-prompt"
               placeholder="A vast desert landscape at golden hour, ancient ruins half-buried in sand, dramatic clouds..."
               bind:value={prompt}
@@ -756,12 +777,41 @@
     margin-bottom: 12px;
   }
 
+  .prompt-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
   .prompt-section label {
     display: block;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-dim);
-    margin-bottom: 4px;
+  }
+
+  .enhance-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .enhance-btn:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .enhance-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .optional {

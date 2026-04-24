@@ -1760,6 +1760,17 @@ def _clear_preview_stack(proj: Project):
     proj.images = [i for i in proj.images if not i.id.startswith("preview_")]
 
 
+@app.post("/api/gallery/enhance-prompt")
+async def api_gallery_enhance_prompt(body: dict):
+    """Enhance a brief prompt with imagined visual details via LLM."""
+    prompt = body.get("prompt", "").strip()
+    if not prompt:
+        raise HTTPException(400, "Prompt is required")
+    from llm import enhance_prompt
+    enhanced = await enhance_prompt(prompt)
+    return {"enhanced_prompt": enhanced}
+
+
 @app.post("/api/gallery/generate")
 async def api_gallery_generate(body: dict):
     """Generate a preview image. Creates the project if needed. Clears any existing preview stack."""

@@ -130,6 +130,7 @@ export const IMAGE_FILTERS = [
   { id: 'integer_crop', label: 'Integer Crop' },
   { id: 'upscale', label: 'Upscale', slow: true },
 ];
+export const galleryEnhancePrompt = (prompt) => request('POST', '/gallery/enhance-prompt', { prompt });
 export const galleryGenerate = (opts) => request('POST', '/gallery/generate', opts);
 export const galleryPreviewStatus = () => request('GET', '/gallery/preview/status');
 export const galleryCancel = () => request('POST', '/gallery/cancel');
