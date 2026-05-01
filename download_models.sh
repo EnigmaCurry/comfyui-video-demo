@@ -5,11 +5,20 @@
 ## Set COMFYUI_MODELS_DIR to your ComfyUI models directory (the one containing
 ## checkpoints/, loras/, unet/, vae/, clip/, text_encoders/, upscale_models/).
 ##
+## Set HF_TOKEN for gated models (Flux 2, LTX, etc.) — get one at:
+##   https://huggingface.co/settings/tokens
+##
 ## Only missing files are downloaded (existing files are skipped).
 
 set -euo pipefail
 
 : "${COMFYUI_MODELS_DIR:?Set COMFYUI_MODELS_DIR to your ComfyUI models directory}"
+
+if [[ -z "${HF_TOKEN:-}" ]]; then
+    echo "WARNING: HF_TOKEN is not set. Gated models will fail to download."
+    echo "         Get a token at: https://huggingface.co/settings/tokens"
+    echo ""
+fi
 
 download() {
     local dir="$1" file="$2" url="$3"
@@ -20,7 +29,11 @@ download() {
         return
     fi
     echo "GET   ${dir}/${file}"
-    wget -q --show-progress -O "$dest" "$url"
+    if [[ -n "${HF_TOKEN:-}" ]]; then
+        wget -q --show-progress --header="Authorization: Bearer ${HF_TOKEN}" -O "$dest" "$url"
+    else
+        wget -q --show-progress -O "$dest" "$url"
+    fi
 }
 
 echo "=== Checkpoints ==="
