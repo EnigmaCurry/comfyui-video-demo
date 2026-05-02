@@ -62,7 +62,7 @@
   "10": {
     "inputs": {
       "weight": 0.8,
-      "weight_type": "original",
+      "weight_type": "style transfer",
       "start_at": 0,
       "end_at": 1,
       "model": ["11", 0],
