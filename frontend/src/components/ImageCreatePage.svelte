@@ -638,6 +638,12 @@
     {#if previewStatus}
       <div class="preview-panel">
         {#if previewStatus === 'rendering'}
+          {#if previewUrl}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="preview-image" onclick={() => fullscreen = true}>
+              <img src={previewUrl} alt="Current" />
+            </div>
+          {/if}
           <div class="preview-placeholder">
             <div class="spinner"></div>
             <span>Generating...</span>
