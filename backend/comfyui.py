@@ -38,6 +38,8 @@ async def queue_prompt(workflow: dict, client_id: str | None = None) -> dict:
             "/api/prompt",
             json={"prompt": workflow, "client_id": client_id},
         )
+        if resp.status_code != 200:
+            print(f"ComfyUI prompt error ({resp.status_code}): {resp.text}", flush=True)
         resp.raise_for_status()
         return resp.json()
 
