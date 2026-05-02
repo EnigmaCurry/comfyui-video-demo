@@ -41,6 +41,8 @@ download checkpoints realisticVisionV51_v51VAE.safetensors \
     https://huggingface.co/frankjoshua/realisticVisionV51_v51VAE/resolve/main/realisticVisionV51_v51VAE.safetensors
 download checkpoints AnythingV5V3_v5PrtRE.safetensors \
     https://huggingface.co/ckpt/anything-v5.0/resolve/main/AnythingV5V3_v5PrtRE.safetensors
+download checkpoints albedobaseXL_v21.safetensors \
+    https://huggingface.co/artificialguybr/albedobasexl-safetensors/resolve/main/albedobaseXL_v21.safetensors
 download checkpoints ltx-2.3-22b-distilled-fp8.safetensors \
     https://huggingface.co/Lightricks/LTX-2.3-fp8/resolve/main/ltx-2.3-22b-distilled-fp8.safetensors
 
@@ -116,6 +118,8 @@ echo ""
 echo "=== IP-Adapter ==="
 download ipadapter ip-adapter-plus_sd15.safetensors \
     https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors
+download ipadapter ip-adapter-plus_sdxl_vit-h.safetensors \
+    https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors
 
 echo ""
 echo "=== CLIP Vision ==="

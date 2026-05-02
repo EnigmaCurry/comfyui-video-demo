@@ -1,7 +1,7 @@
 {
   "4": {
     "inputs": {
-      "ckpt_name": "AnythingV5V3_v5PrtRE.safetensors"
+      "ckpt_name": "albedobaseXL_v21.safetensors"
     },
     "class_type": "CheckpointLoaderSimple",
     "_meta": {
@@ -10,8 +10,8 @@
   },
   "5": {
     "inputs": {
-      "width": 512,
-      "height": 512,
+      "width": 1024,
+      "height": 1024,
       "batch_size": 1
     },
     "class_type": "EmptyLatentImage",
@@ -21,7 +21,7 @@
   },
   "6": {
     "inputs": {
-      "text": "closeup of a fierce warrior woman wearing full armor at the end of a battle\n\nhigh quality, detailed",
+      "text": "high quality, detailed",
       "clip": ["4", 1]
     },
     "class_type": "CLIPTextEncode",
@@ -59,21 +59,6 @@
       "title": "Save Image"
     }
   },
-  "10": {
-    "inputs": {
-      "weight": 0.8,
-      "weight_type": "style transfer",
-      "start_at": 0,
-      "end_at": 1,
-      "model": ["11", 0],
-      "ipadapter": ["11", 1],
-      "image": ["12", 0]
-    },
-    "class_type": "IPAdapter",
-    "_meta": {
-      "title": "IPAdapter"
-    }
-  },
   "11": {
     "inputs": {
       "preset": "PLUS (high strength)",
@@ -86,11 +71,39 @@
   },
   "12": {
     "inputs": {
-      "image": "reference.png"
+      "image": "composition.png"
     },
     "class_type": "LoadImage",
     "_meta": {
-      "title": "Load Image (Style Reference)"
+      "title": "Load Image (Composition)"
+    }
+  },
+  "15": {
+    "inputs": {
+      "weight_style": 1.2,
+      "weight_composition": 1,
+      "expand_style": false,
+      "combine_embeds": "average",
+      "start_at": 0,
+      "end_at": 1,
+      "embeds_scaling": "V only",
+      "model": ["11", 0],
+      "ipadapter": ["11", 1],
+      "image_style": ["16", 0],
+      "image_composition": ["12", 0]
+    },
+    "class_type": "IPAdapterStyleComposition",
+    "_meta": {
+      "title": "IPAdapter Style Composition"
+    }
+  },
+  "16": {
+    "inputs": {
+      "image": "style.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image (Style)"
     }
   },
   "3": {
@@ -101,7 +114,7 @@
       "sampler_name": "dpmpp_2m",
       "scheduler": "karras",
       "denoise": 1,
-      "model": ["10", 0],
+      "model": ["15", 0],
       "positive": ["6", 0],
       "negative": ["7", 0],
       "latent_image": ["5", 0]

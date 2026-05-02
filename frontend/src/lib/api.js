@@ -116,7 +116,7 @@ export const getFinalStatus = () => request('GET', '/final/status');
 // ── Editor / Gallery ──
 export const REFINE_MODELS = [
   { id: 'capybara_i2i', label: 'Capybara I2I' },
-  { id: 'sd15_ipadapter', label: 'Anything V5 (IP-Adapter)' },
+  { id: 'sd15_ipadapter', label: 'SDXL Style Composition (IP-Adapter)' },
 ];
 export const RESOLUTIONS = [
   { label: '512x512 (1:1)', w: 512, h: 512 },

@@ -1865,7 +1865,8 @@ async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
             if refine_model == "sd15_ipadapter":
                 base_wf = load_workflow(IPA_I2I_WORKFLOW_PATH)
                 patched = patch_ipadapter_i2i_workflow(
-                    base_wf, input_image_name=server_name,
+                    base_wf, style_image_name=server_name,
+                    composition_image_name=server_name,
                     prompt_text=img.prompt, negative_prompt_text=neg_prompt,
                     seed_value=seed, width=img.width, height=img.height,
                     output_prefix=f"v2web/{img.id}",

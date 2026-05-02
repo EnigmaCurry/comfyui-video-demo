@@ -81,8 +81,9 @@ CAPY_OUTPUT_FIELD = "filename_prefix"
 
 CAPY_I2I_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "capybara_i2i.json")
 
-# ── SD1.5 IP-Adapter I2I (style-reference refinement) node IDs ────
-IPA_INPUT_IMAGE_NODE = "12"
+# ── SDXL IP-Adapter Style Composition node IDs ───────────────────
+IPA_STYLE_IMAGE_NODE = "16"
+IPA_COMP_IMAGE_NODE = "12"
 IPA_PROMPT_NODE = "6"
 IPA_PROMPT_FIELD = "text"
 IPA_NEG_PROMPT_NODE = "7"
@@ -269,14 +270,16 @@ def patch_capybara_i2i_workflow(workflow: dict, *, input_image_name: str,
     return wf
 
 
-def patch_ipadapter_i2i_workflow(workflow: dict, *, input_image_name: str,
+def patch_ipadapter_i2i_workflow(workflow: dict, *, style_image_name: str,
+                                 composition_image_name: str,
                                  prompt_text: str, negative_prompt_text: str = "",
-                                 seed_value: int, width: int = 512,
-                                 height: int = 512,
+                                 seed_value: int, width: int = 1024,
+                                 height: int = 1024,
                                  output_prefix: str = "ComfyUI") -> dict:
-    """Patch SD1.5 IP-Adapter workflow for style-reference image refinement."""
+    """Patch SDXL IP-Adapter Style Composition workflow for two-image refinement."""
     wf = copy.deepcopy(workflow)
-    wf[IPA_INPUT_IMAGE_NODE]["inputs"]["image"] = input_image_name
+    wf[IPA_STYLE_IMAGE_NODE]["inputs"]["image"] = style_image_name
+    wf[IPA_COMP_IMAGE_NODE]["inputs"]["image"] = composition_image_name
     wf[IPA_PROMPT_NODE]["inputs"][IPA_PROMPT_FIELD] = prompt_text
     wf[IPA_NEG_PROMPT_NODE]["inputs"][IPA_NEG_PROMPT_FIELD] = negative_prompt_text
     wf[IPA_SEED_NODE]["inputs"][IPA_SEED_FIELD] = seed_value
