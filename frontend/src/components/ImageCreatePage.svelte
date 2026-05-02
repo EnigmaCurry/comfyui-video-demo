@@ -138,8 +138,10 @@
       previewStatus = 'rendering';
       previewError = '';
       const redoPrompt = current.prompt;
+      const redoModel = current.model;
+      const redoModelId = REFINE_MODELS.find(m => m.label === redoModel)?.id || refineModel;
       const prevHistory = isRefinement ? history.slice(0, -1) : history;
-      history = [...prevHistory, { prompt: redoPrompt, model: 'Capybara I2I', seed: null, previewUrl: null }];
+      history = [...prevHistory, { prompt: redoPrompt, model: redoModel, seed: null, previewUrl: null }];
       try {
         if (isRefinement) {
           await galleryUndo();
@@ -147,12 +149,13 @@
         await galleryRefine({
           prompt: redoPrompt,
           negative_prompt: negPrompt.trim(),
+          model: redoModelId,
         });
         await pollPreview();
         if (previewStatus === 'done') {
           history = [...prevHistory, {
             prompt: redoPrompt,
-            model: 'Capybara I2I',
+            model: redoModel,
             seed: previewSeed,
             previewUrl,
           }];
