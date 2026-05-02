@@ -109,6 +109,16 @@ download text_encoders gemma_3_12B_it_fp4_mixed.safetensors \
     https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors
 
 echo ""
+echo "=== IP-Adapter ==="
+download ipadapter ip-adapter-plus_sd15.safetensors \
+    https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors
+
+echo ""
+echo "=== CLIP Vision ==="
+download clip_vision CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors \
+    https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors
+
+echo ""
 echo "=== Upscale Models ==="
 download upscale_models RealESRGAN_x4plus.safetensors \
     https://huggingface.co/Comfy-Org/Real-ESRGAN_repackaged/resolve/main/RealESRGAN_x4plus.safetensors
