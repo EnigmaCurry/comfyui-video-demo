@@ -1849,7 +1849,8 @@ async def api_gallery_cancel():
 
 async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
                                     source_path: str, seed: int,
-                                    refine_model: str = "capybara_i2i"):
+                                    refine_model: str = "capybara_i2i",
+                                    style_image_path: str | None = None):
     """Refine a gallery image using the selected refine model in the background."""
     from comfyui import download_output, run_workflow, upload_image
     from workflows import (CAPY_I2I_WORKFLOW_PATH, IPA_I2I_WORKFLOW_PATH,
@@ -1864,8 +1865,12 @@ async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
             print(f"Refining gallery image {img.id}: model={refine_model} seed={seed}", flush=True)
             if refine_model == "sd15_ipadapter":
                 base_wf = load_workflow(IPA_I2I_WORKFLOW_PATH)
+                if style_image_path:
+                    style_server_name = await upload_image(style_image_path)
+                else:
+                    style_server_name = server_name
                 patched = patch_ipadapter_i2i_workflow(
-                    base_wf, style_image_name=server_name,
+                    base_wf, style_image_name=style_server_name,
                     composition_image_name=server_name,
                     prompt_text=img.prompt, negative_prompt_text=neg_prompt,
                     seed_value=seed, width=img.width, height=img.height,
@@ -1934,7 +1939,17 @@ async def api_gallery_refine(body: dict):
     )
     proj.images.insert(0, img)
 
-    task = asyncio.create_task(_do_refine_gallery_image(proj.id, img, source_path, seed, refine_model=refine_model))
+    style_image_path = None
+    style_image_id = body.get("style_image_id")
+    if style_image_id and refine_model == "sd15_ipadapter":
+        style_img = _get_gallery_image(style_image_id)
+        if not style_img.image_filename:
+            raise HTTPException(400, "Style image has no file")
+        style_image_path = os.path.join(images_dir(proj.id), style_img.image_filename)
+        if not os.path.isfile(style_image_path):
+            raise HTTPException(400, "Style image file not found")
+
+    task = asyncio.create_task(_do_refine_gallery_image(proj.id, img, source_path, seed, refine_model=refine_model, style_image_path=style_image_path))
     render_tasks["gallery_preview"] = task
     return {"status": "rendering", "seed": seed, "preview_id": preview_id}
 

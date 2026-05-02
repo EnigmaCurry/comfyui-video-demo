@@ -52,12 +52,14 @@
   }
 
   $effect(() => {
-    if (isTwoImageModel) fetchGalleryImages();
+    if (isTwoImageModel || isStyleModel) fetchGalleryImages();
   });
 
   // Refinement
   let refinePrompt = $state('');
   let refineModel = $state('capybara_i2i');
+  let styleImageId = $state('');
+  let isStyleModel = $derived(refineModel === 'sd15_ipadapter');
 
   let hasPreview = $derived(previewStatus === 'done' && previewUrl);
   let canUndo = $derived(history.length > 1 && !generating);
@@ -221,11 +223,15 @@
     const refinedPrompt = refinePrompt.trim();
     refinePrompt = '';
     try {
-      await galleryRefine({
+      const refineOpts = {
         prompt: refinedPrompt,
         negative_prompt: negPrompt.trim(),
         model: refineModel,
-      });
+      };
+      if (isStyleModel && styleImageId) {
+        refineOpts.style_image_id = styleImageId;
+      }
+      await galleryRefine(refineOpts);
       await pollPreview();
       if (previewStatus === 'done') {
         const refineLabel = REFINE_MODELS.find(m => m.id === refineModel)?.label || refineModel;
@@ -617,6 +623,27 @@
                 {/each}
               </select>
             </div>
+            {#if isStyleModel}
+            <div class="figure-picker">
+              <label>Style Reference</label>
+              {#if galleryImages.length === 0}
+                <p class="figure-empty">No gallery images. Save some images first.</p>
+              {:else}
+                <select bind:value={styleImageId} disabled={generating}>
+                  <option value="">-- Select style image --</option>
+                  {#each galleryImages as gi}
+                    <option value={gi.id}>{gi.prompt ? gi.prompt.slice(0, 60) : gi.id} ({gi.width}x{gi.height})</option>
+                  {/each}
+                </select>
+                {#if styleImageId}
+                  {@const styleImg = galleryImages.find(i => i.id === styleImageId)}
+                  {#if styleImg}
+                    <img class="figure-thumb" src={styleImg.image_url} alt="Style reference" />
+                  {/if}
+                {/if}
+              {/if}
+            </div>
+            {/if}
             <textarea id="ig-refine"
               placeholder="Change the background to a snowy mountain, make the sky more dramatic..."
               bind:value={refinePrompt}
