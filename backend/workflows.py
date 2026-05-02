@@ -81,6 +81,20 @@ CAPY_OUTPUT_FIELD = "filename_prefix"
 
 CAPY_I2I_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "capybara_i2i.json")
 
+# ── SD1.5 IP-Adapter I2I (style-reference refinement) node IDs ────
+IPA_INPUT_IMAGE_NODE = "12"
+IPA_PROMPT_NODE = "6"
+IPA_PROMPT_FIELD = "text"
+IPA_NEG_PROMPT_NODE = "7"
+IPA_NEG_PROMPT_FIELD = "text"
+IPA_SEED_NODE = "3"
+IPA_SEED_FIELD = "seed"
+IPA_LATENT_NODE = "5"
+IPA_OUTPUT_NODE = "9"
+IPA_OUTPUT_FIELD = "filename_prefix"
+
+IPA_I2I_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "sd15_ipadapter_i2i.json")
+
 # ── Image Stitch 2x node IDs ──────────────────────────────────────
 STITCH2X_IMAGE_NODES = ["12", "13", "14", "15"]
 STITCH2X_RESIZE_NODE = "21"
@@ -252,6 +266,23 @@ def patch_capybara_i2i_workflow(workflow: dict, *, input_image_name: str,
     wf[CAPY_RESIZE_NODE]["inputs"]["resize_type.width"] = width
     wf[CAPY_RESIZE_NODE]["inputs"]["resize_type.height"] = height
     wf[CAPY_OUTPUT_NODE]["inputs"][CAPY_OUTPUT_FIELD] = output_prefix
+    return wf
+
+
+def patch_ipadapter_i2i_workflow(workflow: dict, *, input_image_name: str,
+                                 prompt_text: str, negative_prompt_text: str = "",
+                                 seed_value: int, width: int = 512,
+                                 height: int = 512,
+                                 output_prefix: str = "ComfyUI") -> dict:
+    """Patch SD1.5 IP-Adapter workflow for style-reference image refinement."""
+    wf = copy.deepcopy(workflow)
+    wf[IPA_INPUT_IMAGE_NODE]["inputs"]["image"] = input_image_name
+    wf[IPA_PROMPT_NODE]["inputs"][IPA_PROMPT_FIELD] = prompt_text
+    wf[IPA_NEG_PROMPT_NODE]["inputs"][IPA_NEG_PROMPT_FIELD] = negative_prompt_text
+    wf[IPA_SEED_NODE]["inputs"][IPA_SEED_FIELD] = seed_value
+    wf[IPA_LATENT_NODE]["inputs"]["width"] = width
+    wf[IPA_LATENT_NODE]["inputs"]["height"] = height
+    wf[IPA_OUTPUT_NODE]["inputs"][IPA_OUTPUT_FIELD] = output_prefix
     return wf
 
 

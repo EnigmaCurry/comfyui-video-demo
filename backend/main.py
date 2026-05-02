@@ -1848,24 +1848,36 @@ async def api_gallery_cancel():
 
 
 async def _do_refine_gallery_image(proj_id: str, img: GalleryImage,
-                                    source_path: str, seed: int):
-    """Refine a gallery image using Capybara I2I in the background."""
+                                    source_path: str, seed: int,
+                                    refine_model: str = "capybara_i2i"):
+    """Refine a gallery image using the selected refine model in the background."""
     from comfyui import download_output, run_workflow, upload_image
-    from workflows import CAPY_I2I_WORKFLOW_PATH, load_workflow, patch_capybara_i2i_workflow
+    from workflows import (CAPY_I2I_WORKFLOW_PATH, IPA_I2I_WORKFLOW_PATH,
+                           load_workflow, patch_capybara_i2i_workflow,
+                           patch_ipadapter_i2i_workflow)
 
     async with _render_semaphore:
         try:
             server_name = await upload_image(source_path)
-            base_wf = load_workflow(CAPY_I2I_WORKFLOW_PATH)
             neg_prompt = img.negative_prompt or "blurry, low quality, distorted, ugly, watermark, text"
 
-            print(f"Refining gallery image {img.id}: seed={seed}", flush=True)
-            patched = patch_capybara_i2i_workflow(
-                base_wf, input_image_name=server_name,
-                prompt_text=img.prompt, negative_prompt_text=neg_prompt,
-                seed_value=seed, width=img.width, height=img.height,
-                output_prefix=f"v2web/{img.id}",
-            )
+            print(f"Refining gallery image {img.id}: model={refine_model} seed={seed}", flush=True)
+            if refine_model == "sd15_ipadapter":
+                base_wf = load_workflow(IPA_I2I_WORKFLOW_PATH)
+                patched = patch_ipadapter_i2i_workflow(
+                    base_wf, input_image_name=server_name,
+                    prompt_text=img.prompt, negative_prompt_text=neg_prompt,
+                    seed_value=seed, width=img.width, height=img.height,
+                    output_prefix=f"v2web/{img.id}",
+                )
+            else:
+                base_wf = load_workflow(CAPY_I2I_WORKFLOW_PATH)
+                patched = patch_capybara_i2i_workflow(
+                    base_wf, input_image_name=server_name,
+                    prompt_text=img.prompt, negative_prompt_text=neg_prompt,
+                    seed_value=seed, width=img.width, height=img.height,
+                    output_prefix=f"v2web/{img.id}",
+                )
             history = await run_workflow(patched, timeout=600)
             filename = f"{img.id}.png"
             dest = os.path.join(images_dir(proj_id), filename)
@@ -1908,11 +1920,12 @@ async def api_gallery_refine(body: dict):
 
     seed = body.get("seed") or random.randint(0, 2**32 - 1)
     preview_id = _next_preview_id(proj)
+    refine_model = body.get("model", "capybara_i2i")
     img = GalleryImage(
         id=preview_id,
         prompt=prompt.strip(),
         negative_prompt=body.get("negative_prompt", source.negative_prompt),
-        model="capybara_i2i",
+        model=refine_model,
         width=source.width,
         height=source.height,
         seed=seed,
@@ -1920,7 +1933,7 @@ async def api_gallery_refine(body: dict):
     )
     proj.images.insert(0, img)
 
-    task = asyncio.create_task(_do_refine_gallery_image(proj.id, img, source_path, seed))
+    task = asyncio.create_task(_do_refine_gallery_image(proj.id, img, source_path, seed, refine_model=refine_model))
     render_tasks["gallery_preview"] = task
     return {"status": "rendering", "seed": seed, "preview_id": preview_id}
 

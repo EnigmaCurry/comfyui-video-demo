@@ -1,6 +1,6 @@
 <script>
   import { Sparkles, RefreshCw, Save, X, RotateCcw, Undo2, Columns2, Wand2 } from 'lucide-svelte';
-  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, galleryList, galleryEnhancePrompt, T2I_MODELS, RESOLUTIONS } from '../lib/api.js';
+  import { galleryGenerate, galleryPreviewStatus, galleryCancel, galleryRefine, galleryUndo, gallerySave, galleryEdit, galleryList, galleryEnhancePrompt, T2I_MODELS, RESOLUTIONS, REFINE_MODELS } from '../lib/api.js';
 
   let { project = $bindable(null), onstatus, ongallery, recreateImage = $bindable(null), kleinImage = $bindable(null) } = $props();
 
@@ -57,6 +57,7 @@
 
   // Refinement
   let refinePrompt = $state('');
+  let refineModel = $state('capybara_i2i');
 
   let hasPreview = $derived(previewStatus === 'done' && previewUrl);
   let canUndo = $derived(history.length > 1 && !generating);
@@ -220,12 +221,14 @@
       await galleryRefine({
         prompt: refinedPrompt,
         negative_prompt: negPrompt.trim(),
+        model: refineModel,
       });
       await pollPreview();
       if (previewStatus === 'done') {
+        const refineLabel = REFINE_MODELS.find(m => m.id === refineModel)?.label || refineModel;
         history = [...history, {
           prompt: refinedPrompt,
-          model: 'Capybara I2I',
+          model: refineLabel,
           seed: previewSeed,
           previewUrl,
         }];
@@ -603,6 +606,14 @@
 
           <div class="refine-section">
             <label for="ig-refine">Refine</label>
+            <div class="control-group">
+              <label for="ig-refine-model">Model</label>
+              <select id="ig-refine-model" bind:value={refineModel} disabled={generating}>
+                {#each REFINE_MODELS as m}
+                  <option value={m.id}>{m.label}</option>
+                {/each}
+              </select>
+            </div>
             <textarea id="ig-refine"
               placeholder="Change the background to a snowy mountain, make the sky more dramatic..."
               bind:value={refinePrompt}
