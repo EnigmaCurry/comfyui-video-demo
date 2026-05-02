@@ -37,6 +37,8 @@ download() {
 }
 
 echo "=== Checkpoints ==="
+download checkpoints/sd15 realisticVisionV51_v51VAE.safetensors \
+    https://huggingface.co/frankjoshua/realisticVisionV51_v51VAE/resolve/main/realisticVisionV51_v51VAE.safetensors
 download checkpoints ltx-2.3-22b-distilled-fp8.safetensors \
     https://huggingface.co/Lightricks/LTX-2.3-fp8/resolve/main/ltx-2.3-22b-distilled-fp8.safetensors
 
