@@ -127,6 +127,22 @@ FLUX2K_OUTPUT_FIELD = "filename_prefix"
 
 FLUX2K_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "flux2_klein.json")
 
+# ── Qwen Rapid (two-image + SeedVR2 upscale) node IDs ─────────────────
+QRAP_FIGURE1_NODE = "7"
+QRAP_FIGURE2_NODE = "8"
+QRAP_PROMPT_NODE = "3"
+QRAP_PROMPT_FIELD = "prompt"
+QRAP_SEED_NODE = "2"
+QRAP_SEED_FIELD = "seed"
+QRAP_REFINE_SEED_NODE = "26"
+QRAP_REFINE_SEED_FIELD = "noise_seed"
+QRAP_UPSCALE_SEED_NODE = "31"
+QRAP_UPSCALE_SEED_FIELD = "seed"
+QRAP_OUTPUT_NODE = "37"
+QRAP_OUTPUT_FIELD = "filename_prefix"
+
+QRAP_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow", "qwen_rapid.json")
+
 
 # ── Available T2I models ─────────────────────────────────────────────
 T2I_MODELS = {
@@ -196,11 +212,13 @@ def get_t2i_workflow_and_patcher(model: str = "hidream"):
         return ZIMG_WORKFLOW_PATH, patch_zimg_workflow
     if model == "flux2_klein":
         return FLUX2K_WORKFLOW_PATH, patch_flux2_klein_workflow
+    if model == "qwen_rapid":
+        return QRAP_WORKFLOW_PATH, patch_qwen_rapid_workflow
     return T2I_WORKFLOW_PATH, patch_t2i_workflow
 
 
 # Models that require two input images (figure1, figure2)
-TWO_IMAGE_MODELS = {"flux2_klein"}
+TWO_IMAGE_MODELS = {"flux2_klein", "qwen_rapid"}
 
 
 def patch_flux2_klein_workflow(workflow: dict, *, prompt_text: str,
@@ -216,6 +234,24 @@ def patch_flux2_klein_workflow(workflow: dict, *, prompt_text: str,
     wf[FLUX2K_PROMPT_NODE]["inputs"][FLUX2K_PROMPT_FIELD] = prompt_text
     wf[FLUX2K_SEED_NODE]["inputs"][FLUX2K_SEED_FIELD] = seed_value
     wf[FLUX2K_OUTPUT_NODE]["inputs"][FLUX2K_OUTPUT_FIELD] = output_prefix
+    return wf
+
+
+def patch_qwen_rapid_workflow(workflow: dict, *, prompt_text: str,
+                               figure1_image_name: str,
+                               figure2_image_name: str,
+                               seed_value: int,
+                               output_prefix: str = "ComfyUI",
+                               **kwargs) -> dict:
+    """Patch Qwen Rapid workflow: two reference images with SeedVR2 upscale."""
+    wf = copy.deepcopy(workflow)
+    wf[QRAP_FIGURE1_NODE]["inputs"]["image"] = figure1_image_name
+    wf[QRAP_FIGURE2_NODE]["inputs"]["image"] = figure2_image_name
+    wf[QRAP_PROMPT_NODE]["inputs"][QRAP_PROMPT_FIELD] = prompt_text
+    wf[QRAP_SEED_NODE]["inputs"][QRAP_SEED_FIELD] = seed_value
+    wf[QRAP_REFINE_SEED_NODE]["inputs"][QRAP_REFINE_SEED_FIELD] = seed_value
+    wf[QRAP_UPSCALE_SEED_NODE]["inputs"][QRAP_UPSCALE_SEED_FIELD] = seed_value
+    wf[QRAP_OUTPUT_NODE]["inputs"][QRAP_OUTPUT_FIELD] = output_prefix
     return wf
 
 

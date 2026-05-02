@@ -67,6 +67,7 @@ export const T2I_MODELS = [
   { id: 'qwen_illustration', label: 'Qwen Illustration' },
   { id: 'z_image', label: 'Z-Image' },
   { id: 'flux2_klein', label: 'Flux 2 Klein', twoImage: true },
+  { id: 'qwen_rapid', label: 'Qwen Rapid', twoImage: true },
 ];
 export const deleteKeyframe = (id) => request('DELETE', `/keyframes/${id}`);
 export const duplicateKeyframe = (id) => request('POST', `/keyframes/${id}/duplicate`);

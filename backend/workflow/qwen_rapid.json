@@ -1,0 +1,224 @@
+{
+  "1": {
+    "inputs": {
+      "ckpt_name": "Qwen-Rapid-AIO-SFW-v23.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": { "title": "CheckpointLoaderSimple" }
+  },
+  "2": {
+    "inputs": {
+      "seed": 199730832397078,
+      "steps": 5,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "beta",
+      "denoise": 1,
+      "model": ["1", 0],
+      "positive": ["3", 0],
+      "negative": ["4", 0],
+      "latent_image": ["9", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": { "title": "KSampler" }
+  },
+  "3": {
+    "inputs": {
+      "prompt": "Draw the commander beaming down to the surface planet which is a nice field.",
+      "clip": ["1", 1],
+      "vae": ["1", 2],
+      "image1": ["30", 0],
+      "image2": ["36", 0]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": { "title": "TextEncodeQwenImageEditPlus Input Prompt" }
+  },
+  "4": {
+    "inputs": {
+      "prompt": "",
+      "clip": ["1", 1],
+      "vae": ["1", 2]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": { "title": "TextEncodeQwenImageEditPlus Negative" }
+  },
+  "7": {
+    "inputs": {
+      "image": "figure1.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Figure 1" }
+  },
+  "8": {
+    "inputs": {
+      "image": "figure2.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Figure 2" }
+  },
+  "9": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": { "title": "Final Image Size" }
+  },
+  "23": {
+    "inputs": {
+      "detail_amount": 0.1,
+      "start": 0.2,
+      "end": 0.8,
+      "bias": 0.5,
+      "exponent": 1,
+      "start_offset": 0,
+      "end_offset": 0,
+      "fade": 0,
+      "smooth": false,
+      "cfg_scale_override": 0,
+      "sampler": ["24", 0]
+    },
+    "class_type": "DetailDaemonSamplerNode",
+    "_meta": { "title": "DetailDaemonSamplerNode" }
+  },
+  "24": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": { "title": "KSamplerSelect" }
+  },
+  "25": {
+    "inputs": {
+      "noise": ["26", 0],
+      "guider": ["27", 0],
+      "sampler": ["23", 0],
+      "sigmas": ["28", 0],
+      "latent_image": ["2", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": { "title": "SamplerCustomAdvanced" }
+  },
+  "26": {
+    "inputs": {
+      "noise_seed": 858333380052938
+    },
+    "class_type": "RandomNoise",
+    "_meta": { "title": "RandomNoise" }
+  },
+  "27": {
+    "inputs": {
+      "cfg": 1,
+      "model": ["1", 0],
+      "positive": ["3", 0],
+      "negative": ["4", 0]
+    },
+    "class_type": "CFGGuider",
+    "_meta": { "title": "CFGGuider" }
+  },
+  "28": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 7,
+      "denoise": 0.7,
+      "model": ["1", 0]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": { "title": "BasicScheduler" }
+  },
+  "29": {
+    "inputs": {
+      "samples": ["25", 0],
+      "vae": ["1", 2]
+    },
+    "class_type": "VAEDecode",
+    "_meta": { "title": "VAEDecode" }
+  },
+  "30": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "upscale_method": "lanczos",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "image": ["7", 0]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": { "title": "ImageResizeKJv2" }
+  },
+  "31": {
+    "inputs": {
+      "seed": 345207927,
+      "resolution": 2048,
+      "max_resolution": 0,
+      "batch_size": 5,
+      "uniform_batch_size": false,
+      "color_correction": "lab",
+      "temporal_overlap": 0,
+      "prepend_frames": 0,
+      "input_noise_scale": 0,
+      "latent_noise_scale": 0,
+      "offload_device": "cpu",
+      "enable_debug": false,
+      "image": ["29", 0],
+      "dit": ["32", 0],
+      "vae": ["33", 0]
+    },
+    "class_type": "SeedVR2VideoUpscaler",
+    "_meta": { "title": "SeedVR2VideoUpscaler" }
+  },
+  "32": {
+    "inputs": {
+      "model": "seedvr2_ema_7b-Q4_K_M.gguf",
+      "device": "cuda:0",
+      "blocks_to_swap": 0,
+      "swap_io_components": false,
+      "offload_device": "cpu",
+      "attention_mode": "sdpa"
+    },
+    "class_type": "SeedVR2LoadDiTModel",
+    "_meta": { "title": "SeedVR2LoadDiTModel" }
+  },
+  "33": {
+    "inputs": {
+      "model": "ema_vae_fp16.safetensors",
+      "device": "cuda:0",
+      "encode_tiled": false,
+      "encode_tile_size": 1024,
+      "encode_tile_overlap": 128,
+      "decode_tiled": false,
+      "decode_tile_size": 1024,
+      "decode_tile_overlap": 128,
+      "tile_debug": "false",
+      "offload_device": "none",
+      "cache_model": false
+    },
+    "class_type": "SeedVR2LoadVAEModel",
+    "_meta": { "title": "SeedVR2LoadVAEModel" }
+  },
+  "36": {
+    "inputs": {
+      "width": 480,
+      "height": 832,
+      "upscale_method": "lanczos",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "image": ["8", 0]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": { "title": "ImageResizeKJv2" }
+  },
+  "37": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": ["31", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": { "title": "FINAL" }
+  }
+}
