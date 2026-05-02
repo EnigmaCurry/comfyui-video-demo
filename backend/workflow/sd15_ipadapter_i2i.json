@@ -85,8 +85,7 @@
   },
   "12": {
     "inputs": {
-      "image": "reference.png",
-      "upload": "image"
+      "image": "reference.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -96,7 +95,6 @@
   "3": {
     "inputs": {
       "seed": 0,
-      "control_after_generate": "fixed",
       "steps": 30,
       "cfg": 6.5,
       "sampler_name": "dpmpp_2m",
