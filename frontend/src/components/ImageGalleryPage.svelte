@@ -20,7 +20,6 @@
   }
 
   async function handleDelete(img) {
-    if (!confirm('Delete this image?')) return;
     try {
       await galleryDelete(img.id);
       images = images.filter(i => i.id !== img.id);
