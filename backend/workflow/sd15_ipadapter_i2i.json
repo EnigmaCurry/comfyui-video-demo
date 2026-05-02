@@ -1,7 +1,7 @@
 {
   "4": {
     "inputs": {
-      "ckpt_name": "sd15/AnythingV5V3_v5PrtRE.safetensors"
+      "ckpt_name": "AnythingV5V3_v5PrtRE.safetensors"
     },
     "class_type": "CheckpointLoaderSimple",
     "_meta": {
@@ -62,6 +62,7 @@
   "10": {
     "inputs": {
       "weight": 0.8,
+      "weight_type": "original",
       "start_at": 0,
       "end_at": 1,
       "model": ["11", 0],
